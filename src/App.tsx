@@ -89,7 +89,13 @@ export function Brand({ light = false }: { light?: boolean }) {
 }
 function Login({ onLogin }: { onLogin: (u: User) => void }) {
   const { busy, act } = useAction();
-  const [show, setShow] = useState(false);
+  // Demo mode is a local convenience. MODE, not DEV, decides, so a build made while NODE_ENV is
+  // development (as in the sample .env) still cannot ship the demo credentials.
+  const devBuild = import.meta.env.MODE === 'development';
+  const demoLogin = devBuild && import.meta.env.VITE_DEMO_LOGIN === 'true';
+  // The prefilled password is visible in demo mode. Masked dots made the field look empty,
+  // so users typed on top of the prefilled value and got a wrong-credentials error.
+  const [show, setShow] = useState(demoLogin);
   const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
@@ -171,7 +177,7 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
               autoComplete="username"
               dir="ltr"
               placeholder="name@company.com"
-              defaultValue={import.meta.env.DEV ? 'admin@orqiva.com' : ''}
+              defaultValue={devBuild ? 'admin@orqiva.com' : ''}
             />
           </Field>
           <Field label="كلمة المرور">
@@ -184,11 +190,7 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
                 minLength={1}
                 dir="ltr"
                 placeholder="أدخل كلمة المرور"
-                defaultValue={
-                  import.meta.env.DEV && import.meta.env.VITE_DEMO_LOGIN === 'true'
-                    ? 'Orqiva@2026'
-                    : ''
-                }
+                defaultValue={demoLogin ? 'Orqiva@2026' : ''}
               />
               <button
                 type="button"
@@ -206,10 +208,13 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
           <Button busy={busy} type="submit" className="login-submit">
             الدخول إلى مساحة العمل <ArrowLeft size={18} />
           </Button>
-          {import.meta.env.DEV && import.meta.env.VITE_DEMO_LOGIN === 'true' && (
+          {demoLogin && (
             <div className="demo-note">
               <b>مساحة تجريبية جاهزة للاستكشاف</b>
-              <span>بيانات الدخول مُعبأة لتجربة النظام. كل التغييرات تُحفظ فعلياً.</span>
+              <span>
+                بيانات الدخول مُعبأة لتجربة النظام. إذا كتبت بياناتك، امسح القيمة الموجودة أولاً. كل
+                التغييرات تُحفظ فعلياً.
+              </span>
             </div>
           )}
           <div className="login-help">
