@@ -9,3 +9,7 @@ dist/
 *.db-shm
 coverage/
 playwright-results/
+.venv-selenium/
+__pycache__/
+*.py[cod]
+.pytest_cache/
