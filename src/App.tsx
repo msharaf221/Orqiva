@@ -92,17 +92,21 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
   // Demo mode is a local convenience. MODE, not DEV, decides, so a build made while NODE_ENV is
   // development (as in the sample .env) still cannot ship the demo credentials.
   const devBuild = import.meta.env.MODE === 'development';
-  const demoLogin = devBuild && import.meta.env.VITE_DEMO_LOGIN === 'true';
+  const demoLogin = devBuild && import.meta.env.VITE_DEMO_LOGIN !== 'false';
   // The prefilled password is visible in demo mode. Masked dots made the field look empty,
   // so users typed on top of the prefilled value and got a wrong-credentials error.
   const [show, setShow] = useState(demoLogin);
+  const [email, setEmail] = useState(devBuild ? 'admin@orqiva.com' : '');
+  const [password, setPassword] = useState(demoLogin ? 'Orqiva@2026' : '');
   const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
+    const submittedEmail = (String(f.get('email') || email) || '').trim();
+    const submittedPassword = String(f.get('password') || password);
     void act(async () => {
       await api<User>('/auth/login', 'POST', {
-        email: f.get('email'),
-        password: f.get('password'),
+        email: submittedEmail,
+        password: submittedPassword,
       });
       // Verify the browser actually retained the HttpOnly cookie before loading protected screens.
       try {
@@ -177,7 +181,8 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
               autoComplete="username"
               dir="ltr"
               placeholder="name@company.com"
-              defaultValue={devBuild ? 'admin@orqiva.com' : ''}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
             />
           </Field>
           <Field label="كلمة المرور">
@@ -190,7 +195,8 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
                 minLength={1}
                 dir="ltr"
                 placeholder="أدخل كلمة المرور"
-                defaultValue={demoLogin ? 'Orqiva@2026' : ''}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
               />
               <button
                 type="button"

@@ -8,18 +8,18 @@ import { addEquityEntry } from './owners';
 import type { Actor } from './scope';
 import type { Branch, Product } from '../src/types';
 
-migrate();
-if (one('SELECT id FROM users LIMIT 1')) {
-  console.log('Seed skipped: users already exist. Existing data was not changed.');
-  db.close();
-} else {
-  const password = process.env.SEED_PASSWORD;
+export async function seed(closeDb = true) {
+  migrate();
+  if (one('SELECT id FROM users LIMIT 1')) {
+    console.log('Seed skipped: users already exist. Existing data was not changed.');
+    if (closeDb) db.close();
+    return;
+  }
+  const isProd = process.env.NODE_ENV === 'production';
+  const password = process.env.SEED_PASSWORD || (!isProd ? 'Orqiva@2026' : undefined);
   if (!password || password.length < 10)
     throw new Error('Set SEED_PASSWORD to a unique password of at least 10 characters.');
-  if (
-    process.env.NODE_ENV === 'production' &&
-    ['Orqiva@2026', 'ChangeThisPassword2026!'].includes(password)
-  ) {
+  if (isProd && ['Orqiva@2026', 'ChangeThisPassword2026!'].includes(password)) {
     throw new Error('Choose a unique SEED_PASSWORD before initializing production.');
   }
   const passwordHash = await hash(password, 12);
@@ -35,9 +35,20 @@ if (one('SELECT id FROM users LIMIT 1')) {
     now(),
   );
   audit(actor, 'تهيئة النظام', 'SYSTEM', '1');
-  if (process.env.SEED_DEMO === 'true') seedDemo(actor, passwordHash);
-  console.log('Seed completed. Administrator: admin@orqiva.com. Password: value of SEED_PASSWORD.');
-  db.close();
+  const shouldSeedDemo =
+    process.env.SEED_DEMO !== undefined ? process.env.SEED_DEMO === 'true' : !isProd;
+  if (shouldSeedDemo) seedDemo(actor, passwordHash);
+  console.log(
+    `Seed completed. Administrator: admin@orqiva.com. Password: ${process.env.SEED_PASSWORD ? 'value of SEED_PASSWORD' : 'Orqiva@2026'}.`,
+  );
+  if (closeDb) db.close();
+}
+
+const isDirectRun =
+  process.argv[1] && (process.argv[1].endsWith('seed.ts') || process.argv[1].endsWith('seed.js'));
+
+if (isDirectRun) {
+  await seed(true);
 }
 
 function seedDemo(actor: Actor, passwordHash: string) {

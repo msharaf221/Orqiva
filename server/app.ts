@@ -112,7 +112,7 @@ const loginLimiter = rateLimit({
 const tokenHash = (token: string) => createHash('sha256').update(token).digest('hex');
 app.post('/api/auth/login', loginLimiter, async (req, res) => {
   const input = z
-    .object({ email: z.string().email().max(200), password: z.string().min(1).max(128) })
+    .object({ email: z.string().trim().email().max(200), password: z.string().min(1).max(128) })
     .parse(req.body);
   const user = one<User & { password_hash: string }>(
     'SELECT * FROM users WHERE email=? AND active=1',
