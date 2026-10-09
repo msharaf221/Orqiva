@@ -1,0 +1,60 @@
+{
+  "name": "orqiva-erp",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n api,web \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "tsx watch server/index.ts",
+    "dev:web": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit && vite build",
+    "start": "tsx server/index.ts",
+    "db:migrate": "tsx server/migrate.ts",
+    "db:seed": "tsx server/seed.ts",
+    "setup": "npm run db:migrate && npm run db:seed",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"server/**/*.ts\" \"tests/**/*.ts\" \"*.{ts,json}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" \"server/**/*.ts\" \"tests/**/*.ts\" \"*.{ts,json}\"",
+    "test:e2e": "npm run build && playwright test",
+    "test:e2e:server": "tsx tests/e2e/prepare.ts && tsx server/index.ts",
+    "backup": "tsx server/backup.ts",
+    "admin:reset": "tsx server/reset-password.ts"
+  },
+  "dependencies": {
+    "@fontsource-variable/manrope": "^5.3.0",
+    "@fontsource/ibm-plex-sans-arabic": "^5.3.0",
+    "bcryptjs": "^3.0.2",
+    "cookie-parser": "^1.4.7",
+    "express": "^5.1.0",
+    "express-rate-limit": "^8.1.0",
+    "helmet": "^8.1.0",
+    "lucide-react": "^0.468.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-router-dom": "^7.6.0",
+    "recharts": "^2.15.3",
+    "tsx": "^4.23.15",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.0",
+    "@types/cookie-parser": "^1.4.9",
+    "@types/express": "^5.0.1",
+    "@types/node": "^22.15.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@types/supertest": "^6.0.3",
+    "@vitejs/plugin-react": "^4.4.1",
+    "concurrently": "^9.1.2",
+    "prettier": "^3.9.9",
+    "supertest": "^7.1.0",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5",
+    "vitest": "^5.0.3"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}
