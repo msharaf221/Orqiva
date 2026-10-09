@@ -35,6 +35,11 @@ export function transaction<T>(fn: () => T): T {
     throw error;
   }
 }
+/**
+ * Applies pending SQL migrations in file-name order, each in its own transaction.
+ * A migration whose first line is `-- orqiva:foreign_keys=off` may rebuild tables or add
+ * referencing columns; foreign keys are paused for it and integrity is verified before commit.
+ */
 export function migrate() {
   db.exec(
     'CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL)',
@@ -43,12 +48,20 @@ export function migrate() {
   for (const name of readdirSync(dir)
     .filter((n) => n.endsWith('.sql'))
     .sort()) {
-    if (!one('SELECT name FROM schema_migrations WHERE name=?', name)) {
+    if (one('SELECT name FROM schema_migrations WHERE name=?', name)) continue;
+    const sql = readFileSync(resolve(dir, name), 'utf8');
+    const pauseForeignKeys = sql.startsWith('-- orqiva:foreign_keys=off');
+    if (pauseForeignKeys) db.exec('PRAGMA foreign_keys=OFF');
+    try {
       transaction(() => {
-        db.exec(readFileSync(resolve(dir, name), 'utf8'));
+        db.exec(sql);
+        if (pauseForeignKeys && all('PRAGMA foreign_key_check').length)
+          throw new Error(`Foreign key violations found while applying ${name}`);
         run('INSERT INTO schema_migrations VALUES (?,?)', name, now());
       });
-      console.log(`Applied migration: ${name}`);
+    } finally {
+      if (pauseForeignKeys) db.exec('PRAGMA foreign_keys=ON');
     }
+    console.log(`Applied migration: ${name}`);
   }
 }

@@ -10,6 +10,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import {
+  Building2,
   Plus,
   ArrowUpRight,
   ArrowLeft,
@@ -42,7 +43,8 @@ import {
   Initials,
   downloadCSV,
 } from '../lib';
-import type { Dashboard as DashboardData } from '../types';
+import { useBranch, withBranch } from '../branch';
+import type { Dashboard as DashboardData, GroupOverview } from '../types';
 export function RevenueChart({ data }: { data: DashboardData['series'] }) {
   return (
     <div className="revenue-chart" dir="ltr">
@@ -115,9 +117,12 @@ export function RevenueChart({ data }: { data: DashboardData['series'] }) {
 }
 export function Dashboard() {
   const { user } = useSession();
+  const { activeId, isGroup, active } = useBranch();
   const [days, setDays] = useState(30);
+  const from = dayOffset(1 - days),
+    to = today();
   const { data, loading, error, reload } = useData<DashboardData>(
-    `/dashboard?from=${dayOffset(1 - days)}&to=${today()}`,
+    withBranch(`/dashboard?from=${from}&to=${to}`, activeId),
   );
   const exportReport = () => {
     if (data)
@@ -139,7 +144,11 @@ export function Dashboard() {
       <PageHeader
         eyebrow="نظرة شاملة على أعمالك"
         title={`أهلاً، ${user.name.split(' ')[0]}`}
-        description="كل ما تحتاج معرفته عن أداء أعمالك اليوم، في مكان واحد."
+        description={
+          isGroup
+            ? 'أداء المجموعة كلها، وكل فرع بجانب الآخر.'
+            : `أداء ${active?.name ?? 'الفرع'} وحده، بمخزونه وموظفيه ومصروفاته.`
+        }
         actions={
           <>
             <Button variant="secondary" onClick={exportReport} disabled={!data}>
@@ -207,6 +216,7 @@ export function Dashboard() {
                 foot="بعد تكلفة البضاعة والمصروفات"
               />
             </div>
+            {isGroup && user.role === 'ADMIN' && <GroupPanel from={from} to={to} />}
             <div className="dashboard-middle">
               <section className="card chart-card">
                 <div className="card-heading">
@@ -383,7 +393,7 @@ export function Dashboard() {
                 <div className="low-stock-list">
                   {data.lowStock.slice(0, 3).map((p, i) => (
                     <Link
-                      key={p.id}
+                      key={(p.branch_id ?? '') + p.id}
                       to={'/inventory?q=' + encodeURIComponent(p.sku)}
                       className="stock-item"
                     >
@@ -392,7 +402,10 @@ export function Dashboard() {
                       </span>
                       <div>
                         <strong>{p.name}</strong>
-                        <span className="num">{p.sku}</span>
+                        <span className="num">
+                          {p.sku}
+                          {p.branch_name ? ` · ${p.branch_name}` : ''}
+                        </span>
                       </div>
                       <span className="stock-remaining">
                         <b className="num">{p.stock}</b>
@@ -447,5 +460,107 @@ function ArrowLeftRightIcon() {
     <span className="cash-heading-icon">
       <Wallet size={19} />
     </span>
+  );
+}
+
+function GroupPanel({ from, to }: { from: string; to: string }) {
+  const group = useData<GroupOverview>(`/group/overview?from=${from}&to=${to}`);
+  if (group.error)
+    return (
+      <section className="card group-panel">
+        <ErrorState message={group.error} retry={group.reload} />
+      </section>
+    );
+  if (!group.data)
+    return (
+      <section className="card group-panel">
+        <Loading />
+      </section>
+    );
+  const g = group.data;
+  return (
+    <section className="card group-panel">
+      <div className="card-heading">
+        <div>
+          <h2>
+            <Building2 size={18} /> مقارنة الفروع
+          </h2>
+          <p>كل فرع بجانب الآخر. مجموع الصفوف هو ما يظهر في التقارير للمجموعة كلها.</p>
+        </div>
+        <Link to="/distributions" className="btn btn-secondary">
+          توزيع الأرباح <ArrowUpRight size={16} />
+        </Link>
+      </div>
+      <div className="table-scroll">
+        <table className="group-table">
+          <thead>
+            <tr>
+              <th>الفرع</th>
+              <th>المبيعات</th>
+              <th>الربح الإجمالي</th>
+              <th>المصروفات</th>
+              <th>صافي الربح</th>
+              <th>مستحقات العملاء</th>
+              <th>قيمة المخزون</th>
+              <th>تحت حد الطلب</th>
+              <th>في الطريق</th>
+            </tr>
+          </thead>
+          <tbody>
+            {g.branches.map((b) => (
+              <tr key={b.id} className={b.active ? '' : 'muted'}>
+                <td>
+                  <strong>{b.name}</strong>
+                  <small className="cell-sub num">
+                    {b.code}
+                    {b.active ? '' : ' · مؤرشف'}
+                  </small>
+                </td>
+                <td className="num">{money(b.sales)}</td>
+                <td className="num">{money(b.gross)}</td>
+                <td className="num">{money(b.expenses)}</td>
+                <td className={'num amount ' + (b.net < 0 ? 'negative' : '')}>{money(b.net)}</td>
+                <td className="num">{money(b.receivables)}</td>
+                <td className="num">{money(b.stockValue)}</td>
+                <td className="num">
+                  {b.lowStock ? <span className="stock-badge low">{b.lowStock}</span> : '—'}
+                </td>
+                <td className="num">
+                  {b.inTransitOut + b.inTransitIn
+                    ? `${b.inTransitOut} صادر · ${b.inTransitIn} وارد`
+                    : '—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <th>المجموع</th>
+              <th className="num">{money(g.totals.sales)}</th>
+              <th className="num">{money(g.totals.gross)}</th>
+              <th className="num">{money(g.totals.expenses)}</th>
+              <th className={'num ' + (g.totals.net < 0 ? 'negative' : '')}>
+                {money(g.totals.net)}
+              </th>
+              <th className="num">{money(g.totals.receivables)}</th>
+              <th className="num">{money(g.totals.stockValue)}</th>
+              <th />
+              <th />
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <div className="group-foot">
+        <span>
+          السيولة المتاحة للمجموعة <b className="num">{money(g.cashAvailable)} ج.م</b>
+        </span>
+        <span>
+          بضاعة في الطريق <b className="num">{money(g.totals.inTransitValue)} ج.م</b>
+        </span>
+        <span>
+          عجز التحويلات خلال الفترة <b className="num">{money(g.totals.shortageValue)} ج.م</b>
+        </span>
+      </div>
+    </section>
   );
 }

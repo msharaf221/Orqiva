@@ -110,6 +110,7 @@ test('mobile navigation, global search, settings and logout', async ({ page }) =
       cost_price: 5000,
       stock: 5,
       min_stock: 1,
+      branch_id: 'main',
     },
   });
   expect(product.status()).toBe(201);

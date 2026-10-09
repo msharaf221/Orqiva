@@ -20,6 +20,9 @@ import {
   Menu,
   Command,
   ArrowLeft,
+  ArrowRightLeft,
+  Store,
+  HandCoins,
   Eye,
   EyeOff,
   ShieldCheck,
@@ -27,6 +30,7 @@ import {
   CircleHelp,
   ArrowUpRight,
 } from 'lucide-react';
+import { BranchProvider, BranchSwitcher, useBranch, withBranch } from './branch';
 import {
   api,
   Button,
@@ -64,6 +68,11 @@ const SettingsPage = lazy(() =>
 );
 const ActivityPage = lazy(() =>
   import('./pages/Finance').then((m) => ({ default: m.ActivityPage })),
+);
+const Branches = lazy(() => import('./pages/Branches').then((m) => ({ default: m.Branches })));
+const Transfers = lazy(() => import('./pages/Transfers').then((m) => ({ default: m.Transfers })));
+const Distributions = lazy(() =>
+  import('./pages/Distributions').then((m) => ({ default: m.Distributions })),
 );
 export function Brand({ light = false }: { light?: boolean }) {
   return (
@@ -254,11 +263,14 @@ function Authenticated({ user, onLogout }: { user: User; onLogout: () => void })
         },
       }}
     >
-      <Layout />
+      <BranchProvider>
+        <Layout />
+      </BranchProvider>
     </SessionContext.Provider>
   );
 }
-const navigation = [
+type NavItem = { to: string; label: string; icon: typeof Package; adminOnly?: boolean };
+const navigation: { label: string; items: NavItem[] }[] = [
   { label: 'نظرة عامة', items: [{ to: '/', label: 'لوحة التحكم', icon: LayoutDashboard }] },
   {
     label: 'إدارة الأعمال',
@@ -267,8 +279,10 @@ const navigation = [
       { to: '/purchases', label: 'المشتريات', icon: ShoppingBag },
       { to: '/products', label: 'المنتجات', icon: Package },
       { to: '/inventory', label: 'المخزون', icon: Boxes },
+      { to: '/transfers', label: 'التحويلات بين الفروع', icon: ArrowRightLeft },
       { to: '/customers', label: 'العملاء', icon: Users },
       { to: '/suppliers', label: 'الموردون', icon: Truck },
+      { to: '/branches', label: 'الفروع', icon: Store, adminOnly: true },
     ],
   },
   {
@@ -277,11 +291,13 @@ const navigation = [
       { to: '/expenses', label: 'المصروفات', icon: Wallet },
       { to: '/payments', label: 'المدفوعات', icon: ArrowLeftRight },
       { to: '/reports', label: 'التقارير والتحليلات', icon: ChartNoAxesCombined },
+      { to: '/distributions', label: 'التوزيعات والشركاء', icon: HandCoins, adminOnly: true },
     ],
   },
 ];
 function Layout() {
   const { user, company, logout } = useSession();
+  const { branches, loading: branchesLoading } = useBranch();
   const [mobile, setMobile] = useState(false),
     [search, setSearch] = useState(false),
     [notifications, setNotifications] = useState(false),
@@ -320,28 +336,27 @@ function Layout() {
           <span className="workspace-avatar">أ</span>
           <div>
             <strong>{company?.name || 'مساحة العمل'}</strong>
-            <span>
-              <i /> مساحة العمل الرئيسية
-            </span>
+            <BranchSwitcher />
           </div>
-          <ChevronDown size={14} />
         </div>
         <nav>
           {navigation.map((group) => (
             <div className="nav-group" key={group.label}>
               <div className="nav-label">{group.label}</div>
-              {group.items.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  end={item.to === '/'}
-                  className={({ isActive }) => 'nav-item ' + (isActive ? 'active' : '')}
-                >
-                  <item.icon size={19} strokeWidth={1.65} />
-                  <span>{item.label}</span>
-                  {item.to === '/' && <span className="nav-active-dot" />}
-                </NavLink>
-              ))}
+              {group.items
+                .filter((item) => !item.adminOnly || user.role === 'ADMIN')
+                .map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.to === '/'}
+                    className={({ isActive }) => 'nav-item ' + (isActive ? 'active' : '')}
+                  >
+                    <item.icon size={19} strokeWidth={1.65} />
+                    <span>{item.label}</span>
+                    {item.to === '/' && <span className="nav-active-dot" />}
+                  </NavLink>
+                ))}
             </div>
           ))}
         </nav>
@@ -426,6 +441,11 @@ function Layout() {
           </div>
         </header>
         <main className="main-content">
+          {!branchesLoading && user.role !== 'ADMIN' && !branches.length && (
+            <div className="warning-banner branch-warning">
+              لم تُربط بأي فرع بعد. اطلب من مدير النظام إضافتك إلى فرعك لتبدأ العمل.
+            </div>
+          )}
           <Suspense fallback={<Loading />}>
             <Routes>
               <Route path="/" element={<Dashboard />} />
@@ -444,6 +464,15 @@ function Layout() {
               <Route path="/purchases/:id/edit" element={<DocumentEditor type="PURCHASE" />} />
               <Route path="/sales/:id" element={<DocumentDetail />} />
               <Route path="/purchases/:id" element={<DocumentDetail />} />
+              <Route path="/transfers" element={<Transfers />} />
+              <Route
+                path="/branches"
+                element={user.role === 'ADMIN' ? <Branches /> : <Navigate to="/" />}
+              />
+              <Route
+                path="/distributions"
+                element={user.role === 'ADMIN' ? <Distributions /> : <Navigate to="/" />}
+              />
               <Route path="/expenses" element={<Expenses />} />
               <Route path="/payments" element={<Payments />} />
               <Route path="/reports" element={<Reports />} />
@@ -561,7 +590,10 @@ function GlobalSearch({ onClose }: { onClose: () => void }) {
   );
 }
 function Notifications({ onClose }: { onClose: () => void }) {
-  const data = useData<DashboardData>(`/dashboard?from=${dayOffset(-29)}&to=${today()}`);
+  const { activeId } = useBranch();
+  const data = useData<DashboardData>(
+    withBranch(`/dashboard?from=${dayOffset(-29)}&to=${today()}`, activeId),
+  );
   return (
     <Modal
       title="مركز التنبيهات"
@@ -590,7 +622,7 @@ function Notifications({ onClose }: { onClose: () => void }) {
                 onClick={onClose}
                 className="notification-item"
                 to={'/inventory?q=' + encodeURIComponent(p.sku)}
-                key={p.id}
+                key={(p.branch_id ?? '') + p.id}
               >
                 <span className="notification-icon">
                   <Package />
@@ -599,6 +631,7 @@ function Notifications({ onClose }: { onClose: () => void }) {
                   <b>{p.name}</b>
                   <p>
                     المتبقي {p.stock} {p.unit} · الحد الأدنى {p.min_stock}
+                    {p.branch_name ? ` · ${p.branch_name}` : ''}
                   </p>
                 </div>
                 <ChevronLeft size={16} />

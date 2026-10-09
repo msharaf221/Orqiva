@@ -3,12 +3,13 @@ import request from 'supertest';
 import { hash } from 'bcryptjs';
 import { app } from '../server/app';
 import { db, one, all, run, migrate, now } from '../server/db';
-import type { Document, Product } from '../src/types';
+import type { Document } from '../src/types';
 const admin = request.agent(app),
   staff = request.agent(app);
 const header = { 'X-Orqiva-Request': '1' };
 const draft = (overrides: Record<string, unknown> = {}) => ({
   type: 'SALE',
+  branch_id: 'main',
   party_id: 'customer',
   date: '2026-10-01',
   due_date: '2026-10-15',
@@ -23,7 +24,12 @@ async function createAndPost(body: Record<string, unknown> = draft()) {
   await admin.post(`/api/documents/${created.body.id}/post`).set(header).send({}).expect(200);
   return created.body as Document;
 }
-const product = () => one<Product>('SELECT * FROM products WHERE id=?', 'product')!;
+const stockOf = (productId: string, branchId = 'main') =>
+  one<{ quantity: number }>(
+    'SELECT quantity FROM branch_stock WHERE product_id=? AND branch_id=?',
+    productId,
+    branchId,
+  )?.quantity ?? 0;
 beforeAll(async () => {
   const password = await hash('TestingPassword2026!', 4);
   run(
@@ -46,6 +52,7 @@ beforeAll(async () => {
     1,
     now(),
   );
+  run('INSERT INTO user_branches(user_id,branch_id) VALUES(?,?)', 'staff', 'main');
   await admin
     .post('/api/auth/login')
     .set(header)
@@ -59,7 +66,7 @@ beforeAll(async () => {
 });
 beforeEach(() => {
   db.exec(
-    'DELETE FROM audit_logs; DELETE FROM payments; DELETE FROM stock_movements; DELETE FROM document_lines; DELETE FROM documents; DELETE FROM sequences; DELETE FROM products; DELETE FROM parties; DELETE FROM expenses;',
+    'DELETE FROM audit_logs; DELETE FROM distribution_payments; DELETE FROM distribution_lines; DELETE FROM distributions; DELETE FROM equity_entries; DELETE FROM stock_movements; DELETE FROM transfer_lines; DELETE FROM transfers; DELETE FROM payments; DELETE FROM document_lines; DELETE FROM documents; DELETE FROM sequences; DELETE FROM branch_stock; DELETE FROM branch_products; DELETE FROM products; DELETE FROM parties; DELETE FROM expenses;',
   );
   run(
     'INSERT INTO parties VALUES(?,?,?,?,?,?,?,?,?,?)',
@@ -88,7 +95,7 @@ beforeEach(() => {
     now(),
   );
   run(
-    'INSERT INTO products VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+    'INSERT INTO products VALUES(?,?,?,?,?,?,?,?,?,?)',
     'product',
     'SKU-01',
     'منتج اختبار',
@@ -96,11 +103,12 @@ beforeEach(() => {
     'قطعة',
     10000,
     6000,
-    10,
     3,
     1,
     now(),
   );
+  run("INSERT INTO branch_products(branch_id,product_id,active) VALUES('main','product',1)");
+  run("INSERT INTO branch_stock(branch_id,product_id,quantity) VALUES('main','product',10)");
 });
 describe('Real database migrations and security', () => {
   it('issues a partitioned preview cookie and clears it with matching attributes', async () => {
@@ -139,7 +147,7 @@ describe('Real database migrations and security', () => {
 
   it('applies the SQL migration once and creates persistent relational tables', () => {
     migrate();
-    expect(all('SELECT * FROM schema_migrations')).toHaveLength(2);
+    expect(all('SELECT * FROM schema_migrations')).toHaveLength(3);
     expect(one<{ foreign_keys: number }>('PRAGMA foreign_keys')?.foreign_keys).toBe(1);
     expect(all("SELECT name FROM sqlite_master WHERE type='table'").length).toBeGreaterThanOrEqual(
       13,
@@ -226,9 +234,11 @@ describe('Catalog and validation', () => {
         cost_price: 30000,
         stock: 7,
         min_stock: 2,
+        branch_id: 'main',
       })
       .expect(201);
     expect(res.body.stock).toBe(7);
+    expect(stockOf(res.body.id)).toBe(7);
     expect(
       one<{ quantity: number }>(
         'SELECT quantity FROM stock_movements WHERE product_id=?',
@@ -249,6 +259,7 @@ describe('Catalog and validation', () => {
         cost_price: 50,
         stock: 2,
         min_stock: 1,
+        branch_id: 'main',
       })
       .expect(409);
     expect(all('SELECT * FROM products')).toHaveLength(1);
@@ -268,24 +279,24 @@ describe('Catalog and validation', () => {
         stock: 999,
       })
       .expect(400);
-    expect(product().stock).toBe(10);
+    expect(stockOf('product')).toBe(10);
   });
   it('records adjustments, rejects zero and insufficient stock', async () => {
     await admin
       .post('/api/products/product/adjust')
       .set(header)
-      .send({ quantity: -3, reason: 'تسوية جرد' })
+      .send({ branch_id: 'main', quantity: -3, reason: 'تسوية جرد' })
       .expect(200);
-    expect(product().stock).toBe(7);
+    expect(stockOf('product')).toBe(7);
     await admin
       .post('/api/products/product/adjust')
       .set(header)
-      .send({ quantity: -8, reason: 'خصم غير مسموح' })
+      .send({ branch_id: 'main', quantity: -8, reason: 'خصم غير مسموح' })
       .expect(400);
     await admin
       .post('/api/products/product/adjust')
       .set(header)
-      .send({ quantity: 0, reason: 'حركة صفرية' })
+      .send({ branch_id: 'main', quantity: 0, reason: 'حركة صفرية' })
       .expect(400);
     expect(all('SELECT * FROM stock_movements')).toHaveLength(1);
   });
@@ -364,9 +375,9 @@ describe('Atomic invoice lifecycle', () => {
       total: 21660,
       paid: 0,
       status: 'DRAFT',
-      number: 'INV-2026-0001',
+      number: 'INV-HQ-2026-0001',
     });
-    expect(product().stock).toBe(10);
+    expect(stockOf('product')).toBe(10);
     expect(all('SELECT * FROM stock_movements')).toHaveLength(0);
   });
   it('updates a draft atomically and keeps its number', async () => {
@@ -388,12 +399,12 @@ describe('Atomic invoice lifecycle', () => {
       .set(header)
       .expect(200);
     expect(posted.body.lines[0].cost_price).toBe(6500);
-    expect(product().stock).toBe(8);
+    expect(stockOf('product')).toBe(8);
     await admin
       .post('/api/documents/' + res.body.id + '/post')
       .set(header)
       .expect(409);
-    expect(product().stock).toBe(8);
+    expect(stockOf('product')).toBe(8);
     expect(all('SELECT * FROM stock_movements')).toHaveLength(1);
     await admin
       .put('/api/documents/' + res.body.id)
@@ -403,7 +414,7 @@ describe('Atomic invoice lifecycle', () => {
   });
   it('rolls back all stock changes if a later line has insufficient stock', async () => {
     run(
-      'INSERT INTO products VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+      'INSERT INTO products VALUES(?,?,?,?,?,?,?,?,?,?)',
       'second',
       'SKU-02',
       'غير متوفر',
@@ -411,11 +422,12 @@ describe('Atomic invoice lifecycle', () => {
       'قطعة',
       10000,
       6000,
-      0,
       3,
       1,
       now(),
     );
+    run("INSERT INTO branch_products(branch_id,product_id,active) VALUES('main','second',1)");
+    run("INSERT INTO branch_stock(branch_id,product_id,quantity) VALUES('main','second',0)");
     const created = await admin
       .post('/api/documents')
       .set(header)
@@ -429,7 +441,7 @@ describe('Atomic invoice lifecycle', () => {
       )
       .expect(201);
     await admin.post(`/api/documents/${created.body.id}/post`).set(header).expect(409);
-    expect(product().stock).toBe(10);
+    expect(stockOf('product')).toBe(10);
     expect(all('SELECT * FROM stock_movements')).toHaveLength(0);
     expect(one<Document>('SELECT * FROM documents WHERE id=?', created.body.id)?.status).toBe(
       'DRAFT',
@@ -437,10 +449,10 @@ describe('Atomic invoice lifecycle', () => {
   });
   it('a purchase receives stock and cancellation reverses it', async () => {
     const doc = await createAndPost(draft({ type: 'PURCHASE', party_id: 'supplier' }));
-    expect(product().stock).toBe(12);
-    expect(doc.number).toBe('PO-2026-0001');
+    expect(stockOf('product')).toBe(12);
+    expect(doc.number).toBe('PO-HQ-2026-0001');
     await admin.post(`/api/documents/${doc.id}/cancel`).set(header).expect(200);
-    expect(product().stock).toBe(10);
+    expect(stockOf('product')).toBe(10);
     expect(all('SELECT * FROM stock_movements')).toHaveLength(2);
   });
   it('rejects cancelling a purchase if its stock has been consumed', async () => {
@@ -448,23 +460,23 @@ describe('Atomic invoice lifecycle', () => {
     await admin
       .post('/api/products/product/adjust')
       .set(header)
-      .send({ quantity: -12, reason: 'خصم المخزون' })
+      .send({ branch_id: 'main', quantity: -12, reason: 'خصم المخزون' })
       .expect(200);
     await admin.post(`/api/documents/${doc.id}/cancel`).set(header).expect(409);
-    expect(product().stock).toBe(0);
+    expect(stockOf('product')).toBe(0);
     expect(one<Document>('SELECT * FROM documents WHERE id=?', doc.id)?.status).toBe('POSTED');
   });
   it('cancels a sale once and restores stock', async () => {
     const doc = await createAndPost();
     await admin.post(`/api/documents/${doc.id}/cancel`).set(header).expect(200);
-    expect(product().stock).toBe(10);
+    expect(stockOf('product')).toBe(10);
     await admin.post(`/api/documents/${doc.id}/cancel`).set(header).expect(409);
-    expect(product().stock).toBe(10);
+    expect(stockOf('product')).toBe(10);
   });
   it('cancels a draft without touching stock', async () => {
     const doc = await admin.post('/api/documents').set(header).send(draft()).expect(201);
     await admin.post(`/api/documents/${doc.body.id}/cancel`).set(header).expect(200);
-    expect(product().stock).toBe(10);
+    expect(stockOf('product')).toBe(10);
     expect(all('SELECT * FROM stock_movements')).toHaveLength(0);
   });
   it('refuses an archived product at posting time', async () => {
@@ -475,7 +487,7 @@ describe('Atomic invoice lifecycle', () => {
       .send({ active: false })
       .expect(200);
     await admin.post(`/api/documents/${doc.body.id}/post`).set(header).expect(409);
-    expect(product().stock).toBe(10);
+    expect(stockOf('product')).toBe(10);
   });
   it('handles competing requests without overselling', async () => {
     const body = draft({ lines: [{ product_id: 'product', quantity: 7, unit_price: 10000 }] });
@@ -486,7 +498,7 @@ describe('Atomic invoice lifecycle', () => {
       admin.post(`/api/documents/${b.body.id}/post`).set(header),
     ]);
     expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
-    expect(product().stock).toBe(3);
+    expect(stockOf('product')).toBe(3);
   });
 });
 describe('Payments and financial reports', () => {
@@ -530,7 +542,7 @@ describe('Payments and financial reports', () => {
       .expect(201);
     expect(final.body.paid).toBe(doc.total);
     expect(final.body.payments).toHaveLength(2);
-    expect(product().stock).toBe(8);
+    expect(stockOf('product')).toBe(8);
     await admin.post(`/api/documents/${doc.id}/cancel`).set(header).expect(409);
   });
   it('rejects payments on drafts, zero/negative payments and invalid payment dates', async () => {
@@ -573,7 +585,14 @@ describe('Payments and financial reports', () => {
     await admin
       .post('/api/expenses')
       .set(header)
-      .send({ title: 'نقل', category: 'شحن', amount: 2000, date: '2026-10-03', method: 'CASH' })
+      .send({
+        title: 'نقل',
+        category: 'شحن',
+        amount: 2000,
+        date: '2026-10-03',
+        method: 'CASH',
+        branch_id: 'main',
+      })
       .expect(201);
     const response = await admin.get('/api/dashboard?from=2026-10-01&to=2026-10-31').expect(200);
     expect(response.body).toMatchObject({

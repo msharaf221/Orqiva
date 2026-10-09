@@ -46,12 +46,20 @@ import {
   downloadCSV,
   methods,
 } from '../lib';
+import { useBranch, withBranch } from '../branch';
 import type { Expense, Payment, Document, Dashboard as DashboardData, User, Audit } from '../types';
 import { PaymentForm } from './Documents';
 import { RevenueChart } from './Dashboard';
+/** Who bears an expense: one branch, or every open branch by equal share or by the month's sales. */
+export function expenseScope(e: Pick<Expense, 'allocation' | 'branch_name'>) {
+  if (e.allocation === 'BRANCH') return e.branch_name ?? 'فرع';
+  return e.allocation === 'EQUAL' ? 'مشترك · بالتساوي بين الفروع' : 'مشترك · حسب مبيعات الشهر';
+}
+
 export function Expenses() {
   const { user } = useSession();
-  const data = useData<Expense[]>('/expenses');
+  const { activeId, branches } = useBranch();
+  const data = useData<Expense[]>(withBranch('/expenses', activeId));
   const [query, setQuery] = useState(''),
     [category, setCategory] = useState('all'),
     [page, setPage] = useState(1),
@@ -69,6 +77,10 @@ export function Expenses() {
   const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
+    const scope = String(f.get('scope'));
+    const scoped = scope.startsWith('BRANCH:')
+      ? { allocation: 'BRANCH', branch_id: scope.slice('BRANCH:'.length) }
+      : { allocation: scope };
     void act(async () => {
       await api('/expenses', 'POST', {
         title: f.get('title'),
@@ -77,6 +89,7 @@ export function Expenses() {
         date: f.get('date'),
         method: f.get('method'),
         notes: f.get('notes'),
+        ...scoped,
       });
       setAdding(false);
       data.reload();
@@ -186,7 +199,10 @@ export function Expenses() {
                           <span className="expense-icon">
                             <Wallet size={19} />
                           </span>
-                          <strong>{e.title}</strong>
+                          <div>
+                            <strong>{e.title}</strong>
+                            <small className="cell-sub">{expenseScope(e)}</small>
+                          </div>
                         </div>
                       </td>
                       <td>
@@ -263,6 +279,27 @@ export function Expenses() {
                   />
                 </Field>
               </div>
+              <Field
+                label="نطاق المصروف *"
+                hint="المصروف المشترك يُوزَّع على الفروع المفتوحة في تاريخه، ولا يُربط بفرع واحد."
+              >
+                <select
+                  name="scope"
+                  defaultValue={activeId !== 'all' ? `BRANCH:${activeId}` : 'EQUAL'}
+                >
+                  <optgroup label="فرع محدد">
+                    {branches.map((b) => (
+                      <option key={b.id} value={`BRANCH:${b.id}`}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="مشترك بين كل الفروع">
+                    <option value="EQUAL">بالتساوي بين الفروع</option>
+                    <option value="REVENUE">حسب مبيعات الشهر في كل فرع</option>
+                  </optgroup>
+                </select>
+              </Field>
               <div className="form-row">
                 <Field label="التاريخ *">
                   <input name="date" required type="date" defaultValue={today()} />
@@ -307,7 +344,8 @@ export function Expenses() {
 }
 export function Payments() {
   const { user } = useSession();
-  const data = useData<Payment[]>('/payments');
+  const { activeId } = useBranch();
+  const data = useData<Payment[]>(withBranch('/payments', activeId));
   const [query, setQuery] = useState(''),
     [type, setType] = useState('all'),
     [page, setPage] = useState(1),
@@ -496,7 +534,8 @@ function SelectPaymentDoc({
   onSelect: (d: Document) => void;
 }) {
   const [type, setType] = useState('SALE');
-  const data = useData<Document[]>('/documents?type=' + type);
+  const { activeId } = useBranch();
+  const data = useData<Document[]>(withBranch('/documents?type=' + type, activeId));
   const [query, setQuery] = useState('');
   const docs = (data.data || []).filter(
     (d) =>
@@ -553,7 +592,10 @@ function SelectPaymentDoc({
 }
 export function Reports() {
   const [period, setPeriod] = useState({ from: dayOffset(-29), to: today() });
-  const data = useData<DashboardData>(`/dashboard?from=${period.from}&to=${period.to}`);
+  const { activeId } = useBranch();
+  const data = useData<DashboardData>(
+    withBranch(`/dashboard?from=${period.from}&to=${period.to}`, activeId),
+  );
   const report = data.data;
   const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -1023,6 +1065,7 @@ function SecuritySettings() {
 }
 function UserSettings() {
   const { user } = useSession();
+  const { branches } = useBranch();
   const data = useData<User[]>('/users');
   const [adding, setAdding] = useState(false),
     [editing, setEditing] = useState<User | null>(null);
@@ -1042,6 +1085,7 @@ function UserSettings() {
           email: f.get('email'),
           password: f.get('password'),
           role: f.get('role'),
+          branch_ids: f.getAll('branch_ids').map(String),
         });
       setAdding(false);
       setEditing(null);
@@ -1138,6 +1182,22 @@ function UserSettings() {
                     />
                   </Field>
                 </>
+              )}
+              {!editing && (
+                <div className="field branch-field">
+                  <span>الفروع المسموح بها (للموظف)</span>
+                  <div className="branch-checks">
+                    {branches.map((b) => (
+                      <label key={b.id} className="check-line">
+                        <input type="checkbox" name="branch_ids" value={b.id} />
+                        {b.name}
+                      </label>
+                    ))}
+                  </div>
+                  <small>
+                    المدير يرى كل الفروع تلقائياً. عدّل صلاحيات الفروع لاحقاً من صفحة كل فرع.
+                  </small>
+                </div>
               )}
               <Field label="الصلاحية">
                 <select name="role" defaultValue={editing?.role || 'STAFF'}>
