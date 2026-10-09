@@ -12,6 +12,7 @@ services:
       SEED_DEMO: ${SEED_DEMO:-false}
       SEED_PASSWORD: ${SEED_PASSWORD:?Set a unique SEED_PASSWORD in .env before starting}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      COOKIE_PARTITIONED: ${COOKIE_PARTITIONED:-false}
     volumes:
       - orqiva-data:/app/data
       - orqiva-backups:/app/backups

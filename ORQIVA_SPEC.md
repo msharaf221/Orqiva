@@ -9,7 +9,7 @@ An Arabic-first, RTL trading-business operations application. One company, one w
 ## Entities
 
 - `users`: named individual logins, unique case-insensitive email, bcrypt password hash, ADMIN/STAFF role, active status.
-- `sessions`: SHA-256 hashes of random bearer tokens, user foreign key, eight-hour expiry. HttpOnly SameSite=Lax cookie. Secure configurable for HTTPS.
+- `sessions`: SHA-256 hashes of random bearer tokens, user foreign key, eight-hour expiry. HttpOnly SameSite=Lax cookie by default. Secure configurable for HTTPS. Development previews on `*.e2b.app`, or explicit `COOKIE_PARTITIONED=true`, use Secure + SameSite=None + Partitioned (CHIPS); both issuance and logout use identical attributes.
 - `company`: singleton identity, contact details, tax identifier, default tax rate and invoice note.
 - `parties`: customer/supplier type, contact information, tax ID, notes and archive flag. Balances are derived, not editable.
 - `products`: unique case-insensitive SKU, category, unit, sale/reference-cost prices, current stock, minimum stock and archive flag.
@@ -89,8 +89,8 @@ Dashboard; searchable/paginated products; inventory balances and movements; cust
 ## Delivery verification
 
 - Two real SQL migrations applied to the preview database; idempotent migration tracking.
-- 34 automated API/integration tests using a fresh on-disk database.
-- Three Playwright workflows exercised against the production build, including mobile interaction.
+- 48 automated tests: 36 API/integration tests using a fresh on-disk database and 12 cookie/client-session policy tests.
+- Six Playwright workflows exercised against the production build, including mobile interaction, real cross-site HTTPS iframe login with third-party cookies restricted, blocked-cookie feedback, and deduplicated session-expiry notifications.
 - TypeScript strict and no-unused checks; formatted source and successful Vite build.
 - Dependency audit reports zero known vulnerabilities at delivery time; not a guarantee of future safety.
 - SQLite Online Backup executed and resulting file integrity checked.

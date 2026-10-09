@@ -44,6 +44,7 @@ import {
   dayOffset,
 } from './lib';
 import type { User, Company, Product, Party, Document, Dashboard as DashboardData } from './types';
+import { ApiError } from './api';
 const Dashboard = lazy(() => import('./pages/Dashboard').then((m) => ({ default: m.Dashboard })));
 const Products = lazy(() => import('./pages/Catalog').then((m) => ({ default: m.Products })));
 const Inventory = lazy(() => import('./pages/Catalog').then((m) => ({ default: m.Inventory })));
@@ -83,14 +84,23 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
   const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
-    void act(async () =>
-      onLogin(
-        await api<User>('/auth/login', 'POST', {
-          email: f.get('email'),
-          password: f.get('password'),
-        }),
-      ),
-    );
+    void act(async () => {
+      await api<User>('/auth/login', 'POST', {
+        email: f.get('email'),
+        password: f.get('password'),
+      });
+      // Verify the browser actually retained the HttpOnly cookie before loading protected screens.
+      try {
+        onLogin(await api<User>('/auth/me'));
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          throw new Error(
+            'تعذر حفظ جلسة الدخول في المتصفح. افتح المعاينة في تبويب مستقل أو اسمح بملفات تعريف الارتباط لهذا الموقع.',
+          );
+        }
+        throw error;
+      }
+    });
   };
   return (
     <div className="login-page">

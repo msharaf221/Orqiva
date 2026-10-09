@@ -103,6 +103,40 @@ beforeEach(() => {
   );
 });
 describe('Real database migrations and security', () => {
+  it('issues a partitioned preview cookie and clears it with matching attributes', async () => {
+    const login = await request(app)
+      .post('/api/auth/login')
+      .set(header)
+      .set('Host', '5173-preview.e2b.app')
+      .send({ email: 'admin@test.local', password: 'TestingPassword2026!' })
+      .expect(200);
+    const cookies = login.headers['set-cookie'];
+    const cookie = String(Array.isArray(cookies) ? cookies[0] : cookies);
+    expect(cookie).toContain('HttpOnly');
+    expect(cookie).toContain('Secure');
+    expect(cookie).toContain('SameSite=None');
+    expect(cookie).toContain('Partitioned');
+    await request(app)
+      .get('/api/auth/me')
+      .set('Host', '5173-preview.e2b.app')
+      .set('Cookie', cookie.split(';')[0])
+      .expect(200);
+    const logout = await request(app)
+      .post('/api/auth/logout')
+      .set(header)
+      .set('Host', '5173-preview.e2b.app')
+      .set('Cookie', cookie.split(';')[0])
+      .expect(200);
+    const cleared = String(logout.headers['set-cookie']);
+    expect(cleared).toContain('SameSite=None');
+    expect(cleared).toContain('Partitioned');
+    expect(cleared).toContain('Expires=Thu, 01 Jan 1970');
+    await request(app).get('/api/auth/me').set('Cookie', cookie.split(';')[0]).expect(401);
+  });
+  it('preserves CSRF checks even with partitioned preview cookies', async () => {
+    await admin.post('/api/expenses').set('Host', '5173-preview.e2b.app').send({}).expect(403);
+  });
+
   it('applies the SQL migration once and creates persistent relational tables', () => {
     migrate();
     expect(all('SELECT * FROM schema_migrations')).toHaveLength(2);

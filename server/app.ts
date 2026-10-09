@@ -27,6 +27,7 @@ import {
   date,
 } from './validation';
 import { report } from './reports';
+import { sessionCookieOptions } from './session-cookie';
 import type { User, Product, Party, Document, Company } from '../src/types';
 
 declare global {
@@ -56,7 +57,8 @@ app.use(
 );
 app.use(express.json({ limit: '256kb' }));
 app.use(cookieParser());
-// Non-simple custom header + SameSite cookie prevent cross-site mutations; no CORS is enabled.
+// Non-simple custom header prevents cross-site mutations, including with embedded cookies.
+// No CORS is enabled, so other origins cannot send the required header.
 app.use('/api', (req, res, next) => {
   res.setHeader('Cache-Control', 'no-store');
   if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && req.get('X-Orqiva-Request') !== '1')
@@ -75,12 +77,6 @@ const loginLimiter = rateLimit({
   message: { error: 'محاولات كثيرة. يرجى المحاولة بعد ١٥ دقيقة.' },
 });
 const tokenHash = (token: string) => createHash('sha256').update(token).digest('hex');
-const cookieOptions = {
-  httpOnly: true,
-  sameSite: 'lax' as const,
-  secure: process.env.COOKIE_SECURE === 'true',
-  path: '/',
-};
 app.post('/api/auth/login', loginLimiter, async (req, res) => {
   const input = z
     .object({ email: z.string().email().max(200), password: z.string().min(1).max(128) })
@@ -105,7 +101,7 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
     );
     audit(user, 'تسجيل دخول', 'USER', user.id);
   });
-  res.cookie('orqiva_session', token, { ...cookieOptions, maxAge: 8 * 3600000 });
+  res.cookie('orqiva_session', token, { ...sessionCookieOptions(req), maxAge: 8 * 3600000 });
   const { password_hash: _password, ...safeUser } = user;
   res.json(safeUser);
 });
@@ -138,7 +134,7 @@ const authorizeDoc = (req: Request, _res: Response, next: NextFunction) => {
 app.get('/api/auth/me', (req, res) => res.json(req.user));
 app.post('/api/auth/logout', (req, res) => {
   run('DELETE FROM sessions WHERE id=?', tokenHash(req.cookies.orqiva_session));
-  res.clearCookie('orqiva_session', cookieOptions).json({ ok: true });
+  res.clearCookie('orqiva_session', sessionCookieOptions(req)).json({ ok: true });
 });
 app.post('/api/auth/password', async (req, res) => {
   const input = z

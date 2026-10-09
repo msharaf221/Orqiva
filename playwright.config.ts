@@ -35,6 +35,7 @@ export default defineConfig({
       SEED_DEMO: 'false',
       SEED_PASSWORD: 'E2ETestPassword2026!',
       COOKIE_SECURE: 'false',
+      COOKIE_PARTITIONED: 'false',
     },
   },
 });

@@ -21,6 +21,8 @@ import {
   ArrowDownRight,
 } from 'lucide-react';
 import type { User, Company, Document } from './types';
+import { api, SessionExpiredError } from './api';
+export { api } from './api';
 export const money = (value: number, decimals = 0) =>
   new Intl.NumberFormat('en-US', {
     minimumFractionDigits: decimals,
@@ -45,30 +47,6 @@ export const formatDate = (date: string, short = false) =>
   }).format(new Date(date));
 export const toCents = (value: FormDataEntryValue | null) => Math.round(Number(value) * 100);
 export const methods = { CASH: 'نقداً', BANK: 'تحويل بنكي', CARD: 'بطاقة بنكية' };
-export async function api<T>(
-  url: string,
-  method = 'GET',
-  body?: unknown,
-  requestKey?: string,
-): Promise<T> {
-  const response = await fetch('/api' + url, {
-    method,
-    credentials: 'same-origin',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Orqiva-Request': '1',
-      ...(requestKey ? { 'Idempotency-Key': requestKey } : {}),
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  const data = await response.json();
-  if (!response.ok) {
-    if (response.status === 401 && !url.startsWith('/auth/'))
-      window.dispatchEvent(new Event('session-expired'));
-    throw new Error(data.error + (data.details ? ' — ' + data.details.join('، ') : ''));
-  }
-  return data as T;
-}
 export function useData<T>(url: string) {
   const [data, setData] = useState<T | null>(null),
     [error, setError] = useState(''),
@@ -152,7 +130,8 @@ export function useAction() {
         await fn();
         if (message) toast(message);
       } catch (e) {
-        toast(e instanceof Error ? e.message : 'تعذر إتمام العملية', 'error');
+        if (!(e instanceof SessionExpiredError))
+          toast(e instanceof Error ? e.message : 'تعذر إتمام العملية', 'error');
       } finally {
         pending.current = false;
         setBusy(false);
