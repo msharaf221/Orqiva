@@ -2,6 +2,10 @@ export type Role = 'ADMIN' | 'STAFF';
 export type DocType = 'SALE' | 'PURCHASE';
 export type PartyType = 'CUSTOMER' | 'SUPPLIER';
 export type PaymentMethod = 'CASH' | 'BANK' | 'CARD';
+export type BranchKind = 'HQ' | 'STORE' | 'WAREHOUSE' | 'ONLINE';
+export type ExpenseAllocation = 'BRANCH' | 'EQUAL' | 'REVENUE';
+export type TransferStatus = 'DRAFT' | 'IN_TRANSIT' | 'RECEIVED' | 'CANCELLED';
+export type DistributionStatus = 'DRAFT' | 'APPROVED' | 'PAID' | 'CANCELLED';
 export interface User {
   id: string;
   name: string;
@@ -9,6 +13,7 @@ export interface User {
   role: Role;
   active: number;
   created_at: string;
+  branch_ids?: string[];
 }
 export interface Company {
   id: number;
@@ -20,6 +25,36 @@ export interface Company {
   currency: string;
   tax_rate: number;
   invoice_note: string;
+}
+export interface Branch {
+  id: string;
+  code: string;
+  name: string;
+  kind: BranchKind;
+  phone: string;
+  address: string;
+  active: number;
+  opened_on: string;
+  closed_on: string | null;
+  created_at: string;
+  stock_units?: number;
+  stock_value?: number;
+  users?: { id: string; name: string; role: Role }[];
+}
+export interface BranchProduct {
+  product_id: string;
+  sku: string;
+  name: string;
+  category: string;
+  unit: string;
+  cost_price: number;
+  base_sale_price: number;
+  base_min_stock: number;
+  product_active: number;
+  active: number;
+  sale_price: number | null;
+  min_stock: number | null;
+  stock: number;
 }
 export interface Product {
   id: string;
@@ -33,6 +68,10 @@ export interface Product {
   min_stock: number;
   active: number;
   created_at: string;
+  /** Branch-scoped reads: 1 when the product is sellable in the selected branch. */
+  available?: number;
+  branch_id?: string;
+  branch_name?: string;
 }
 export interface Party {
   id: string;
@@ -71,12 +110,16 @@ export interface Payment {
   number?: string;
   party_name?: string;
   type?: DocType;
+  branch_name?: string;
 }
 export interface Document {
   id: string;
   number: string;
   type: DocType;
   status: 'DRAFT' | 'POSTED' | 'CANCELLED';
+  branch_id: string;
+  branch_name: string;
+  branch_code?: string;
   party_id: string;
   party_name: string;
   party_phone?: string;
@@ -105,6 +148,9 @@ export interface Expense {
   method: PaymentMethod;
   notes: string;
   created_at: string;
+  branch_id: string | null;
+  branch_name?: string | null;
+  allocation: ExpenseAllocation;
 }
 export interface Movement {
   id: string;
@@ -116,6 +162,8 @@ export interface Movement {
   number: string | null;
   user_name: string;
   created_at: string;
+  branch_name?: string;
+  transfer_number?: string | null;
 }
 export interface Audit {
   id: string;
@@ -148,4 +196,162 @@ export interface Dashboard {
   topProducts: { name: string; sku: string; quantity: number; revenue: number }[];
   expenseCategories: { category: string; amount: number }[];
   activities: Audit[];
+}
+export interface TransferLine {
+  id: string;
+  transfer_id: string;
+  product_id: string;
+  name: string;
+  sku: string;
+  quantity_sent: number;
+  quantity_received: number | null;
+  unit_cost: number;
+}
+export interface Transfer {
+  id: string;
+  number: string;
+  from_branch_id: string;
+  to_branch_id: string;
+  from_branch_name: string;
+  to_branch_name: string;
+  status: TransferStatus;
+  date: string;
+  notes: string;
+  created_at: string;
+  shipped_at: string | null;
+  received_at: string | null;
+  cancelled_at: string | null;
+  lines?: TransferLine[];
+}
+export interface TransferSuggestion {
+  product_id: string;
+  sku: string;
+  name: string;
+  from_branch_id: string;
+  from_branch_name: string;
+  to_branch_id: string;
+  to_branch_name: string;
+  quantity: number;
+}
+export interface Owner {
+  id: string;
+  name: string;
+  phone: string;
+  email: string;
+  share_bps: number;
+  active: number;
+  created_at: string;
+  contributed: number;
+  withdrawn: number;
+  declared: number;
+  paid: number;
+  due: number;
+}
+export interface EquityEntry {
+  id: string;
+  owner_id: string;
+  kind: 'CONTRIBUTION' | 'WITHDRAWAL';
+  amount: number;
+  method: PaymentMethod;
+  date: string;
+  notes: string;
+  created_at: string;
+}
+export interface BranchResult {
+  branch_id: string;
+  code: string;
+  name: string;
+  sales: number;
+  cost: number;
+  gross: number;
+  expenses: number;
+  net: number;
+}
+export interface DistributionPreview {
+  period_from: string;
+  period_to: string;
+  reserve_bps: number;
+  /** A live distribution already covers part of this period; creating one would be refused. */
+  overlap: { number: string } | null;
+  branches: BranchResult[];
+  netProfit: number;
+  reserve: number;
+  distributable: number;
+  shareTotal: number;
+  cashAvailable: number;
+  uncovered: number;
+  lines: { owner_id: string; owner_name: string; share_bps: number; amount: number }[];
+}
+export interface Distribution {
+  id: string;
+  number: string;
+  period_from: string;
+  period_to: string;
+  status: DistributionStatus;
+  reserve_bps: number;
+  net_profit: number;
+  reserve_amount: number;
+  distributable: number;
+  snapshot: string;
+  notes: string;
+  created_at: string;
+  approved_at: string | null;
+  paid_at: string | null;
+  lines?: {
+    id: string;
+    owner_id: string;
+    owner_name: string;
+    share_bps: number;
+    amount: number;
+    paid: number;
+  }[];
+  payments?: {
+    id: string;
+    line_id: string;
+    owner_name: string;
+    amount: number;
+    method: PaymentMethod;
+    date: string;
+    reference: string;
+  }[];
+  breakdown?: BranchResult[];
+}
+export interface GroupOverview {
+  from: string;
+  to: string;
+  branches: (BranchResult & {
+    id: string;
+    active: number;
+    receivables: number;
+    stockValue: number;
+    stockUnits: number;
+    lowStock: number;
+    inTransitOut: number;
+    inTransitIn: number;
+    invoices: number;
+  })[];
+  totals: {
+    sales: number;
+    gross: number;
+    expenses: number;
+    net: number;
+    receivables: number;
+    stockValue: number;
+    inTransitValue: number;
+    shortageValue: number;
+  };
+  cashAvailable: number;
+  owners: Owner[];
+}
+export interface StockMatrix {
+  branches: { id: string; code: string; name: string; active: number }[];
+  rows: {
+    product_id: string;
+    sku: string;
+    name: string;
+    unit: string;
+    cost_price: number;
+    total: number;
+    by_branch: Record<string, number>;
+  }[];
 }

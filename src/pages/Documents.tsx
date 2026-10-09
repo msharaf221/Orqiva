@@ -46,13 +46,15 @@ import {
   downloadCSV,
   methods,
 } from '../lib';
+import { GROUP, useBranch, withBranch } from '../branch';
 import type { Document, DocType, Product, Party } from '../types';
 export function Documents({ type }: { type: DocType }) {
   const sale = type === 'SALE';
   const path = sale ? '/sales' : '/purchases';
   const { user } = useSession();
   const [params] = useSearchParams();
-  const data = useData<Document[]>('/documents?type=' + type);
+  const { activeId, isGroup } = useBranch();
+  const data = useData<Document[]>(withBranch('/documents?type=' + type, activeId));
   const [query, setQuery] = useState(''),
     [status, setStatus] = useState(params.get('status') || 'all'),
     [page, setPage] = useState(1);
@@ -227,7 +229,10 @@ export function Documents({ type }: { type: DocType }) {
                       <td>
                         <div className="person-cell">
                           <Initials name={d.party_name} tone={i} />
-                          <span>{d.party_name}</span>
+                          <span>
+                            {d.party_name}
+                            {isGroup && <small className="cell-sub">{d.branch_name}</small>}
+                          </span>
                         </div>
                       </td>
                       <td className="muted no-wrap">{formatDate(d.date, true)}</td>
@@ -289,7 +294,11 @@ function Editor({ type, existing }: { type: DocType; existing?: Document }) {
   const navigate = useNavigate();
   const toast = useToast();
   const { busy, act } = useAction();
-  const products = useData<Product[]>('/products'),
+  const { activeId, branches, defaultBranchId } = useBranch();
+  const [branchId, setBranchId] = useState(
+    existing?.branch_id ?? (activeId !== GROUP ? activeId : defaultBranchId),
+  );
+  const products = useData<Product[]>(withBranch('/products', branchId)),
     parties = useData<Party[]>('/parties?type=' + (sale ? 'CUSTOMER' : 'SUPPLIER'));
   const [lines, setLines] = useState<EditorLine[]>(
     existing?.lines?.map((l) => ({
@@ -315,6 +324,12 @@ function Editor({ type, existing }: { type: DocType; existing?: Document }) {
     total = subtotal - discountCents + tax;
   const changeLine = (key: string, patch: Partial<EditorLine>) =>
     setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
+  const changeBranch = (next: string) => {
+    setBranchId(next);
+    // Lines were priced and stocked for the previous branch; start them again for the new one.
+    if (!existing)
+      setLines([{ key: crypto.randomUUID(), product_id: '', quantity: '1', price: '0' }]);
+  };
   const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
@@ -325,6 +340,7 @@ function Editor({ type, existing }: { type: DocType; existing?: Document }) {
         existing ? 'PUT' : 'POST',
         {
           type,
+          branch_id: branchId,
           party_id: form.get('party_id'),
           date: form.get('date'),
           due_date: form.get('due_date'),
@@ -394,6 +410,29 @@ function Editor({ type, existing }: { type: DocType; existing?: Document }) {
               </span>
             </div>
             <div className="form-card-body">
+              <div className="form-row">
+                <Field
+                  label="الفرع *"
+                  hint={
+                    sale
+                      ? 'تُسحب البضاعة من مخزون هذا الفرع، ولا تُباع فيه إلا المنتجات المتاحة له.'
+                      : 'تُستلم البضاعة في مخزون هذا الفرع.'
+                  }
+                >
+                  <select
+                    required
+                    value={branchId}
+                    onChange={(e) => changeBranch(e.target.value)}
+                    aria-label="فرع الفاتورة"
+                  >
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
               <div className="form-row">
                 <Field label={sale ? 'العميل *' : 'المورد *'}>
                   <select required name="party_id" defaultValue={existing?.party_id || ''}>
@@ -488,7 +527,7 @@ function Editor({ type, existing }: { type: DocType; existing?: Document }) {
                               اختر منتجاً
                             </option>
                             {products.data
-                              ?.filter((p) => p.active)
+                              ?.filter((p) => p.active && p.available)
                               .map((p) => (
                                 <option
                                   key={p.id}
@@ -727,6 +766,7 @@ export function DocumentDetail() {
               <p>{doc.party_address}</p>
               <p dir="ltr">{doc.party_phone}</p>
               {doc.party_tax_number && <p>الرقم الضريبي: {doc.party_tax_number}</p>}
+              <p className="muted">الفرع: {doc.branch_name}</p>
             </div>
             <div className="invoice-dates">
               <div>

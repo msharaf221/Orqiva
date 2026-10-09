@@ -1,6 +1,8 @@
 import { z } from 'zod';
 const text = (max = 200) => z.string().trim().min(1, 'هذا الحقل مطلوب').max(max);
 const optionalText = (max = 500) => z.string().trim().max(max).default('');
+const id = () => z.string().trim().min(1).max(100);
+const quantity = z.number().int().min(1).max(1_000_000);
 export const money = z.number().int().min(0).max(1_000_000_000);
 export const date = z
   .string()
@@ -9,6 +11,7 @@ export const date = z
     const d = new Date(s + 'T00:00:00Z');
     return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
   }, 'تاريخ غير صالح');
+const paymentMethod = z.enum(['CASH', 'BANK', 'CARD']);
 export const partySchema = z
   .object({
     type: z.enum(['CUSTOMER', 'SUPPLIER']),
@@ -20,22 +23,45 @@ export const partySchema = z
     notes: optionalText(2000),
   })
   .strict();
+const productFields = {
+  sku: text(50),
+  name: text(),
+  category: text(80),
+  unit: text(30),
+  sale_price: money,
+  cost_price: money,
+  min_stock: z.number().int().min(0).max(1_000_000),
+};
+/** Stock is never edited directly; it changes through documents, transfers and adjustments. */
+export const productUpdateSchema = z.object(productFields).strict();
 export const productSchema = z
   .object({
-    sku: text(50),
-    name: text(),
-    category: text(80),
-    unit: text(30),
-    sale_price: money,
-    cost_price: money,
-    min_stock: z.number().int().min(0).max(1_000_000),
+    ...productFields,
     stock: z.number().int().min(0).max(1_000_000).default(0),
+    branch_id: id().optional(),
+  })
+  .strict()
+  .refine((p) => !p.stock || !!p.branch_id, {
+    message: 'اختر الفرع الذي يُضاف إليه الرصيد الافتتاحي',
+    path: ['branch_id'],
+  });
+export const adjustSchema = z
+  .object({
+    branch_id: id(),
+    quantity: z
+      .number()
+      .int()
+      .min(-1_000_000)
+      .max(1_000_000)
+      .refine((q) => q !== 0),
+    reason: z.string().trim().min(3).max(300),
   })
   .strict();
 export const documentSchema = z
   .object({
     type: z.enum(['SALE', 'PURCHASE']),
-    party_id: text(100),
+    branch_id: id(),
+    party_id: id(),
     date,
     due_date: date,
     discount: money.default(0),
@@ -45,8 +71,8 @@ export const documentSchema = z
       .array(
         z
           .object({
-            product_id: text(100),
-            quantity: z.number().int().min(1).max(1_000_000),
+            product_id: id(),
+            quantity: quantity,
             unit_price: money,
           })
           .strict(),
@@ -62,7 +88,7 @@ export const documentSchema = z
 export const paymentSchema = z
   .object({
     amount: money.refine((n) => n > 0, 'المبلغ يجب أن يكون أكبر من صفر'),
-    method: z.enum(['CASH', 'BANK', 'CARD']),
+    method: paymentMethod,
     date,
     reference: optionalText(200),
   })
@@ -72,11 +98,27 @@ export const expenseSchema = z
     title: text(),
     category: text(80),
     amount: money.refine((n) => n > 0),
-    method: z.enum(['CASH', 'BANK', 'CARD']),
+    method: paymentMethod,
     date,
     notes: optionalText(2000),
+    allocation: z.enum(['BRANCH', 'EQUAL', 'REVENUE']).default('BRANCH'),
+    branch_id: id().nullable().optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((e, ctx) => {
+    if (e.allocation === 'BRANCH' && !e.branch_id)
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'اختر الفرع الذي يخصّه هذا المصروف',
+        path: ['branch_id'],
+      });
+    if (e.allocation !== 'BRANCH' && e.branch_id)
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'المصروف المشترك لا يُربط بفرع واحد',
+        path: ['branch_id'],
+      });
+  });
 export const companySchema = z
   .object({
     name: text(),
@@ -99,5 +141,124 @@ export const userSchema = z
       .transform((s) => s.toLowerCase()),
     password: z.string().min(10).max(128),
     role: z.enum(['ADMIN', 'STAFF']),
+    branch_ids: z.array(id()).max(200).default([]),
+  })
+  .strict();
+
+const branchKind = z.enum(['HQ', 'STORE', 'WAREHOUSE', 'ONLINE']);
+export const branchSchema = z
+  .object({
+    code: z
+      .string()
+      .trim()
+      .toUpperCase()
+      .regex(/^[A-Z0-9]{2,8}$/, 'كود الفرع: حروف إنجليزية أو أرقام من ٢ إلى ٨ خانات'),
+    name: text(100),
+    kind: branchKind.default('STORE'),
+    phone: optionalText(40),
+    address: optionalText(300),
+    opened_on: date,
+  })
+  .strict();
+export const branchUpdateSchema = z
+  .object({
+    name: text(100),
+    kind: branchKind,
+    phone: optionalText(40),
+    address: optionalText(300),
+  })
+  .strict();
+export const branchStatusSchema = z.object({ active: z.boolean() }).strict();
+export const branchProductSchema = z
+  .object({
+    active: z.boolean(),
+    sale_price: money.nullable(),
+    min_stock: z.number().int().min(0).max(1_000_000).nullable(),
+  })
+  .strict();
+export const branchUsersSchema = z.object({ user_ids: z.array(id()).max(200) }).strict();
+
+const noDuplicateProducts = (lines: { product_id: string }[]) =>
+  new Set(lines.map((l) => l.product_id)).size === lines.length;
+export const transferSchema = z
+  .object({
+    from_branch_id: id(),
+    to_branch_id: id(),
+    date,
+    notes: optionalText(1000),
+    lines: z
+      .array(z.object({ product_id: id(), quantity }).strict())
+      .min(1)
+      .max(100),
+  })
+  .strict()
+  .refine((t) => t.from_branch_id !== t.to_branch_id, {
+    message: 'لا يمكن التحويل إلى الفرع نفسه',
+    path: ['to_branch_id'],
+  })
+  .refine((t) => noDuplicateProducts(t.lines), {
+    message: 'المنتج مكرر في التحويل؛ عدّل الكمية بدلاً من تكراره',
+    path: ['lines'],
+  });
+export const transferReceiveSchema = z
+  .object({
+    lines: z
+      .array(
+        z
+          .object({
+            product_id: id(),
+            quantity_received: z.number().int().min(0).max(1_000_000),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(100),
+  })
+  .strict()
+  .refine((t) => noDuplicateProducts(t.lines), {
+    message: 'منتج مكرر في الاستلام',
+    path: ['lines'],
+  });
+
+export const ownerSchema = z
+  .object({
+    name: text(100),
+    phone: optionalText(40),
+    email: z.union([z.string().email().max(200), z.literal('')]).default(''),
+    share_bps: z.number().int().min(0).max(10000),
+  })
+  .strict();
+export const equitySchema = z
+  .object({
+    kind: z.enum(['CONTRIBUTION', 'WITHDRAWAL']),
+    amount: money.refine((n) => n > 0, 'المبلغ يجب أن يكون أكبر من صفر'),
+    method: paymentMethod,
+    date,
+    notes: optionalText(500),
+  })
+  .strict();
+export const distributionSchema = z
+  .object({
+    period_from: date,
+    period_to: date,
+    reserve_bps: z.number().int().min(0).max(5000),
+    notes: optionalText(1000),
+  })
+  .strict()
+  .refine((d) => d.period_to >= d.period_from, {
+    message: 'نهاية الفترة يجب أن تكون بعد بدايتها',
+    path: ['period_to'],
+  })
+  .refine((d) => Date.parse(d.period_to) - Date.parse(d.period_from) <= 366 * 86400000, {
+    message: 'الفترة الواحدة لا تتجاوز سنة',
+    path: ['period_to'],
+  });
+export const distributionPaymentSchema = z
+  .object({
+    line_id: id(),
+    amount: money.refine((n) => n > 0, 'المبلغ يجب أن يكون أكبر من صفر'),
+    method: paymentMethod,
+    date,
+    reference: optionalText(200),
   })
   .strict();

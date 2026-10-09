@@ -41,11 +41,13 @@ import {
   formatDate,
   Status,
 } from '../lib';
+import { useBranch, withBranch } from '../branch';
 import type { Product, Party, PartyType, Movement, Document } from '../types';
 export function Products() {
   const { user } = useSession();
   const [params] = useSearchParams();
-  const data = useData<Product[]>('/products');
+  const { activeId } = useBranch();
+  const data = useData<Product[]>(withBranch('/products', activeId));
   const [query, setQuery] = useState(params.get('q') || '');
   const [category, setCategory] = useState('all');
   const [archived, setArchived] = useState(false);
@@ -274,6 +276,7 @@ function ProductForm({
   onSaved: () => void;
 }) {
   const { busy, act } = useAction();
+  const { branches, defaultBranchId } = useBranch();
   const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
@@ -285,7 +288,7 @@ function ProductForm({
       sale_price: toCents(f.get('sale_price')),
       cost_price: toCents(f.get('cost_price')),
       min_stock: Number(f.get('min_stock')),
-      ...(!product ? { stock: Number(f.get('stock')) } : {}),
+      ...(!product ? { stock: Number(f.get('stock')), branch_id: String(f.get('branch_id')) } : {}),
     };
     void act(
       async () => {
@@ -378,12 +381,26 @@ function ProductForm({
             </Field>
           </div>
           {!product && (
-            <Field
-              label="الرصيد الافتتاحي للمخزون"
-              hint="يسجل تلقائياً كحركة افتتاحية في سجل المخزون."
-            >
-              <input name="stock" required type="number" min="0" max="1000000" defaultValue={0} />
-            </Field>
+            <>
+              <Field
+                label="الرصيد الافتتاحي للمخزون"
+                hint="يسجل تلقائياً كحركة افتتاحية في سجل المخزون."
+              >
+                <input name="stock" required type="number" min="0" max="1000000" defaultValue={0} />
+              </Field>
+              <Field
+                label="الفرع الذي يُسجَّل فيه الرصيد"
+                hint="الفروع الأخرى تبدأ بصفر، وتحوّل إليها بالتحويلات."
+              >
+                <select name="branch_id" required defaultValue={defaultBranchId}>
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </>
           )}
           <div className="info-banner">
             <Package size={18} />
@@ -405,8 +422,10 @@ function ProductForm({
 export function Inventory() {
   const { user } = useSession();
   const [params] = useSearchParams();
-  const products = useData<Product[]>('/products'),
-    movements = useData<Movement[]>('/movements');
+  const { activeId, isGroup, active, branches, defaultBranchId } = useBranch();
+  const [adjustBranch, setAdjustBranch] = useState(defaultBranchId);
+  const products = useData<Product[]>(withBranch('/products', activeId)),
+    movements = useData<Movement[]>(withBranch('/movements', activeId));
   const [query, setQuery] = useState(params.get('q') || ''),
     [low, setLow] = useState(params.get('low') === '1'),
     [tab, setTab] = useState('levels'),
@@ -435,6 +454,7 @@ export function Inventory() {
     if (adjust)
       void act(async () => {
         await api(`/products/${adjust.id}/adjust`, 'POST', {
+          branch_id: isGroup ? adjustBranch : activeId,
           quantity: Number(f.get('quantity')),
           reason: f.get('reason'),
         });
@@ -593,7 +613,13 @@ export function Inventory() {
                           </td>
                           {user.role === 'ADMIN' && (
                             <td>
-                              <button className="btn-small" onClick={() => setAdjust(p)}>
+                              <button
+                                className="btn-small"
+                                onClick={() => {
+                                  setAdjustBranch(isGroup ? defaultBranchId : activeId);
+                                  setAdjust(p);
+                                }}
+                              >
                                 <SlidersHorizontal size={14} /> تسوية
                               </button>
                             </td>
@@ -662,11 +688,30 @@ export function Inventory() {
         )}
       </section>
       {adjust && (
-        <Modal title="تسوية المخزون" description={adjust.name} onClose={() => setAdjust(null)}>
+        <Modal
+          title="تسوية المخزون"
+          description={`${adjust.name}${isGroup ? '' : ' · ' + (active?.name ?? '')}`}
+          onClose={() => setAdjust(null)}
+        >
           <form onSubmit={submit}>
             <div className="modal-body form-grid">
+              {isGroup && (
+                <Field label="الفرع الذي تُسوّى فيه الكمية *">
+                  <select
+                    required
+                    value={adjustBranch}
+                    onChange={(e) => setAdjustBranch(e.target.value)}
+                  >
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              )}
               <div className="adjust-current">
-                <span>المخزون الحالي</span>
+                <span>{isGroup ? 'إجمالي المخزون في كل الفروع' : 'المخزون الحالي'}</span>
                 <strong className="num">
                   {adjust.stock} <small>{adjust.unit}</small>
                 </strong>

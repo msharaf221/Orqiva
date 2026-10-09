@@ -4,7 +4,7 @@ This is the implementation specification chosen for this delivery, not a reprodu
 
 ## Product and tenancy
 
-An Arabic-first, RTL trading-business operations application. One company, one warehouse, EGP base currency, integer units. Local-first deployment using an actual SQLite database and SQL migrations. Supports an administrator and a sales staff role, rather than configurable permissions per module.
+An Arabic-first, RTL trading-business operations application. One legal company operating several branches under one owner: every branch is a stock location with its own assortment, prices, reorder levels, invoice numbering and staff access. EGP base currency, integer units. Local-first deployment using an actual SQLite database and SQL migrations. Supports an administrator and a sales staff role, rather than configurable permissions per module.
 
 ## Entities
 
@@ -12,17 +12,36 @@ An Arabic-first, RTL trading-business operations application. One company, one w
 - `sessions`: SHA-256 hashes of random bearer tokens, user foreign key, eight-hour expiry. HttpOnly SameSite=Lax cookie by default. Secure configurable for HTTPS. Development previews on `*.e2b.app`, or explicit `COOKIE_PARTITIONED=true`, use Secure + SameSite=None + Partitioned (CHIPS); both issuance and logout use identical attributes.
 - `company`: singleton identity, contact details, tax identifier, default tax rate and invoice note.
 - `parties`: customer/supplier type, contact information, tax ID, notes and archive flag. Balances are derived, not editable.
-- `products`: unique case-insensitive SKU, category, unit, sale/reference-cost prices, current stock, minimum stock and archive flag.
-- `documents`: SALE/PURCHASE, globally unique sequential annual number, DRAFT/POSTED/CANCELLED state, party, document/due dates, integer monetary totals, notes and author.
+- `products`: unique case-insensitive SKU, category, unit, sale/reference-cost prices, minimum stock and archive flag. Quantities are not stored here; they live per branch in `branch_stock`.
+- `branches`: unique code (2-8 alphanumerics), name, kind (HQ/STORE/WAREHOUSE/ONLINE), contact, `opened_on`, `closed_on` and active flag. Archiving closes the branch from today and requires zero stock and no drafts or goods in transit.
+- `branch_products`: per branch, whether the product is listed (sellable and purchasable there), an optional sale-price override and an optional reorder-level override.
+- `branch_stock`: quantity per (branch, product), never negative. Every change is paired with a `stock_movements` row, so balances always reconcile with the movement log.
+- `user_branches`: branches each employee may operate in. Administrators see every branch.
+- `transfers` / `transfer_lines`: DRAFT, IN_TRANSIT, RECEIVED or CANCELLED. Shipping removes goods from the sender; receiving records the quantity that arrived; the difference is kept on the transfer as a shortage. The unit cost is snapshotted at shipment.
+- `owners`: share in basis points. Active shares must not exceed 10000 and must equal 10000 before any distribution.
+- `equity_entries`: owner contributions and withdrawals (cash in and out of the group pool).
+- `distributions` / `distribution_lines` / `distribution_payments`: a frozen calculation for a closed period, approved only if recalculation still matches, paid per owner with partial payments capped by the amount owed and by available cash.
+- `documents`: SALE/PURCHASE, branch, unique sequential annual number per branch (for example `INV-NSR-2026-0001`, `PO-HQ-2026-0001`), DRAFT/POSTED/CANCELLED state, party, document/due dates, integer monetary totals, notes and author.
 - `document_lines`: product identity snapshot, positive integer quantity, price, cost snapshot and total. A product appears once per invoice.
 - `payments`: positive amount, CASH/BANK/CARD method, date, optional external reference, invoice and author. Optional unique UUID request key for safe retries.
-- `stock_movements`: signed nonzero quantity, optional invoice, reason and author. Timestamp is actual registration time.
-- `expenses`: immutable positive amount, category, date, method, notes and author.
+- `stock_movements`: signed nonzero quantity, branch, optional invoice or transfer, reason and author. Timestamp is actual registration time.
+- `expenses`: immutable positive amount, category, date, method, notes and author, plus an allocation: `BRANCH` (one branch), `EQUAL` (split equally among branches open on the expense date) or `REVENUE` (split by each branch's posted net sales in the expense's own month).
 - `sequences`: annual invoice counters incremented transactionally.
 - `audit_logs`: actor, action, entity ID, summary and timestamp.
 - `schema_migrations`: applied migration names and timestamps.
 
 Foreign keys and CHECK constraints are enabled. Every domain mutation which spans several rows uses a synchronous `BEGIN IMMEDIATE` transaction. Failures roll back invoice status, line costs, movements, balances and audit entries together.
+
+## Multi-branch rules (v2)
+
+- A sale draws from the stock of its own branch and only lists products that branch carries. A purchase is received into the branch named on the document.
+- Shared expenses are allocated with the largest-remainder method, so allocations always add back exactly to the expense amount. Group totals never change with the allocation; only the split between branches does.
+- A branch is only charged for shared expenses dated from its opening date until its closing date.
+- A distribution period is the group's net profit (sales before tax, minus cost of goods sold, minus all expenses). Losses in one branch reduce the group total. A reserve (default 5%, configurable from 0% to 50%) is taken only from a positive total. The rest is split across active owners by share, using largest remainder so the parts add back exactly.
+- Distribution periods may not overlap a live (non-cancelled) distribution. Approval recalculates the period; if sales, expenses or owner shares changed since the draft, approval is refused and the draft must be replaced.
+- Owner payments and withdrawals may not take the group's cash below zero. Cash is one pool: sales collections and owner contributions in; purchase payments, expenses, withdrawals and distribution payments out.
+- Staff see and operate only in their assigned branches. Shared (unassigned) expenses, owner data, distributions and the group overview are administrator-only. Customers and suppliers are shared across branches, so their balances are group-wide.
+- The migration `003_multi_branch.sql` moves every pre-existing record into the `main` branch (code `HQ`), keeps every document number unchanged, and creates one owner at 100%. It is verified by an automated upgrade test.
 
 ## Invoice lifecycle
 
@@ -72,7 +91,16 @@ All `/api` endpoints except health and login require a valid session. Mutations 
 | `/api/documents/:id/payments` | POST payment | Sales: all; purchases: admin |
 | `/api/payments` | GET consolidated payment ledger | Signed in |
 | `/api/movements` | GET latest 1000 movements | Signed in |
-| `/api/expenses` | GET / POST immutable expense | Read all; write admin |
+| `/api/expenses` | GET / POST immutable expense with allocation | Admin writes; staff read their branches |
+| `/api/branches` | GET / POST; `PUT` details; `PATCH .../active` archive or reopen | Admin writes; staff read assigned branches |
+| `/api/branches/:id/assortment` | GET listed products, prices and reorder levels; `PUT .../products/:productId` | Read per scope; admin writes |
+| `/api/branches/:id/staff` | GET / PUT assigned employees | Admin |
+| `/api/stock/matrix` | GET product by branch quantities | Scoped to visible branches |
+| `/api/transfers` | GET / POST draft; `PUT` draft; `POST .../ship`, `.../receive`, `.../cancel` | Source or destination branch access |
+| `/api/transfers/suggestions` | GET rebalancing suggestions within scope | Scoped |
+| `/api/group/overview` | GET per-branch results, group totals and cash position | Admin |
+| `/api/owners` | GET / POST / `PUT`; `PATCH .../active`; `.../entries` and `.../ledger` | Admin |
+| `/api/distributions` | GET list; `POST /preview` (no write); `POST` draft; `.../approve`, `.../cancel`, `.../payments` | Admin |
 | `/api/dashboard?from=YYYY-MM-DD&to=YYYY-MM-DD` | GET period report, max 366 days | Signed in |
 | `/api/users` | GET / POST | Admin |
 | `/api/users/:id` | PATCH role/active, revoke sessions | Admin; cannot modify self |
@@ -98,6 +126,6 @@ Dashboard; searchable/paginated products; inventory balances and movements; cust
 
 ## Explicit exclusions
 
-Statutory/general-ledger accounting, Egyptian e-invoicing integration, tax filing, sales/purchase returns and credit notes, payment refunds, editing recorded expenses, payroll, manufacturing, multi-company, multi-warehouse, multicurrency, fractional stock, batch/serial tracking, weighted-average/FIFO costing, attachments, bulk import, third-party integrations, MFA, password-reset email and horizontal scaling. These are not hidden placeholders or buttons promising unimplemented actions.
+Statutory/general-ledger accounting with double-entry journals, Egyptian e-invoicing integration, tax filing, sales/purchase returns and credit notes, payment refunds, editing recorded expenses, payroll, manufacturing, multi-company (separate legal entities with separate books), multicurrency, intercompany transfer pricing, bank accounts per branch, several stock locations inside one branch, fractional stock, batch/serial tracking, weighted-average/FIFO costing, attachments, bulk import, third-party integrations, MFA, password-reset email and horizontal scaling. These are not hidden placeholders or buttons promising unimplemented actions.
 
 Operational deployment requires HTTPS, unique credentials, backup scheduling and recovery testing, network access controls, proxy/rate-limit review and accountant approval of the chosen financial policies. Audit records can be changed by someone with direct server/database access; they are not a cryptographic immutable ledger.
