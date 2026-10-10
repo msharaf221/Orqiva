@@ -20,7 +20,9 @@ import {
   CreditCard,
   ArrowLeft,
   Filter,
+  Shield,
 } from 'lucide-react';
+import { PermissionsModal } from './PermissionsModal';
 import {
   api,
   useData,
@@ -47,7 +49,15 @@ import {
   methods,
 } from '../lib';
 import { useBranch, withBranch } from '../branch';
-import type { Expense, Payment, Document, Dashboard as DashboardData, User, Audit } from '../types';
+import type {
+  Expense,
+  Payment,
+  Document,
+  Dashboard as DashboardData,
+  User,
+  Audit,
+  Role,
+} from '../types';
 import { PaymentForm } from './Documents';
 import { RevenueChart } from './Dashboard';
 /** Who bears an expense: one branch, or every open branch by equal share or by the month's sales. */
@@ -1063,12 +1073,22 @@ function SecuritySettings() {
     </form>
   );
 }
+const ROLE_LABELS: Record<Role, string> = {
+  ADMIN: 'مدير النظام',
+  BRANCH_MANAGER: 'مدير فرع',
+  GENERAL_ACCOUNTANT: 'محاسب عام',
+  TREASURY_ACCOUNTANT: 'محاسب خزنة',
+  CASHIER: 'كاشير',
+  STAFF: 'موظف مبيعات',
+};
+
 function UserSettings() {
   const { user } = useSession();
   const { branches } = useBranch();
   const data = useData<User[]>('/users');
   const [adding, setAdding] = useState(false),
-    [editing, setEditing] = useState<User | null>(null);
+    [editing, setEditing] = useState<User | null>(null),
+    [customizing, setCustomizing] = useState<User | null>(null);
   const { busy, act } = useAction();
   const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -1097,8 +1117,8 @@ function UserSettings() {
       <section className="card settings-card">
         <div className="card-heading">
           <div>
-            <h2>فريق العمل</h2>
-            <p>حدد من يمكنه الوصول إلى مساحة عملك.</p>
+            <h2>فريق العمل والصلاحيات</h2>
+            <p>حدد أدوار الموظفين وخصص الصلاحيات الفردية والاستثناءات لكل مستخدم.</p>
           </div>
           <Button onClick={() => setAdding(true)}>
             <Plus size={16} /> مستخدم جديد
@@ -1120,35 +1140,66 @@ function UserSettings() {
                   <span>{u.email}</span>
                 </div>
                 <span className={'badge ' + (u.active ? 'paid' : 'cancelled')}>
-                  {u.active ? (u.role === 'ADMIN' ? 'مدير' : 'موظف') : 'معطل'}
+                  {u.active ? ROLE_LABELS[u.role] || u.role : 'معطل'}
                 </span>
-                <button
-                  className="icon-btn"
-                  disabled={u.id === user.id}
-                  onClick={() => setEditing(u)}
-                  aria-label={'تعديل صلاحيات ' + u.name}
-                >
-                  <Pencil size={16} />
-                </button>
+                <div className="user-item-actions">
+                  <button
+                    className="icon-btn"
+                    disabled={u.id === user.id}
+                    onClick={() => setCustomizing(u)}
+                    title={'تخصيص الصلاحيات الفردية لـ ' + u.name}
+                    aria-label={'تخصيص صلاحيات ' + u.name}
+                  >
+                    <Shield size={16} />
+                  </button>
+                  <button
+                    className="icon-btn"
+                    disabled={u.id === user.id}
+                    onClick={() => setEditing(u)}
+                    title={'تعديل بيانات ' + u.name}
+                    aria-label={'تعديل بيانات ' + u.name}
+                  >
+                    <Pencil size={16} />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
         )}
         <div className="permissions-note">
-          <h3>كيف تعمل الصلاحيات؟</h3>
+          <h3>هيكل الأدوار والصلاحيات المخصصة</h3>
           <p>
-            <b>مدير النظام:</b> جميع العمليات، إعدادات الشركة، إدارة المستخدمين وإلغاء الفواتير.
+            <b>مدير النظام (ADMIN):</b> وصول كامل لكافة العمليات وإعدادات الشركة وإدارة المستخدمين
+            والفروع.
           </p>
           <p>
-            <b>موظف المبيعات:</b> الاطلاع على بيانات الأعمال والتقارير، إدارة العملاء، إنشاء واعتماد
-            فواتير المبيعات وتسجيل تحصيلاتها. لا يمكنه إدارة المشتريات أو المصروفات أو تسوية
-            المخزون.
+            <b>مدير الفرع (BRANCH_MANAGER):</b> مبيعات ومشتريات ومخزون الفرع والتحويلات وصلاحيات
+            نقطة البيع POS والتقارير.
+          </p>
+          <p>
+            <b>محاسب عام (GENERAL_ACCOUNTANT):</b> القيود المالية، المبيعات والمشتريات، المصروفات،
+            والتقارير المالية الموسعة.
+          </p>
+          <p>
+            <b>محاسب خزنة (TREASURY_ACCOUNTANT):</b> المصروفات وحركات الخزينة وتقفيل ورديات الكاشير
+            والتقارير المالية.
+          </p>
+          <p>
+            <b>كاشير (CASHIER):</b> واجهة نقطة البيع السريعة POS، فتح الوردية وحركات الدرج النقدي
+            وإغلاق الوردية والبيع للعملاء.
+          </p>
+          <p>
+            <b>موظف مبيعات (STAFF):</b> الاطلاع على المبيعات والعملاء وإنشاء فواتير المبيعات.
+          </p>
+          <p className="perms-tip">
+            💡 <b>الاستثناءات والتخصيص الفردي:</b> يمكنك النقر على أيقونة الدرع 🛡️ بجانب أي مستخدم
+            لمنح (+) أو حجب (-) أي صلاحية محددة استثنائياً دون تغيير دوره العام.
           </p>
         </div>
       </section>
       {(adding || editing) && (
         <Modal
-          title={editing ? 'تعديل صلاحيات المستخدم' : 'إضافة مستخدم جديد'}
+          title={editing ? 'تعديل بيانات ودور المستخدم' : 'إضافة مستخدم جديد'}
           onClose={() => {
             setAdding(false);
             setEditing(null);
@@ -1199,10 +1250,14 @@ function UserSettings() {
                   </small>
                 </div>
               )}
-              <Field label="الصلاحية">
+              <Field label="الدور الوظيفي">
                 <select name="role" defaultValue={editing?.role || 'STAFF'}>
+                  <option value="ADMIN">مدير النظام (كامل الصلاحيات)</option>
+                  <option value="BRANCH_MANAGER">مدير فرع</option>
+                  <option value="GENERAL_ACCOUNTANT">محاسب عام</option>
+                  <option value="TREASURY_ACCOUNTANT">محاسب خزنة</option>
+                  <option value="CASHIER">كاشير نقطة بيع</option>
                   <option value="STAFF">موظف مبيعات</option>
-                  <option value="ADMIN">مدير النظام</option>
                 </select>
               </Field>
               {editing && (
@@ -1232,6 +1287,16 @@ function UserSettings() {
             </div>
           </form>
         </Modal>
+      )}
+      {customizing && (
+        <PermissionsModal
+          targetUser={customizing}
+          onClose={() => setCustomizing(null)}
+          onSaved={() => {
+            setCustomizing(null);
+            data.reload();
+          }}
+        />
       )}
     </>
   );

@@ -130,6 +130,15 @@ export const companySchema = z
     invoice_note: optionalText(1000),
   })
   .strict();
+export const roleEnum = z.enum([
+  'ADMIN',
+  'STAFF',
+  'GENERAL_ACCOUNTANT',
+  'TREASURY_ACCOUNTANT',
+  'BRANCH_MANAGER',
+  'CASHIER',
+]);
+
 export const userSchema = z
   .object({
     name: text(100),
@@ -140,10 +149,19 @@ export const userSchema = z
       .max(200)
       .transform((s) => s.toLowerCase()),
     password: z.string().min(10).max(128),
-    role: z.enum(['ADMIN', 'STAFF']),
+    role: roleEnum,
     branch_ids: z.array(id()).max(200).default([]),
   })
   .strict();
+
+export const userUpdateSchema = z
+  .object({
+    active: z.boolean(),
+    role: roleEnum,
+  })
+  .strict();
+
+export const permissionOverridesSchema = z.record(z.string(), z.boolean().nullable());
 
 const branchKind = z.enum(['HQ', 'STORE', 'WAREHOUSE', 'ONLINE']);
 export const branchSchema = z

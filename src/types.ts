@@ -1,4 +1,35 @@
-export type Role = 'ADMIN' | 'STAFF';
+export type Role =
+  'ADMIN' | 'STAFF' | 'GENERAL_ACCOUNTANT' | 'TREASURY_ACCOUNTANT' | 'BRANCH_MANAGER' | 'CASHIER';
+
+export type PermissionKey =
+  | 'sales:view'
+  | 'sales:create'
+  | 'sales:post'
+  | 'sales:cancel'
+  | 'pos:access'
+  | 'pos:shift_open'
+  | 'pos:shift_close'
+  | 'pos:cash_movement'
+  | 'pos:discount'
+  | 'purchases:view'
+  | 'purchases:create'
+  | 'purchases:post'
+  | 'purchases:cancel'
+  | 'products:view'
+  | 'products:manage'
+  | 'inventory:adjust'
+  | 'transfers:manage'
+  | 'customers:manage'
+  | 'suppliers:manage'
+  | 'expenses:manage'
+  | 'payments:manage'
+  | 'reports:view'
+  | 'distributions:manage'
+  | 'branches:manage'
+  | 'users:manage'
+  | 'company:manage'
+  | 'audit:view';
+
 export type DocType = 'SALE' | 'PURCHASE';
 export type PartyType = 'CUSTOMER' | 'SUPPLIER';
 export type PaymentMethod = 'CASH' | 'BANK' | 'CARD';
@@ -6,6 +37,74 @@ export type BranchKind = 'HQ' | 'STORE' | 'WAREHOUSE' | 'ONLINE';
 export type ExpenseAllocation = 'BRANCH' | 'EQUAL' | 'REVENUE';
 export type TransferStatus = 'DRAFT' | 'IN_TRANSIT' | 'RECEIVED' | 'CANCELLED';
 export type DistributionStatus = 'DRAFT' | 'APPROVED' | 'PAID' | 'CANCELLED';
+
+export type PosShiftStatus = 'OPEN' | 'PENDING_REVIEW' | 'CLOSED';
+export type PosCashMovementType = 'IN' | 'OUT';
+
+export interface PosShift {
+  id: string;
+  number: string;
+  branch_id: string;
+  user_id: string;
+  status: PosShiftStatus;
+  opened_at: string;
+  closed_at: string | null;
+  opening_cash: number;
+  expected_cash: number;
+  closing_cash: number | null;
+  difference: number;
+  cashier_declared_cash?: number | null;
+  reviewed_by?: string | null;
+  reviewer_name?: string | null;
+  review_notes?: string;
+  discrepancy_expense_id?: string | null;
+  notes: string;
+  created_at: string;
+  user_name?: string;
+  branch_name?: string;
+}
+
+export interface PosCashMovement {
+  id: string;
+  shift_id: string;
+  type: PosCashMovementType;
+  amount: number;
+  reason: string;
+  created_by: string;
+  created_at: string;
+  user_name?: string;
+}
+
+export interface PosShiftSummary {
+  shift: PosShift;
+  cash_sales: number;
+  card_sales: number;
+  bank_sales: number;
+  credit_sales: number;
+  total_sales: number;
+  sales_count: number;
+  cash_in: number;
+  cash_out: number;
+  opening_cash: number;
+  expected_cash: number;
+  closing_cash: number | null;
+  difference: number;
+  cashier_declared_cash?: number | null;
+  discrepancy_expense_id?: string | null;
+  movements: PosCashMovement[];
+}
+
+export interface PosCartLine {
+  product_id: string;
+  name: string;
+  sku: string;
+  unit: string;
+  unit_price: number;
+  quantity: number;
+  stock: number;
+  line_discount: number;
+}
+
 export interface User {
   id: string;
   name: string;
@@ -14,6 +113,8 @@ export interface User {
   active: number;
   created_at: string;
   branch_ids?: string[];
+  permissions?: PermissionKey[];
+  overrides?: Record<string, boolean>;
 }
 export interface Company {
   id: number;

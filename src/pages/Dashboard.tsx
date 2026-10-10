@@ -26,6 +26,7 @@ import {
   ChevronLeft,
   CircleCheck,
   TrendingUp,
+  Store,
 } from 'lucide-react';
 import {
   PageHeader,
@@ -151,6 +152,9 @@ export function Dashboard() {
         }
         actions={
           <>
+            <Link to="/pos" className="btn btn-secondary pos-quick-header-btn">
+              <Store size={17} /> نقطة البيع (POS)
+            </Link>
             <Button variant="secondary" onClick={exportReport} disabled={!data}>
               <Download size={16} /> تصدير التقرير
             </Button>
@@ -160,6 +164,23 @@ export function Dashboard() {
           </>
         }
       />
+      <div className="pos-dashboard-banner card">
+        <div className="pos-dash-info">
+          <span className="pos-dash-icon">
+            <Store size={24} />
+          </span>
+          <div>
+            <h3>شاشة نقطة البيع السريعة (POS) Odoo-Style</h3>
+            <p>
+              واجهة مخصصة للكاشير: شبكة منتجات سريعة، قارئ باركود، إدارة الورديات والنقدية، وطباعة
+              إيصالات حرارية.
+            </p>
+          </div>
+        </div>
+        <Link to="/pos" className="btn btn-primary pos-dash-launch-btn">
+          دخول شاشة الكاشير الآن <ArrowLeft size={16} />
+        </Link>
+      </div>
       <div className="overview-toolbar">
         <div className="section-label">
           <span className="live-dot" /> ملخص الأعمال{' '}
