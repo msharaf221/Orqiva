@@ -38,7 +38,13 @@ describe('upgrading a single-warehouse installation', () => {
     migrate();
     expect(
       all<{ name: string }>('SELECT name FROM schema_migrations ORDER BY name').map((r) => r.name),
-    ).toEqual(['001_initial.sql', '002_payment_idempotency.sql', '003_multi_branch.sql']);
+    ).toEqual([
+      '001_initial.sql',
+      '002_payment_idempotency.sql',
+      '003_multi_branch.sql',
+      '004_permissions_and_pos.sql',
+      '005_pos_treasury_workflow.sql',
+    ]);
     expect(one("SELECT code FROM branches WHERE id='main'")).toEqual({ code: 'HQ' });
     expect(
       one("SELECT quantity FROM branch_stock WHERE branch_id='main' AND product_id='p1'"),

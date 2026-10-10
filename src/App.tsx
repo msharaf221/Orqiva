@@ -47,9 +47,18 @@ import {
   today,
   dayOffset,
 } from './lib';
-import type { User, Company, Product, Party, Document, Dashboard as DashboardData } from './types';
+import type {
+  User,
+  Company,
+  Product,
+  Party,
+  Document,
+  Dashboard as DashboardData,
+  PermissionKey,
+} from './types';
 import { ApiError } from './api';
 const Dashboard = lazy(() => import('./pages/Dashboard').then((m) => ({ default: m.Dashboard })));
+const POS = lazy(() => import('./pages/POS').then((m) => ({ default: m.POS })));
 const Products = lazy(() => import('./pages/Catalog').then((m) => ({ default: m.Products })));
 const Inventory = lazy(() => import('./pages/Catalog').then((m) => ({ default: m.Inventory })));
 const Parties = lazy(() => import('./pages/Catalog').then((m) => ({ default: m.Parties })));
@@ -280,29 +289,72 @@ function Authenticated({ user, onLogout }: { user: User; onLogout: () => void })
     </SessionContext.Provider>
   );
 }
-type NavItem = { to: string; label: string; icon: typeof Package; adminOnly?: boolean };
+const ROLE_NAMES: Record<string, string> = {
+  ADMIN: 'مدير النظام',
+  BRANCH_MANAGER: 'مدير فرع',
+  GENERAL_ACCOUNTANT: 'محاسب عام',
+  TREASURY_ACCOUNTANT: 'محاسب خزنة',
+  CASHIER: 'كاشير',
+  STAFF: 'موظف مبيعات',
+};
+
+type NavItem = {
+  to: string;
+  label: string;
+  icon: typeof Package;
+  adminOnly?: boolean;
+  permission?: PermissionKey;
+};
 const navigation: { label: string; items: NavItem[] }[] = [
-  { label: 'نظرة عامة', items: [{ to: '/', label: 'لوحة التحكم', icon: LayoutDashboard }] },
+  {
+    label: 'نظرة عامة',
+    items: [
+      { to: '/', label: 'لوحة التحكم', icon: LayoutDashboard },
+      { to: '/pos', label: 'نقطة البيع (POS)', icon: Store, permission: 'pos:access' },
+    ],
+  },
   {
     label: 'إدارة الأعمال',
     items: [
-      { to: '/sales', label: 'المبيعات', icon: ReceiptText },
-      { to: '/purchases', label: 'المشتريات', icon: ShoppingBag },
-      { to: '/products', label: 'المنتجات', icon: Package },
-      { to: '/inventory', label: 'المخزون', icon: Boxes },
-      { to: '/transfers', label: 'التحويلات بين الفروع', icon: ArrowRightLeft },
-      { to: '/customers', label: 'العملاء', icon: Users },
-      { to: '/suppliers', label: 'الموردون', icon: Truck },
-      { to: '/branches', label: 'الفروع', icon: Store, adminOnly: true },
+      { to: '/sales', label: 'المبيعات', icon: ReceiptText, permission: 'sales:view' },
+      { to: '/purchases', label: 'المشتريات', icon: ShoppingBag, permission: 'purchases:view' },
+      { to: '/products', label: 'المنتجات', icon: Package, permission: 'products:view' },
+      { to: '/inventory', label: 'المخزون', icon: Boxes, permission: 'products:view' },
+      {
+        to: '/transfers',
+        label: 'التحويلات بين الفروع',
+        icon: ArrowRightLeft,
+        permission: 'transfers:manage',
+      },
+      { to: '/customers', label: 'العملاء', icon: Users, permission: 'customers:manage' },
+      { to: '/suppliers', label: 'الموردون', icon: Truck, permission: 'suppliers:manage' },
+      {
+        to: '/branches',
+        label: 'الفروع',
+        icon: Store,
+        adminOnly: true,
+        permission: 'branches:manage',
+      },
     ],
   },
   {
     label: 'الإدارة المالية',
     items: [
-      { to: '/expenses', label: 'المصروفات', icon: Wallet },
-      { to: '/payments', label: 'المدفوعات', icon: ArrowLeftRight },
-      { to: '/reports', label: 'التقارير والتحليلات', icon: ChartNoAxesCombined },
-      { to: '/distributions', label: 'التوزيعات والشركاء', icon: HandCoins, adminOnly: true },
+      { to: '/expenses', label: 'المصروفات', icon: Wallet, permission: 'expenses:manage' },
+      { to: '/payments', label: 'المدفوعات', icon: ArrowLeftRight, permission: 'payments:manage' },
+      {
+        to: '/reports',
+        label: 'التقارير والتحليلات',
+        icon: ChartNoAxesCombined,
+        permission: 'reports:view',
+      },
+      {
+        to: '/distributions',
+        label: 'التوزيعات والشركاء',
+        icon: HandCoins,
+        adminOnly: true,
+        permission: 'distributions:manage',
+      },
     ],
   },
 ];
@@ -355,7 +407,12 @@ function Layout() {
             <div className="nav-group" key={group.label}>
               <div className="nav-label">{group.label}</div>
               {group.items
-                .filter((item) => !item.adminOnly || user.role === 'ADMIN')
+                .filter((item) => {
+                  if (user.role === 'ADMIN') return true;
+                  if (item.adminOnly) return false;
+                  if (item.permission && !user.permissions?.includes(item.permission)) return false;
+                  return true;
+                })
                 .map((item) => (
                   <NavLink
                     key={item.to}
@@ -402,7 +459,7 @@ function Layout() {
               </span>
               <div>
                 <strong>{user.name}</strong>
-                <span>{user.role === 'ADMIN' ? 'مدير النظام' : 'موظف مبيعات'}</span>
+                <span>{ROLE_NAMES[user.role] || user.role}</span>
               </div>
               <ChevronDown size={15} />
             </button>
@@ -433,6 +490,14 @@ function Layout() {
             <strong>{heading}</strong>
           </div>
           <div className="topbar-actions">
+            <Link
+              to="/pos"
+              className="topbar-pos-link"
+              title="الدخول المباشر لشاشة نقطة البيع (POS)"
+            >
+              <Store size={16} />
+              <span>نقطة البيع (POS)</span>
+            </Link>
             <button className="global-search" onClick={() => setSearch(true)}>
               <Search size={16} />
               <span>ابحث في مساحة العمل...</span>
@@ -460,6 +525,7 @@ function Layout() {
           <Suspense fallback={<Loading />}>
             <Routes>
               <Route path="/" element={<Dashboard />} />
+              <Route path="/pos" element={<POS />} />
               <Route path="/products" element={<Products />} />
               <Route path="/inventory" element={<Inventory />} />
               <Route path="/customers" element={<Parties type="CUSTOMER" key="customers" />} />

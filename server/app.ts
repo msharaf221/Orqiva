@@ -18,7 +18,36 @@ import {
   cancelDocument,
   addPayment,
 } from './service';
-import { partySchema, expenseSchema, companySchema, userSchema, date } from './validation';
+import {
+  partySchema,
+  expenseSchema,
+  companySchema,
+  userSchema,
+  userUpdateSchema,
+  permissionOverridesSchema,
+  date,
+} from './validation';
+import {
+  ALL_PERMISSIONS,
+  getEffectivePermissions,
+  getUserPermissionOverrides,
+  hasPermission,
+  requirePermission,
+  setUserPermissionOverrides,
+} from './permissions';
+import {
+  getCurrentShift,
+  openShift,
+  addCashMovement,
+  getShiftSummary,
+  closeShift,
+  submitShiftClosing,
+  approveShiftClosing,
+  listPendingReviewShifts,
+  listShifts,
+  posCheckout,
+  ensureWalkInCustomer,
+} from './pos';
 import { report, groupOverview, stockMatrix } from './reports';
 import { canSee, scopeFor, scopeSql } from './scope';
 import { listProducts, createProduct, updateProduct, adjustStock } from './catalog';
@@ -72,6 +101,7 @@ declare global {
 }
 export const app = express();
 migrate();
+ensureWalkInCustomer();
 app.disable('x-powered-by');
 app.use(
   helmet({
@@ -136,7 +166,13 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
   });
   res.cookie('orqiva_session', token, { ...sessionCookieOptions(req), maxAge: 8 * 3600000 });
   const { password_hash: _password, ...safeUser } = user;
-  res.json(safeUser);
+  const enrichedUser: User = {
+    ...safeUser,
+    permissions: getEffectivePermissions(safeUser),
+    overrides: getUserPermissionOverrides(safeUser.id),
+    branch_ids: assignedBranches(safeUser.id),
+  };
+  res.json(enrichedUser);
 });
 app.use('/api', (req, res, next) => {
   const token: unknown = req.cookies.orqiva_session;
@@ -149,6 +185,9 @@ app.use('/api', (req, res, next) => {
         )
       : undefined;
   if (!user) return res.status(401).json({ error: 'يرجى تسجيل الدخول للمتابعة' });
+  user.permissions = getEffectivePermissions(user);
+  user.overrides = getUserPermissionOverrides(user.id);
+  user.branch_ids = assignedBranches(user.id);
   req.user = user;
   next();
 });
@@ -160,8 +199,15 @@ const authorizeDoc = (req: Request, _res: Response, next: NextFunction) => {
   const type = req.params.id
     ? requireRow(one<Document>('SELECT * FROM documents WHERE id=?', String(req.params.id))).type
     : req.body?.type;
-  if (type === 'PURCHASE' && req.user.role !== 'ADMIN')
-    throw new AppError(403, 'اعتماد المشتريات متاح لمدير النظام فقط');
+  if (type === 'PURCHASE') {
+    if (!hasPermission(req.user, ['purchases:create', 'purchases:post'])) {
+      throw new AppError(403, 'اعتماد المشتريات متاح لمدير النظام أو من يملك صلاحية المشتريات فقط');
+    }
+  } else if (type === 'SALE') {
+    if (!hasPermission(req.user, ['sales:create', 'sales:post'])) {
+      throw new AppError(403, 'ليس لديك صلاحية لإدارة المبيعات');
+    }
+  }
   next();
 };
 /** Period filter shared by reports (optional branch); ranges are capped at one year. */
@@ -448,7 +494,7 @@ app.get('/api/expenses', (req, res) => {
     ),
   );
 });
-app.post('/api/expenses', admin, (req, res) => {
+app.post('/api/expenses', requirePermission('expenses:manage'), (req, res) => {
   const p = expenseSchema.parse(req.body);
   const expenseId = id();
   transaction(() => {
@@ -532,7 +578,12 @@ app.get('/api/audit', admin, (_req, res) =>
 app.get('/api/users', admin, (_req, res) =>
   res.json(
     all<User>('SELECT id,name,email,role,active,created_at FROM users ORDER BY created_at').map(
-      (u) => ({ ...u, branch_ids: assignedBranches(u.id) }),
+      (u) => ({
+        ...u,
+        branch_ids: assignedBranches(u.id),
+        permissions: getEffectivePermissions(u),
+        overrides: getUserPermissionOverrides(u.id),
+      }),
     ),
   ),
 );
@@ -551,7 +602,7 @@ app.post('/api/users', admin, async (req, res) => {
       1,
       now(),
     );
-    for (const branchId of p.role === 'STAFF' ? p.branch_ids : [])
+    for (const branchId of p.role === 'ADMIN' ? [] : p.branch_ids)
       run(
         'INSERT OR IGNORE INTO user_branches(user_id,branch_id) VALUES(?,?)',
         userId,
@@ -559,17 +610,21 @@ app.post('/api/users', admin, async (req, res) => {
       );
     audit(req.user, 'إضافة مستخدم', 'USER', userId, p.name);
   });
-  res
-    .status(201)
-    .json(one('SELECT id,name,email,role,active,created_at FROM users WHERE id=?', userId));
+  const created = one<User>(
+    'SELECT id,name,email,role,active,created_at FROM users WHERE id=?',
+    userId,
+  )!;
+  res.status(201).json({
+    ...created,
+    branch_ids: assignedBranches(userId),
+    permissions: getEffectivePermissions(created),
+    overrides: getUserPermissionOverrides(userId),
+  });
 });
 app.patch('/api/users/:id', admin, (req, res) => {
   const userId = String(req.params.id);
-  const input = z
-    .object({ active: z.boolean(), role: z.enum(['ADMIN', 'STAFF']) })
-    .strict()
-    .parse(req.body);
-  if (userId === req.user.id)
+  const input = userUpdateSchema.parse(req.body);
+  if (userId === req.user.id && (!input.active || input.role !== 'ADMIN'))
     throw new AppError(400, 'لا يمكنك تغيير صلاحيات أو تعطيل حسابك الحالي');
   requireRow(one('SELECT id FROM users WHERE id=?', userId));
   transaction(() => {
@@ -578,6 +633,90 @@ app.patch('/api/users/:id', admin, (req, res) => {
     audit(req.user, 'تعديل صلاحيات مستخدم', 'USER', userId);
   });
   res.json({ ok: true });
+});
+
+// Permissions Management -----------------------------------------------------------------------
+app.get('/api/permissions/catalog', (_req, res) => {
+  res.json(ALL_PERMISSIONS);
+});
+app.get('/api/users/:id/permissions', admin, (req, res) => {
+  const userId = String(req.params.id);
+  const targetUser = requireRow(
+    one<User>('SELECT id, name, email, role FROM users WHERE id=?', userId),
+  );
+  res.json({
+    user_id: targetUser.id,
+    role: targetUser.role,
+    overrides: getUserPermissionOverrides(targetUser.id),
+    effective: getEffectivePermissions(targetUser),
+  });
+});
+app.put('/api/users/:id/permissions', admin, (req, res) => {
+  const userId = String(req.params.id);
+  const overrides = permissionOverridesSchema.parse(req.body);
+  const result = setUserPermissionOverrides(
+    userId,
+    overrides as Record<string, boolean | null>,
+    req.user,
+  );
+  run('DELETE FROM sessions WHERE user_id=?', userId);
+  res.json(result);
+});
+
+// Point of Sale (POS) ---------------------------------------------------------------------------
+app.get('/api/pos/shifts/current', requirePermission('pos:access'), (req, res) => {
+  const branchId = String(req.query.branch_id || 'main');
+  scopeFor(req.user, branchId);
+  res.json(getCurrentShift(req.user.id, branchId));
+});
+app.post('/api/pos/shifts/open', requirePermission('pos:shift_open'), (req, res) => {
+  res.status(201).json(openShift(req.body, req.user));
+});
+app.post(
+  '/api/pos/shifts/:id/cash-movement',
+  requirePermission('pos:cash_movement'),
+  (req, res) => {
+    res.status(201).json(addCashMovement(String(req.params.id), req.body, req.user));
+  },
+);
+app.get('/api/pos/shifts/:id/summary', requirePermission('pos:access'), (req, res) => {
+  res.json(getShiftSummary(String(req.params.id), req.user));
+});
+app.post('/api/pos/shifts/:id/submit', requirePermission('pos:access'), (req, res) => {
+  res.json(submitShiftClosing(String(req.params.id), req.body, req.user));
+});
+app.post('/api/pos/shifts/:id/approve', requirePermission('pos:shift_close'), (req, res) => {
+  res.json(approveShiftClosing(String(req.params.id), req.body, req.user));
+});
+app.post('/api/pos/shifts/:id/close', requirePermission('pos:shift_close'), (req, res) => {
+  res.json(closeShift(String(req.params.id), req.body, req.user));
+});
+app.get('/api/pos/shifts/pending-review', requirePermission('pos:shift_close'), (req, res) => {
+  res.json(listPendingReviewShifts(scopeFor(req.user, req.query.branch_id)));
+});
+app.get('/api/pos/shifts', requirePermission('pos:access'), (req, res) => {
+  const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+  res.json(listShifts(scopeFor(req.user, req.query.branch_id), status));
+});
+app.post('/api/pos/checkout', requirePermission('pos:access'), (req, res) => {
+  res.status(201).json(posCheckout(req.body, req.user));
+});
+app.get('/api/pos/products', requirePermission('pos:access'), (req, res) => {
+  const branchId = String(req.query.branch_id || 'main');
+  scopeFor(req.user, branchId);
+  const products = all(
+    `SELECT p.id, p.sku, p.name, p.category, p.unit,
+            COALESCE(bp.sale_price, p.sale_price) sale_price,
+            p.cost_price,
+            COALESCE(bs.quantity, 0) stock
+     FROM branch_products bp
+     JOIN products p ON p.id=bp.product_id
+     LEFT JOIN branch_stock bs ON bs.branch_id=bp.branch_id AND bs.product_id=bp.product_id
+     WHERE bp.branch_id=? AND bp.active=1 AND p.active=1
+     ORDER BY p.category, p.name`,
+    branchId,
+  );
+  res.json(products);
 });
 app.use('/api', (_req, res) => res.status(404).json({ error: 'المسار غير موجود' }));
 const dist = resolve('dist');
