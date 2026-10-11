@@ -32,10 +32,15 @@ async function setupProduct(
 ) {
   const costPrice = opts.costPrice ?? 10000; // 100.00 EGP default
 
-  const supplierRes = await admin
-    .post('/api/parties')
-    .set(header)
-    .send({ type: 'SUPPLIER', name: 'مورد اختبار', phone: '', email: '', address: '', tax_number: '', notes: '' });
+  const supplierRes = await admin.post('/api/parties').set(header).send({
+    type: 'SUPPLIER',
+    name: 'مورد اختبار',
+    phone: '',
+    email: '',
+    address: '',
+    tax_number: '',
+    notes: '',
+  });
   expect(supplierRes.status).toBe(201);
   const supplierId = supplierRes.body.id;
 
@@ -66,17 +71,20 @@ async function postPurchase(
   unitPrice: number,
 ) {
   const today = new Date().toISOString().slice(0, 10);
-  const draft = await admin.post('/api/documents').set(header).send({
-    type: 'PURCHASE',
-    branch_id: 'main',
-    party_id: supplierId,
-    date: today,
-    due_date: today,
-    tax_rate: 0,
-    discount: 0,
-    notes: '',
-    lines: [{ product_id: productId, quantity: qty, unit_price: unitPrice }],
-  });
+  const draft = await admin
+    .post('/api/documents')
+    .set(header)
+    .send({
+      type: 'PURCHASE',
+      branch_id: 'main',
+      party_id: supplierId,
+      date: today,
+      due_date: today,
+      tax_rate: 0,
+      discount: 0,
+      notes: '',
+      lines: [{ product_id: productId, quantity: qty, unit_price: unitPrice }],
+    });
   expect(draft.status).toBe(201);
   const docId = draft.body.id;
   const posted = await admin.post(`/api/documents/${docId}/post`).set(header).send({});
@@ -93,17 +101,20 @@ async function postSale(
   unitPrice: number,
 ) {
   const today = new Date().toISOString().slice(0, 10);
-  const draft = await admin.post('/api/documents').set(header).send({
-    type: 'SALE',
-    branch_id: 'main',
-    party_id: customerId,
-    date: today,
-    due_date: today,
-    tax_rate: 0,
-    discount: 0,
-    notes: '',
-    lines: [{ product_id: productId, quantity: qty, unit_price: unitPrice }],
-  });
+  const draft = await admin
+    .post('/api/documents')
+    .set(header)
+    .send({
+      type: 'SALE',
+      branch_id: 'main',
+      party_id: customerId,
+      date: today,
+      due_date: today,
+      tax_rate: 0,
+      discount: 0,
+      notes: '',
+      lines: [{ product_id: productId, quantity: qty, unit_price: unitPrice }],
+    });
   expect(draft.status).toBe(201);
   const docId = draft.body.id;
   const posted = await admin.post(`/api/documents/${docId}/post`).set(header).send({});
@@ -176,10 +187,15 @@ describe('WAC — Sale snapshots correct COGS', () => {
     // Purchase at 12000 — WAC becomes 12000
     await postPurchase(admin, supplierId, productId, 10, 12000);
 
-    const custRes = await admin
-      .post('/api/parties')
-      .set(header)
-      .send({ type: 'CUSTOMER', name: 'عميل اختبار', phone: '', email: '', address: '', tax_number: '', notes: '' });
+    const custRes = await admin.post('/api/parties').set(header).send({
+      type: 'CUSTOMER',
+      name: 'عميل اختبار',
+      phone: '',
+      email: '',
+      address: '',
+      tax_number: '',
+      notes: '',
+    });
     const customerId = custRes.body.id;
 
     const saleDOc = await postSale(admin, customerId, productId, 3, 20000);
@@ -196,10 +212,15 @@ describe('WAC — Sale snapshots correct COGS', () => {
 
     await postPurchase(admin, supplierId, productId, 10, 12000); // WAC = 12000
 
-    const custRes = await admin
-      .post('/api/parties')
-      .set(header)
-      .send({ type: 'CUSTOMER', name: 'عميل اختبار', phone: '', email: '', address: '', tax_number: '', notes: '' });
+    const custRes = await admin.post('/api/parties').set(header).send({
+      type: 'CUSTOMER',
+      name: 'عميل اختبار',
+      phone: '',
+      email: '',
+      address: '',
+      tax_number: '',
+      notes: '',
+    });
     const customerId = custRes.body.id;
 
     await postSale(admin, customerId, productId, 4, 20000); // Sell 4 units
@@ -238,20 +259,26 @@ describe('WAC — Transfer carries cost to receiving branch', () => {
     });
 
     // Create and ship transfer from HQ to B
-    const transferRes = await admin.post('/api/transfers').set(header).send({
-      from_branch_id: 'main',
-      to_branch_id: branchBId,
-      date: today,
-      notes: '',
-      lines: [{ product_id: productId, quantity: 5 }],
-    });
+    const transferRes = await admin
+      .post('/api/transfers')
+      .set(header)
+      .send({
+        from_branch_id: 'main',
+        to_branch_id: branchBId,
+        date: today,
+        notes: '',
+        lines: [{ product_id: productId, quantity: 5 }],
+      });
     expect(transferRes.status).toBe(201);
     const transferId = transferRes.body.id;
 
     await admin.post(`/api/transfers/${transferId}/ship`).set(header).send({});
-    await admin.post(`/api/transfers/${transferId}/receive`).set(header).send({
-      lines: [{ product_id: productId, quantity_received: 5 }],
-    });
+    await admin
+      .post(`/api/transfers/${transferId}/receive`)
+      .set(header)
+      .send({
+        lines: [{ product_id: productId, quantity_received: 5 }],
+      });
 
     // Branch B's WAC should be 14000 (inherited from HQ shipment)
     const costB = getBranchCost(branchBId, productId);
@@ -275,10 +302,15 @@ describe('WAC — Cancel reversal', () => {
 
     await postPurchase(admin, supplierId, productId, 10, 12000); // WAC = 12000, value = 120000
 
-    const custRes = await admin
-      .post('/api/parties')
-      .set(header)
-      .send({ type: 'CUSTOMER', name: 'عميل اختبار', phone: '', email: '', address: '', tax_number: '', notes: '' });
+    const custRes = await admin.post('/api/parties').set(header).send({
+      type: 'CUSTOMER',
+      name: 'عميل اختبار',
+      phone: '',
+      email: '',
+      address: '',
+      tax_number: '',
+      notes: '',
+    });
     const customerId = custRes.body.id;
 
     const saleDoc = await postSale(admin, customerId, productId, 3, 20000); // sell 3, value = 84000

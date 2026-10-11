@@ -350,8 +350,9 @@ export function Expenses() {
                     .filter((a) => a.active)
                     .map((a) => (
                       <option key={a.id} value={a.id}>
-                        {a.name} ({a.type === 'CASH' ? 'خزينة' : a.type === 'BANK' ? 'حساب بنكي' : 'محفظة'}) — الرصيد:{' '}
-                        {money(a.balance, 2)} ج.م
+                        {a.name} (
+                        {a.type === 'CASH' ? 'خزينة' : a.type === 'BANK' ? 'حساب بنكي' : 'محفظة'}) —
+                        الرصيد: {money(a.balance, 2)} ج.م
                       </option>
                     ))}
                 </select>
@@ -1134,7 +1135,9 @@ function UserSettings() {
   const isSelectedAdmin = activeRole?.code === 'ADMIN';
 
   const openAdd = () => {
-    setSelectedRoleId(rolesData.data?.find((r) => r.code === 'SALES')?.id || rolesData.data?.[0]?.id || '');
+    setSelectedRoleId(
+      rolesData.data?.find((r) => r.code === 'SALES')?.id || rolesData.data?.[0]?.id || '',
+    );
     setAdding(true);
   };
 
@@ -1200,7 +1203,7 @@ function UserSettings() {
                   <span>{u.email}</span>
                 </div>
                 <span className={'badge ' + (u.active ? 'paid' : 'cancelled')}>
-                  {u.active ? (u.role_name || (u.role === 'ADMIN' ? 'مدير' : 'موظف')) : 'معطل'}
+                  {u.active ? u.role_name || (u.role === 'ADMIN' ? 'مدير' : 'موظف') : 'معطل'}
                 </span>
                 <div className="user-item-actions">
                   <button
@@ -1228,7 +1231,8 @@ function UserSettings() {
         <div className="permissions-note">
           <h3>نظام الصلاحيات المخصص (RBAC)</h3>
           <p>
-            يدعم النظام أدواراً مخصصة مع صلاحيات دقيقة لكل شاشة وعملية. يمكنك تخصيص الأدوار من تبويب <b>"الأدوار والصلاحيات"</b> أعلاه.
+            يدعم النظام أدواراً مخصصة مع صلاحيات دقيقة لكل شاشة وعملية. يمكنك تخصيص الأدوار من تبويب{' '}
+            <b>"الأدوار والصلاحيات"</b> أعلاه.
           </p>
         </div>
       </section>
@@ -1301,7 +1305,8 @@ function UserSettings() {
                     ))}
                   </div>
                   <small>
-                    مدير النظام يرى كل الفروع تلقائياً. لباقي الأدوار، حدد الفروع المسموح بالعمل عليها.
+                    مدير النظام يرى كل الفروع تلقائياً. لباقي الأدوار، حدد الفروع المسموح بالعمل
+                    عليها.
                   </small>
                 </div>
               )}
@@ -1393,13 +1398,15 @@ function RolesSettings() {
                     {role.is_system ? 'دور قياسي' : 'مخصص'}
                   </span>
                 </div>
-                <p className="role-card-desc">{role.description || 'لا يوجد وصف محدد لهذا الدور'}</p>
+                <p className="role-card-desc">
+                  {role.description || 'لا يوجد وصف محدد لهذا الدور'}
+                </p>
                 <div className="role-card-meta">
-                  <span className="badge paid">
-                    {role.user_count || 0} مستخدم
-                  </span>
+                  <span className="badge paid">{role.user_count || 0} مستخدم</span>
                   <span className="muted" style={{ fontSize: '11px' }}>
-                    {role.code === 'ADMIN' ? 'كافة الصلاحيات (شامل)' : `${role.permissions.length} صلاحيات نشطة`}
+                    {role.code === 'ADMIN'
+                      ? 'كافة الصلاحيات (شامل)'
+                      : `${role.permissions.length} صلاحيات نشطة`}
                   </span>
                 </div>
                 <div className="role-perms-summary">
@@ -1412,9 +1419,7 @@ function RolesSettings() {
                     );
                   })}
                   {role.permissions.length > 4 && (
-                    <span className="perm-pill more">
-                      +{role.permissions.length - 4} أخرى
-                    </span>
+                    <span className="perm-pill more">+{role.permissions.length - 4} أخرى</span>
                   )}
                 </div>
                 <div className="role-card-actions">
@@ -1539,7 +1544,14 @@ function RoleModal({
           </Field>
 
           <div style={{ marginTop: '12px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '8px',
+              }}
+            >
               <strong>صلاحيات الدور ({selectedPerms.length} محددة) *</strong>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button
@@ -1722,14 +1734,17 @@ export function CashAccountModal({
         : { initial_balance: toCents(f.get('initial_balance')) }),
     };
 
-    void act(async () => {
-      if (account) {
-        await api(`/cash-accounts/${account.id}`, 'PUT', payload);
-      } else {
-        await api('/cash-accounts', 'POST', payload);
-      }
-      onSaved();
-    }, account ? 'تم حفظ تعديلات الحساب' : 'تم إنشاء الحساب المالي بنجاح');
+    void act(
+      async () => {
+        if (account) {
+          await api(`/cash-accounts/${account.id}`, 'PUT', payload);
+        } else {
+          await api('/cash-accounts', 'POST', payload);
+        }
+        onSaved();
+      },
+      account ? 'تم حفظ تعديلات الحساب' : 'تم إنشاء الحساب المالي بنجاح',
+    );
   };
 
   return (
@@ -2044,7 +2059,16 @@ export function StatementModal({
         </div>
 
         <div className="table-toolbar" style={{ marginTop: '12px' }}>
-          <div className="table-filters" style={{ width: '100%', display: 'flex', gap: '8px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <div
+            className="table-filters"
+            style={{
+              width: '100%',
+              display: 'flex',
+              gap: '8px',
+              alignItems: 'flex-end',
+              flexWrap: 'wrap',
+            }}
+          >
             <Field label="من تاريخ">
               <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
             </Field>
@@ -2391,10 +2415,7 @@ export function Accounts() {
                   )}
 
                   <div className="account-actions">
-                    <Button
-                      variant="secondary"
-                      onClick={() => setStatementAccount(acc)}
-                    >
+                    <Button variant="secondary" onClick={() => setStatementAccount(acc)}>
                       <ReceiptText size={14} /> كشف الحساب
                     </Button>
                     {user.role === 'ADMIN' && (
@@ -2405,10 +2426,7 @@ export function Accounts() {
                         >
                           <ArrowRightLeft size={14} /> تحويل
                         </Button>
-                        <Button
-                          variant="secondary"
-                          onClick={() => setEditingAccount(acc)}
-                        >
+                        <Button variant="secondary" onClick={() => setEditingAccount(acc)}>
                           <Pencil size={14} />
                         </Button>
                       </>
@@ -2438,26 +2456,24 @@ export function Accounts() {
                 </tr>
               </thead>
               <tbody>
-                {filteredTransfers
-                  .slice((page - 1) * 10, page * 10)
-                  .map((t) => (
-                    <tr key={t.id}>
-                      <td className="num">
-                        <strong>{t.number}</strong>
-                      </td>
-                      <td className="muted">{formatDate(t.date, true)}</td>
-                      <td>
-                        <span className="account-tag">{t.from_account_name}</span>
-                      </td>
-                      <td>
-                        <span className="account-tag in-flow">{t.to_account_name}</span>
-                      </td>
-                      <td className="num amount">
-                        <strong>{money(t.amount, 2)}</strong> <small>ج.م</small>
-                      </td>
-                      <td className="muted notes-cell">{t.notes || '—'}</td>
-                    </tr>
-                  ))}
+                {filteredTransfers.slice((page - 1) * 10, page * 10).map((t) => (
+                  <tr key={t.id}>
+                    <td className="num">
+                      <strong>{t.number}</strong>
+                    </td>
+                    <td className="muted">{formatDate(t.date, true)}</td>
+                    <td>
+                      <span className="account-tag">{t.from_account_name}</span>
+                    </td>
+                    <td>
+                      <span className="account-tag in-flow">{t.to_account_name}</span>
+                    </td>
+                    <td className="num amount">
+                      <strong>{money(t.amount, 2)}</strong> <small>ج.م</small>
+                    </td>
+                    <td className="muted notes-cell">{t.notes || '—'}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
             <Pagination page={page} setPage={setPage} total={filteredTransfers.length} size={10} />
@@ -2499,12 +2515,8 @@ export function Accounts() {
       )}
 
       {statementAccount && (
-        <StatementModal
-          account={statementAccount}
-          onClose={() => setStatementAccount(null)}
-        />
+        <StatementModal account={statementAccount} onClose={() => setStatementAccount(null)} />
       )}
     </>
   );
 }
-

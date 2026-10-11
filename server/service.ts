@@ -197,8 +197,7 @@ function prepareDocument(
   const party = requireRow(
     one<Party>('SELECT * FROM parties WHERE id=? AND active=1', input.party_id),
   );
-  if (party.type !== expectedPartyType)
-    throw new AppError(400, 'نوع الحساب لا يتوافق مع الفاتورة');
+  if (party.type !== expectedPartyType) throw new AppError(400, 'نوع الحساب لا يتوافق مع الفاتورة');
   if (new Set(input.lines.map((l) => l.product_id)).size !== input.lines.length)
     throw new AppError(400, 'المنتج مكرر في الفاتورة؛ عدّل الكمية بدلاً من تكراره');
 

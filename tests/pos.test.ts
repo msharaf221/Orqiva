@@ -324,4 +324,3 @@ describe('Odoo-like Fast POS Interface & Shifts', () => {
     expect(expenseEntry?.title).toContain('عجز نقدية وردية');
   });
 });
-

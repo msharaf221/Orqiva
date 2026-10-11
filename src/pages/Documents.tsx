@@ -829,7 +829,9 @@ export function DocumentDetail() {
   const isSale = doc ? doc.type === 'SALE' || doc.type === 'SALE_RETURN' : true;
   const isReturn = doc ? doc.type === 'SALE_RETURN' || doc.type === 'PURCHASE_RETURN' : false;
   const path = isSale ? '/sales' : '/purchases';
-  const editable = isSale ? can(user, 'documents:create_sale') : can(user, 'documents:create_purchase');
+  const editable = isSale
+    ? can(user, 'documents:create_sale')
+    : can(user, 'documents:create_purchase');
 
   const linkedReturnsData = useData<Document[]>(
     doc && !isReturn ? '/documents?original_document_id=' + doc.id : null,
@@ -1362,8 +1364,9 @@ export function PaymentForm({
                 .filter((a) => a.active)
                 .map((a) => (
                   <option key={a.id} value={a.id}>
-                    {a.name} ({a.type === 'CASH' ? 'خزينة' : a.type === 'BANK' ? 'حساب بنكي' : 'محفظة'}) — الرصيد:{' '}
-                    {money(a.balance, 2)} ج.م
+                    {a.name} (
+                    {a.type === 'CASH' ? 'خزينة' : a.type === 'BANK' ? 'حساب بنكي' : 'محفظة'}) —
+                    الرصيد: {money(a.balance, 2)} ج.م
                   </option>
                 ))}
             </select>
@@ -1444,21 +1447,24 @@ export function ReturnModal({
       }))
       .filter((l) => l.quantity > 0);
 
-    void act(async () => {
-      const created = await api<Document>('/documents', 'POST', {
-        type: isSale ? 'SALE_RETURN' : 'PURCHASE_RETURN',
-        branch_id: doc.branch_id,
-        party_id: doc.party_id,
-        original_document_id: doc.id,
-        date: today(),
-        due_date: today(),
-        tax_rate: doc.tax_rate,
-        discount: 0,
-        notes: notes || `مرتجع عن الفاتورة ${doc.number}`,
-        lines: returnLines,
-      });
-      onCreated(created.id);
-    }, isSale ? 'تم إنشاء إشعار الدائن كمسودة' : 'تم إنشاء إشعار المدين كمسودة');
+    void act(
+      async () => {
+        const created = await api<Document>('/documents', 'POST', {
+          type: isSale ? 'SALE_RETURN' : 'PURCHASE_RETURN',
+          branch_id: doc.branch_id,
+          party_id: doc.party_id,
+          original_document_id: doc.id,
+          date: today(),
+          due_date: today(),
+          tax_rate: doc.tax_rate,
+          discount: 0,
+          notes: notes || `مرتجع عن الفاتورة ${doc.number}`,
+          lines: returnLines,
+        });
+        onCreated(created.id);
+      },
+      isSale ? 'تم إنشاء إشعار الدائن كمسودة' : 'تم إنشاء إشعار المدين كمسودة',
+    );
   };
 
   return (

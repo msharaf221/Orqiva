@@ -48,8 +48,12 @@ describe('upgrading a single-warehouse installation', () => {
       '007_granular_rbac.sql',
       '008_pos_and_treasury.sql',
     ]);
-    expect(one("SELECT role_id FROM user_roles WHERE user_id='u-admin'")).toEqual({ role_id: 'role_admin' });
-    expect(one("SELECT role_id FROM user_roles WHERE user_id='u-staff'")).toEqual({ role_id: 'role_sales' });
+    expect(one("SELECT role_id FROM user_roles WHERE user_id='u-admin'")).toEqual({
+      role_id: 'role_admin',
+    });
+    expect(one("SELECT role_id FROM user_roles WHERE user_id='u-staff'")).toEqual({
+      role_id: 'role_sales',
+    });
     expect(one("SELECT code FROM branches WHERE id='main'")).toEqual({ code: 'HQ' });
     expect(
       one("SELECT quantity FROM branch_stock WHERE branch_id='main' AND product_id='p1'"),

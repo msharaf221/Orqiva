@@ -235,18 +235,29 @@ const authorizeDoc = (req: Request, _res: Response, next: NextFunction) => {
     : req.body?.type;
   if (type === 'PURCHASE' || type === 'PURCHASE_RETURN') {
     if (!hasPermission(req.user, 'documents:create_purchase'))
-      throw new AppError(403, 'التعامل مع المشتريات متاح لمدير النظام أو من لديه صلاحية المشتريات فقط');
+      throw new AppError(
+        403,
+        'التعامل مع المشتريات متاح لمدير النظام أو من لديه صلاحية المشتريات فقط',
+      );
   } else {
     if (!hasPermission(req.user, 'documents:create_sale'))
-      throw new AppError(403, 'التعامل مع المبيعات متاح لمدير النظام أو من لديه صلاحية المبيعات فقط');
+      throw new AppError(
+        403,
+        'التعامل مع المبيعات متاح لمدير النظام أو من لديه صلاحية المبيعات فقط',
+      );
   }
   next();
 };
 const authorizePost = (req: Request, _res: Response, next: NextFunction) => {
   if (!hasPermission(req.user, 'documents:post'))
     throw new AppError(403, 'اعتماد المستندات يتطلب صلاحية الاعتماد');
-  const type = requireRow(one<Document>('SELECT * FROM documents WHERE id=?', String(req.params.id))).type;
-  if ((type === 'PURCHASE' || type === 'PURCHASE_RETURN') && !hasPermission(req.user, 'documents:create_purchase'))
+  const type = requireRow(
+    one<Document>('SELECT * FROM documents WHERE id=?', String(req.params.id)),
+  ).type;
+  if (
+    (type === 'PURCHASE' || type === 'PURCHASE_RETURN') &&
+    !hasPermission(req.user, 'documents:create_purchase')
+  )
     throw new AppError(403, 'اعتماد المشتريات متاح لمدير النظام أو من لديه صلاحية المشتريات فقط');
   next();
 };
@@ -663,7 +674,6 @@ app.post('/api/cash-accounts/transfers', requirePermission('finance:accounts'), 
   res.status(201).json(createAccountTransfer(req.body, req.user));
 });
 
-
 // Reports --------------------------------------------------------------------------------------
 app.get('/api/dashboard', (req, res) => {
   const input = period.parse(req.query);
@@ -767,7 +777,11 @@ app.post('/api/users', requirePermission('users:manage'), async (req, res) => {
   } else if (p.role === 'STAFF' || p.role === 'SALES') {
     roleId = 'role_sales';
   } else {
-    const r = one<{ id: string; code: string }>('SELECT id, code FROM roles WHERE code=? OR id=?', p.role, p.role);
+    const r = one<{ id: string; code: string }>(
+      'SELECT id, code FROM roles WHERE code=? OR id=?',
+      p.role,
+      p.role,
+    );
     if (r) {
       roleId = r.id;
       roleCode = r.code;
@@ -787,11 +801,7 @@ app.post('/api/users', requirePermission('users:manage'), async (req, res) => {
       1,
       now(),
     );
-    run(
-      'INSERT OR REPLACE INTO user_roles(user_id, role_id) VALUES(?,?)',
-      userId,
-      finalRoleId,
-    );
+    run('INSERT OR REPLACE INTO user_roles(user_id, role_id) VALUES(?,?)', userId, finalRoleId);
     for (const branchId of dbUserRole === 'ADMIN' ? [] : p.branch_ids)
       run(
         'INSERT OR IGNORE INTO user_branches(user_id,branch_id) VALUES(?,?)',
@@ -855,17 +865,8 @@ app.patch('/api/users/:id', requirePermission('users:manage'), (req, res) => {
   const finalRoleId = newRoleId || (newRole === 'ADMIN' ? 'role_admin' : 'role_sales');
   const newActive = input.active !== undefined ? (input.active ? 1 : 0) : user.active;
   transaction(() => {
-    run(
-      'UPDATE users SET active=?,role=? WHERE id=?',
-      newActive,
-      dbUserRole,
-      userId,
-    );
-    run(
-      'INSERT OR REPLACE INTO user_roles(user_id, role_id) VALUES(?,?)',
-      userId,
-      finalRoleId,
-    );
+    run('UPDATE users SET active=?,role=? WHERE id=?', newActive, dbUserRole, userId);
+    run('INSERT OR REPLACE INTO user_roles(user_id, role_id) VALUES(?,?)', userId, finalRoleId);
     if (input.branch_ids !== undefined) {
       run('DELETE FROM user_branches WHERE user_id=?', userId);
       if (dbUserRole !== 'ADMIN') {
@@ -937,9 +938,13 @@ app.post(
   },
 );
 
-app.post('/api/pos/shifts/:id/close', requirePermission('pos:shift_close', 'pos:access'), (req, res) => {
-  res.json(closeShift(String(req.params.id), req.body, req.user));
-});
+app.post(
+  '/api/pos/shifts/:id/close',
+  requirePermission('pos:shift_close', 'pos:access'),
+  (req, res) => {
+    res.json(closeShift(String(req.params.id), req.body, req.user));
+  },
+);
 
 app.get(
   '/api/pos/shifts/pending-review',

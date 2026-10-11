@@ -48,7 +48,13 @@ describe('Granular RBAC (الأدوار والصلاحيات المخصصة)', (
         name: 'مشرف مبيعات ممتاز',
         code: 'SALES_SUPERVISOR',
         description: 'صلاحيات مبيعات موسعة تشمل الإلغاء وعرض التقارير',
-        permissions: ['documents:view', 'documents:create_sale', 'documents:post', 'documents:cancel', 'reports:view'],
+        permissions: [
+          'documents:view',
+          'documents:create_sale',
+          'documents:post',
+          'documents:cancel',
+          'reports:view',
+        ],
       })
       .expect(201);
 
@@ -189,13 +195,29 @@ describe('Granular RBAC (الأدوار والصلاحيات المخصصة)', (
     const custRes = await admin
       .post('/api/parties')
       .set(header)
-      .send({ type: 'CUSTOMER', name: 'عميل الصلاحيات', phone: '', email: '', address: '', tax_number: '', notes: '' })
+      .send({
+        type: 'CUSTOMER',
+        name: 'عميل الصلاحيات',
+        phone: '',
+        email: '',
+        address: '',
+        tax_number: '',
+        notes: '',
+      })
       .expect(201);
 
     const prodRes = await admin
       .post('/api/products')
       .set(header)
-      .send({ sku: 'RBAC-01', name: 'منتج رباك', category: 'عام', unit: 'قطعة', sale_price: 15000, cost_price: 10000, min_stock: 0 })
+      .send({
+        sku: 'RBAC-01',
+        name: 'منتج رباك',
+        category: 'عام',
+        unit: 'قطعة',
+        sale_price: 15000,
+        cost_price: 10000,
+        min_stock: 0,
+      })
       .expect(201);
 
     // Stock up product

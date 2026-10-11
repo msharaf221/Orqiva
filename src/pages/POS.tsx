@@ -105,9 +105,7 @@ export function POS() {
     active || branches.find((b) => b.id === defaultBranchId) || branches[0] || null;
   const toast = useToast();
   const isAccountantOrAdmin =
-    user.role === 'ADMIN' ||
-    user.role === 'BRANCH_MANAGER' ||
-    user.role === 'TREASURY_ACCOUNTANT';
+    user.role === 'ADMIN' || user.role === 'BRANCH_MANAGER' || user.role === 'TREASURY_ACCOUNTANT';
 
   // Shift & Products Data
   const [shift, setShift] = useState<PosShift | null>(null);
@@ -130,7 +128,10 @@ export function POS() {
   const [cashMovementModal, setCashMovementModal] = useState(false);
   const [closeShiftModal, setCloseShiftModal] = useState(false);
   const [treasuryReviewModal, setTreasuryReviewModal] = useState(false);
-  const [handoverSlip, setHandoverSlip] = useState<{ shift: PosShift; summary: PosShiftSummary } | null>(null);
+  const [handoverSlip, setHandoverSlip] = useState<{
+    shift: PosShift;
+    summary: PosShiftSummary;
+  } | null>(null);
   const [customerPickerModal, setCustomerPickerModal] = useState(false);
   const [discountModal, setDiscountModal] = useState(false);
   const [checkoutModal, setCheckoutModal] = useState(false);
@@ -498,8 +499,9 @@ export function POS() {
             <div>
               <h4>الوردية ({shift.number}) تم تسليمها وبانتظار اعتماد محاسب الخزنة</h4>
               <p>
-                تم جرد وتسجيل النقدية بالدرج ({money(shift.cashier_declared_cash || 0)} ج.م) وإرسالها للمراجعة.
-                لا يمكن تسجيل مبيعات جديدة على هذه الوردية حتى يتم اعتمادها مالياً وترحيل القيود.
+                تم جرد وتسجيل النقدية بالدرج ({money(shift.cashier_declared_cash || 0)} ج.م)
+                وإرسالها للمراجعة. لا يمكن تسجيل مبيعات جديدة على هذه الوردية حتى يتم اعتمادها
+                مالياً وترحيل القيود.
               </p>
             </div>
           </div>
@@ -638,7 +640,9 @@ export function POS() {
                     return;
                   }
                   if (shift.status === 'PENDING_REVIEW') {
-                    toast('تم تسليم الوردية لمسؤول الخزنة وبانتظار الاعتماد. لا يمكن تسجيل مبيعات جديدة.');
+                    toast(
+                      'تم تسليم الوردية لمسؤول الخزنة وبانتظار الاعتماد. لا يمكن تسجيل مبيعات جديدة.',
+                    );
                     return;
                   }
                   setCheckoutModal(true);
@@ -1095,7 +1099,9 @@ function CloseShiftModal({
 
   return (
     <Modal
-      title={directClose ? 'إغلاق الوردية والاعتماد المباشر' : 'تسليم الوردية للخزنة (تسليم الكاشير)'}
+      title={
+        directClose ? 'إغلاق الوردية والاعتماد المباشر' : 'تسليم الوردية للخزنة (تسليم الكاشير)'
+      }
       description={
         directClose
           ? 'إغلاق الوردية واعتماد تقرير مطابقة النقدية فوراً وترحيل القيود.'
@@ -1110,14 +1116,27 @@ function CloseShiftModal({
           ) : summary ? (
             <>
               {isAccountantOrAdmin && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px', background: '#f8faf9', border: '1px solid #dbe6e0', borderRadius: '8px' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '10px 12px',
+                    background: '#f8faf9',
+                    border: '1px solid #dbe6e0',
+                    borderRadius: '8px',
+                  }}
+                >
                   <input
                     type="checkbox"
                     id="directCloseToggle"
                     checked={directClose}
                     onChange={(e) => setDirectClose(e.target.checked)}
                   />
-                  <label htmlFor="directCloseToggle" style={{ fontSize: '13px', cursor: 'pointer', fontWeight: 600 }}>
+                  <label
+                    htmlFor="directCloseToggle"
+                    style={{ fontSize: '13px', cursor: 'pointer', fontWeight: 600 }}
+                  >
                     إغلاق واعتماد مباشر فوري (صلاحية مدير / محاسب خزنة)
                   </label>
                 </div>
@@ -1147,7 +1166,13 @@ function CloseShiftModal({
                 </div>
               </div>
 
-              <Field label={directClose ? 'النقدية الفعلية المعتمدة (ج.م) *' : 'النقدية المحصاة في الدرج المسلّمة للخزنة (ج.م) *'}>
+              <Field
+                label={
+                  directClose
+                    ? 'النقدية الفعلية المعتمدة (ج.م) *'
+                    : 'النقدية المحصاة في الدرج المسلّمة للخزنة (ج.م) *'
+                }
+              >
                 <input
                   type="number"
                   step="any"
@@ -1309,7 +1334,15 @@ function TreasuryReviewModal({
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr', gap: '16px' }}>
             {/* Shifts Sidebar */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderLeft: '1px solid var(--border)', paddingLeft: '12px' }}>
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+                borderLeft: '1px solid var(--border)',
+                paddingLeft: '12px',
+              }}
+            >
               <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--muted)' }}>
                 الورديات المعلقة ({pendingList.length})
               </span>
@@ -1321,7 +1354,8 @@ function TreasuryReviewModal({
                   style={{
                     padding: '10px 12px',
                     borderRadius: '8px',
-                    border: '1px solid ' + (selectedShiftId === s.id ? 'var(--green)' : 'var(--border)'),
+                    border:
+                      '1px solid ' + (selectedShiftId === s.id ? 'var(--green)' : 'var(--border)'),
                     background: selectedShiftId === s.id ? '#f0f7f4' : '#fff',
                     textAlign: 'right',
                     cursor: 'pointer',
@@ -1351,7 +1385,9 @@ function TreasuryReviewModal({
                     <div className="pos-reconciliation-card">
                       <div className="pos-recon-row">
                         <span>رقم الوردية / الكاشير:</span>
-                        <b>{summary.shift.number} ({summary.shift.user_name})</b>
+                        <b>
+                          {summary.shift.number} ({summary.shift.user_name})
+                        </b>
                       </div>
                       <div className="pos-recon-row">
                         <span>الرصيد الافتتاحي:</span>
@@ -1402,7 +1438,11 @@ function TreasuryReviewModal({
                     <div
                       className={
                         'pos-diff-banner ' +
-                        (differenceCents === 0 ? 'match' : differenceCents < 0 ? 'deficit' : 'surplus')
+                        (differenceCents === 0
+                          ? 'match'
+                          : differenceCents < 0
+                            ? 'deficit'
+                            : 'surplus')
                       }
                     >
                       {differenceCents === 0 ? (
@@ -1433,7 +1473,9 @@ function TreasuryReviewModal({
                         <div>
                           <strong>تسجيل قيد عجز تلقائي:</strong>
                           <p style={{ margin: '2px 0 0', fontSize: '12px' }}>
-                            سيتم تلقائياً إنشاء قيد مصروف تشغيلي بقيمة ({money(Math.abs(differenceCents))} ج.م) في تصنيف «عجز نقدية نقطة بيع» لضبط الخزنة وحساب الأرباح والخسائر.
+                            سيتم تلقائياً إنشاء قيد مصروف تشغيلي بقيمة (
+                            {money(Math.abs(differenceCents))} ج.م) في تصنيف «عجز نقدية نقطة بيع»
+                            لضبط الخزنة وحساب الأرباح والخسائر.
                           </p>
                         </div>
                       </div>
@@ -1517,7 +1559,10 @@ function ShiftHandoverSlipModal({
               <div>رقم الوردية: {shift.number}</div>
               <div>التاريخ: {new Date().toLocaleDateString('ar-EG')}</div>
               <div>الكاشير: {cashierName}</div>
-              <div>وقت الافتتاح: {shift.opened_at ? new Date(shift.opened_at).toLocaleTimeString('ar-EG') : '—'}</div>
+              <div>
+                وقت الافتتاح:{' '}
+                {shift.opened_at ? new Date(shift.opened_at).toLocaleTimeString('ar-EG') : '—'}
+              </div>
               <div>وقت التسليم: {new Date().toLocaleTimeString('ar-EG')}</div>
             </div>
             <div className="receipt-dash" />
@@ -1551,8 +1596,17 @@ function ShiftHandoverSlipModal({
             </div>
             <div className="receipt-row">
               <span>فارق التسليم:</span>
-              <span style={{ fontWeight: 'bold', color: diffCents < 0 ? '#dc2626' : diffCents > 0 ? '#16a34a' : 'inherit' }}>
-                {diffCents === 0 ? 'مطابقة تامة' : diffCents < 0 ? `عجز: -${money(Math.abs(diffCents))} ج.م` : `زيادة: +${money(diffCents)} ج.م`}
+              <span
+                style={{
+                  fontWeight: 'bold',
+                  color: diffCents < 0 ? '#dc2626' : diffCents > 0 ? '#16a34a' : 'inherit',
+                }}
+              >
+                {diffCents === 0
+                  ? 'مطابقة تامة'
+                  : diffCents < 0
+                    ? `عجز: -${money(Math.abs(diffCents))} ج.م`
+                    : `زيادة: +${money(diffCents)} ج.م`}
               </span>
             </div>
             {shift.notes && (
@@ -1563,7 +1617,14 @@ function ShiftHandoverSlipModal({
           </div>
 
           <div className="receipt-dash" />
-          <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
+          <div
+            style={{
+              marginTop: '16px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              fontSize: '11px',
+            }}
+          >
             <div style={{ textAlign: 'center' }}>
               <div>توقيع الكاشير المسلّم</div>
               <div style={{ marginTop: '24px' }}>...........................</div>
@@ -2045,7 +2106,9 @@ function ThermalReceiptModal({
               </div>
             )}
             <div className="receipt-row">
-              <span>ضريبة القيمة المضافة ({((result.document.tax_rate ?? 1400) / 100).toFixed(0)}%):</span>
+              <span>
+                ضريبة القيمة المضافة ({((result.document.tax_rate ?? 1400) / 100).toFixed(0)}%):
+              </span>
               <span>{money(result.document.tax)} ج.م</span>
             </div>
             <div className="receipt-dash" />

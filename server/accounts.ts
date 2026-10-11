@@ -1,9 +1,5 @@
 import { all, one, run, transaction, id, now, type SQLInputValue } from './db';
-import {
-  cashAccountSchema,
-  updateCashAccountSchema,
-  accountTransferSchema,
-} from './validation';
+import { cashAccountSchema, updateCashAccountSchema, accountTransferSchema } from './validation';
 import { AppError, audit, nextNumber, requireRow, type Actor } from './service';
 import type { CashAccount, AccountTransfer, AccountStatementEntry } from '../src/types';
 
@@ -118,7 +114,8 @@ export function assertAccountFunds(
     accountId,
   );
   if (!account) throw new AppError(404, 'الحساب المالي المحدد غير موجود');
-  if (!account.active) throw new AppError(409, `الحساب المالي "${account.name}" مؤرشف ولا يقبل حركات`);
+  if (!account.active)
+    throw new AppError(409, `الحساب المالي "${account.name}" مؤرشف ولا يقبل حركات`);
 
   if (overrideOverdraft) {
     if (actor.role !== 'ADMIN') {
@@ -386,7 +383,10 @@ export function getAccountStatement(
     date: string;
     created_at: string;
     notes: string;
-  }>('SELECT id, title, amount, date, created_at, notes FROM expenses WHERE account_id = ?', accountId);
+  }>(
+    'SELECT id, title, amount, date, created_at, notes FROM expenses WHERE account_id = ?',
+    accountId,
+  );
 
   for (const ex of expenses) {
     txs.push({

@@ -13,28 +13,35 @@ async function getAdmin() {
 }
 
 async function setupPartyAndProduct(admin: any) {
-  const customerRes = await admin
-    .post('/api/parties')
-    .set(header)
-    .send({ type: 'CUSTOMER', name: 'عميل خزينة', phone: '', email: '', address: '', tax_number: '', notes: '' });
-  const supplierRes = await admin
-    .post('/api/parties')
-    .set(header)
-    .send({ type: 'SUPPLIER', name: 'مورد خزينة', phone: '', email: '', address: '', tax_number: '', notes: '' });
-  const productRes = await admin
-    .post('/api/products')
-    .set(header)
-    .send({
-      sku: 'SKU-ACC-1',
-      name: 'منتج حسابات',
-      category: 'عام',
-      unit: 'قطعة',
-      sale_price: 50000, // 500 EGP
-      cost_price: 30000, // 300 EGP
-      min_stock: 5,
-      stock: 100,
-      branch_id: 'main',
-    });
+  const customerRes = await admin.post('/api/parties').set(header).send({
+    type: 'CUSTOMER',
+    name: 'عميل خزينة',
+    phone: '',
+    email: '',
+    address: '',
+    tax_number: '',
+    notes: '',
+  });
+  const supplierRes = await admin.post('/api/parties').set(header).send({
+    type: 'SUPPLIER',
+    name: 'مورد خزينة',
+    phone: '',
+    email: '',
+    address: '',
+    tax_number: '',
+    notes: '',
+  });
+  const productRes = await admin.post('/api/products').set(header).send({
+    sku: 'SKU-ACC-1',
+    name: 'منتج حسابات',
+    category: 'عام',
+    unit: 'قطعة',
+    sale_price: 50000, // 500 EGP
+    cost_price: 30000, // 300 EGP
+    min_stock: 5,
+    stock: 100,
+    branch_id: 'main',
+  });
 
   return {
     customerId: customerRes.body.id,
@@ -56,18 +63,15 @@ describe('Cash & Bank Accounts', () => {
 
   it('creates a custom cash drawer with initial balance and overdraft prevention', async () => {
     const admin = await getAdmin();
-    const res = await admin
-      .post('/api/cash-accounts')
-      .set(header)
-      .send({
-        name: 'خزينة فرع المعادي',
-        type: 'CASH',
-        branch_id: 'main',
-        currency: 'EGP',
-        initial_balance: 100000, // 1,000 EGP
-        allow_negative: 0,
-        notes: 'خزينة الكاش اليومية',
-      });
+    const res = await admin.post('/api/cash-accounts').set(header).send({
+      name: 'خزينة فرع المعادي',
+      type: 'CASH',
+      branch_id: 'main',
+      currency: 'EGP',
+      initial_balance: 100000, // 1,000 EGP
+      allow_negative: 0,
+      notes: 'خزينة الكاش اليومية',
+    });
     expect(res.status).toBe(201);
     expect(res.body.id).toBeDefined();
     expect(res.body.balance).toBe(100000);
@@ -83,33 +87,27 @@ describe('Cash & Bank Accounts', () => {
     const { customerId, productId } = await setupPartyAndProduct(admin);
 
     // Create a new cash drawer with 0 initial balance and allow_negative = 0
-    const accRes = await admin
-      .post('/api/cash-accounts')
-      .set(header)
-      .send({
-        name: 'خزينة مبيعات حصرية',
-        type: 'CASH',
-        branch_id: 'main',
-        initial_balance: 0,
-        allow_negative: 0,
-      });
+    const accRes = await admin.post('/api/cash-accounts').set(header).send({
+      name: 'خزينة مبيعات حصرية',
+      type: 'CASH',
+      branch_id: 'main',
+      initial_balance: 0,
+      allow_negative: 0,
+    });
     const accountId = accRes.body.id;
     expect(accRes.body.balance).toBe(0);
 
     // 1. Try to record an expense of 200 EGP from this empty account -> must fail with 409
-    const failedExpRes = await admin
-      .post('/api/expenses')
-      .set(header)
-      .send({
-        title: 'شراء أدوات نظافة',
-        category: 'نظافة',
-        amount: 20000, // 200 EGP
-        method: 'CASH',
-        account_id: accountId,
-        date: '2026-03-01',
-        allocation: 'BRANCH',
-        branch_id: 'main',
-      });
+    const failedExpRes = await admin.post('/api/expenses').set(header).send({
+      title: 'شراء أدوات نظافة',
+      category: 'نظافة',
+      amount: 20000, // 200 EGP
+      method: 'CASH',
+      account_id: accountId,
+      date: '2026-03-01',
+      allocation: 'BRANCH',
+      branch_id: 'main',
+    });
     expect(failedExpRes.status).toBe(409);
     expect(failedExpRes.body.error).toContain('لا يكفي');
 
@@ -131,15 +129,12 @@ describe('Cash & Bank Accounts', () => {
     expect(saleRes.status).toBe(201);
     await admin.post(`/api/documents/${saleRes.body.id}/post`).set(header).expect(200);
 
-    const payRes = await admin
-      .post(`/api/documents/${saleRes.body.id}/payments`)
-      .set(header)
-      .send({
-        amount: 50000,
-        method: 'CASH',
-        account_id: accountId,
-        date: '2026-03-01',
-      });
+    const payRes = await admin.post(`/api/documents/${saleRes.body.id}/payments`).set(header).send({
+      amount: 50000,
+      method: 'CASH',
+      account_id: accountId,
+      date: '2026-03-01',
+    });
     expect(payRes.status).toBe(201);
 
     // Account balance should now be 500 EGP
@@ -147,19 +142,16 @@ describe('Cash & Bank Accounts', () => {
     expect(checkAcc.body.balance).toBe(50000);
 
     // 3. Now the 200 EGP expense should succeed!
-    const okExpRes = await admin
-      .post('/api/expenses')
-      .set(header)
-      .send({
-        title: 'شراء أدوات نظافة',
-        category: 'نظافة',
-        amount: 20000,
-        method: 'CASH',
-        account_id: accountId,
-        date: '2026-03-02',
-        allocation: 'BRANCH',
-        branch_id: 'main',
-      });
+    const okExpRes = await admin.post('/api/expenses').set(header).send({
+      title: 'شراء أدوات نظافة',
+      category: 'نظافة',
+      amount: 20000,
+      method: 'CASH',
+      account_id: accountId,
+      date: '2026-03-02',
+      allocation: 'BRANCH',
+      branch_id: 'main',
+    });
     expect(okExpRes.status).toBe(201);
 
     // Account balance should now be 300 EGP (500 - 200)
@@ -171,40 +163,31 @@ describe('Cash & Bank Accounts', () => {
     const admin = await getAdmin();
 
     // Create Bank account with 10,000 EGP
-    const bankRes = await admin
-      .post('/api/cash-accounts')
-      .set(header)
-      .send({
-        name: 'بنك مصر',
-        type: 'BANK',
-        initial_balance: 1000000, // 10,000 EGP
-        allow_negative: 0,
-      });
+    const bankRes = await admin.post('/api/cash-accounts').set(header).send({
+      name: 'بنك مصر',
+      type: 'BANK',
+      initial_balance: 1000000, // 10,000 EGP
+      allow_negative: 0,
+    });
     const bankId = bankRes.body.id;
 
     // Create Cash drawer with 1,000 EGP
-    const cashRes = await admin
-      .post('/api/cash-accounts')
-      .set(header)
-      .send({
-        name: 'خزينة نقدية أ',
-        type: 'CASH',
-        initial_balance: 100000, // 1,000 EGP
-        allow_negative: 0,
-      });
+    const cashRes = await admin.post('/api/cash-accounts').set(header).send({
+      name: 'خزينة نقدية أ',
+      type: 'CASH',
+      initial_balance: 100000, // 1,000 EGP
+      allow_negative: 0,
+    });
     const cashId = cashRes.body.id;
 
     // Transfer 3,000 EGP from Bank to Cash drawer
-    const transferRes = await admin
-      .post('/api/cash-accounts/transfers')
-      .set(header)
-      .send({
-        from_account_id: bankId,
-        to_account_id: cashId,
-        amount: 300000, // 3,000 EGP
-        date: '2026-03-05',
-        notes: 'تغذية خزينة الفرع نقدياً من البنك',
-      });
+    const transferRes = await admin.post('/api/cash-accounts/transfers').set(header).send({
+      from_account_id: bankId,
+      to_account_id: cashId,
+      amount: 300000, // 3,000 EGP
+      date: '2026-03-05',
+      notes: 'تغذية خزينة الفرع نقدياً من البنك',
+    });
     expect(transferRes.status).toBe(201);
     expect(transferRes.body.number).toMatch(/^TR-/);
 

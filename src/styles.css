@@ -6008,7 +6008,9 @@ fieldset {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
 }
 .role-card:hover {
   border-color: #cbd5e1;
@@ -7290,7 +7292,11 @@ fieldset {
     border: none !important;
     background: #fff !important;
     color: #000 !important;
-    font-family: 'Cairo', 'IBM Plex Sans Arabic', -apple-system, sans-serif !important;
+    font-family:
+      'Cairo',
+      'IBM Plex Sans Arabic',
+      -apple-system,
+      sans-serif !important;
     font-size: 11px !important;
     line-height: 1.35 !important;
     break-after: avoid !important;

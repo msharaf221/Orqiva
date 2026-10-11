@@ -195,10 +195,22 @@ export function Products() {
                         <span className="category-tag">{p.category}</span>
                       </td>
                       <td className="num amount">{money(p.sale_price, 2)}</td>
-                      <td className="num muted" title={p.avg_cost && p.avg_cost !== p.cost_price ? `التكلفة المرجعية: ${money(p.cost_price, 2)} ج.م` : undefined}>
+                      <td
+                        className="num muted"
+                        title={
+                          p.avg_cost && p.avg_cost !== p.cost_price
+                            ? `التكلفة المرجعية: ${money(p.cost_price, 2)} ج.م`
+                            : undefined
+                        }
+                      >
                         {money(p.avg_cost ?? p.cost_price, 2)}
                         {p.avg_cost && p.avg_cost !== p.cost_price ? (
-                          <small className="cell-sub" style={{ display: 'block', color: 'var(--brand-main)' }}>مرجح</small>
+                          <small
+                            className="cell-sub"
+                            style={{ display: 'block', color: 'var(--brand-main)' }}
+                          >
+                            مرجح
+                          </small>
                         ) : null}
                       </td>
                       <td>
@@ -432,7 +444,9 @@ export function Inventory() {
   const [adjustBranch, setAdjustBranch] = useState(defaultBranchId);
   const products = useData<Product[]>(withBranch('/products', activeId)),
     movements = useData<Movement[]>(withBranch('/movements', activeId)),
-    costMovements = useData<CostMovement[]>(can(user, 'inventory:view') ? withBranch('/cost-movements', activeId) : null);
+    costMovements = useData<CostMovement[]>(
+      can(user, 'inventory:view') ? withBranch('/cost-movements', activeId) : null,
+    );
   const [query, setQuery] = useState(params.get('q') || ''),
     [low, setLow] = useState(params.get('low') === '1'),
     [tab, setTab] = useState('levels'),
@@ -845,7 +859,9 @@ export function Parties({ type }: { type: PartyType }) {
     [selected, setSelected] = useState<Party | null>(null),
     [archive, setArchive] = useState<Party | null>(null);
   const { busy, act } = useAction();
-  const editable = customer ? can(user, 'parties:manage') : (can(user, 'parties:manage') && can(user, 'documents:create_purchase'));
+  const editable = customer
+    ? can(user, 'parties:manage')
+    : can(user, 'parties:manage') && can(user, 'documents:create_purchase');
   useEffect(() => setQuery(params.get('q') || ''), [params]);
   useEffect(() => setPage(1), [query, archived]);
   const parties = data.data || [];

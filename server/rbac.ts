@@ -8,8 +8,16 @@ export const PERMISSIONS: PermissionDef[] = [
   // نقطة البيع POS
   { id: 'pos:access', name: 'دخول شاشة الكاشير ونقطة البيع (POS)', group: 'نقطة البيع (POS)' },
   { id: 'pos:shift_open', name: 'افتتاح وردية كاشير جديدة', group: 'نقطة البيع (POS)' },
-  { id: 'pos:shift_close', name: 'إغلاق واعتماد وردية الكاشير وترحيل الفروقات', group: 'نقطة البيع (POS)' },
-  { id: 'pos:cash_movement', name: 'تسجيل حركات السحب والإيداع النقدي بالوردية', group: 'نقطة البيع (POS)' },
+  {
+    id: 'pos:shift_close',
+    name: 'إغلاق واعتماد وردية الكاشير وترحيل الفروقات',
+    group: 'نقطة البيع (POS)',
+  },
+  {
+    id: 'pos:cash_movement',
+    name: 'تسجيل حركات السحب والإيداع النقدي بالوردية',
+    group: 'نقطة البيع (POS)',
+  },
   { id: 'pos:discount', name: 'تطبيق خصومات في نقطة البيع', group: 'نقطة البيع (POS)' },
 
   // المستندات والمبيعات والمشتريات
@@ -40,7 +48,11 @@ export const PERMISSIONS: PermissionDef[] = [
   { id: 'reports:group_overview', name: 'عرض تقرير المجموعة الشامل', group: 'التقارير' },
 
   // الشركاء والتوزيعات
-  { id: 'distribution:manage', name: 'إدارة الشركاء وتوزيع الأرباح وحقوق الملكية', group: 'الشركاء' },
+  {
+    id: 'distribution:manage',
+    name: 'إدارة الشركاء وتوزيع الأرباح وحقوق الملكية',
+    group: 'الشركاء',
+  },
 
   // الإدارة والنظام
   { id: 'branches:manage', name: 'إدارة الفروع وبيانات الشركة', group: 'الإدارة' },
@@ -114,7 +126,11 @@ export function getUserPermissionOverrides(userId: string): Record<string, boole
  * 4. User-specific overrides (user_permission_overrides) are applied.
  * 5. Canonical aliases are expanded for bidirectional compatibility.
  */
-export function getUserPermissions(user: { id: string; role: string; role_id?: string | null }): string[] {
+export function getUserPermissions(user: {
+  id: string;
+  role: string;
+  role_id?: string | null;
+}): string[] {
   if (user.role === 'ADMIN') {
     return Array.from(new Set(ALL_PERMISSION_IDS));
   }
@@ -138,7 +154,11 @@ export function getUserPermissions(user: { id: string; role: string; role_id?: s
     } else if (user.role === 'BRANCH_MANAGER') {
       roleId = 'role_branch_mgr';
     } else {
-      const match = one<{ id: string }>('SELECT id FROM roles WHERE code=? OR id=?', user.role, user.role);
+      const match = one<{ id: string }>(
+        'SELECT id FROM roles WHERE code=? OR id=?',
+        user.role,
+        user.role,
+      );
       roleId = match?.id;
     }
   }
@@ -155,11 +175,38 @@ export function getUserPermissions(user: { id: string; role: string; role_id?: s
 
   // Predefined role fallbacks if not yet migrated into role_permissions
   if (user.role === 'CASHIER') {
-    ['pos:access', 'pos:shift_open', 'pos:shift_close', 'pos:cash_movement', 'pos:discount', 'documents:create_sale', 'documents:view', 'parties:view', 'inventory:view'].forEach(p => permsSet.add(p));
+    [
+      'pos:access',
+      'pos:shift_open',
+      'pos:shift_close',
+      'pos:cash_movement',
+      'pos:discount',
+      'documents:create_sale',
+      'documents:view',
+      'parties:view',
+      'inventory:view',
+    ].forEach((p) => permsSet.add(p));
   } else if (user.role === 'TREASURY_ACCOUNTANT') {
-    ['pos:access', 'pos:shift_close', 'pos:cash_movement', 'finance:expenses', 'finance:payments', 'finance:view', 'reports:view'].forEach(p => permsSet.add(p));
+    [
+      'pos:access',
+      'pos:shift_close',
+      'pos:cash_movement',
+      'finance:expenses',
+      'finance:payments',
+      'finance:view',
+      'reports:view',
+    ].forEach((p) => permsSet.add(p));
   } else if (user.role === 'STAFF') {
-    ['documents:view', 'documents:create_sale', 'documents:post', 'parties:view', 'parties:manage', 'finance:view', 'finance:payments', 'inventory:view'].forEach(p => permsSet.add(p));
+    [
+      'documents:view',
+      'documents:create_sale',
+      'documents:post',
+      'parties:view',
+      'parties:manage',
+      'finance:view',
+      'finance:payments',
+      'inventory:view',
+    ].forEach((p) => permsSet.add(p));
   }
 
   // Bidirectional alias helper
@@ -195,11 +242,11 @@ export function getUserPermissions(user: { id: string; role: string; role_id?: s
     if (add) {
       permsSet.add(key);
       const aliases = map[key] || [];
-      aliases.forEach(a => permsSet.add(a));
+      aliases.forEach((a) => permsSet.add(a));
     } else {
       permsSet.delete(key);
       const aliases = map[key] || [];
-      aliases.forEach(a => permsSet.delete(a));
+      aliases.forEach((a) => permsSet.delete(a));
     }
   };
 
@@ -218,7 +265,11 @@ export function getUserPermissions(user: { id: string; role: string; role_id?: s
   return Array.from(permsSet);
 }
 
-export function getEffectivePermissions(user: { id: string; role: string; role_id?: string | null }): string[] {
+export function getEffectivePermissions(user: {
+  id: string;
+  role: string;
+  role_id?: string | null;
+}): string[] {
   return getUserPermissions(user);
 }
 
@@ -247,7 +298,8 @@ export function hasPermission(
     if (p === 'purchases:cancel' && perms.has('documents:cancel')) return true;
     if (p === 'products:view' && perms.has('inventory:view')) return true;
     if (p === 'products:manage' && perms.has('catalog:manage')) return true;
-    if ((p === 'customers:manage' || p === 'suppliers:manage') && perms.has('parties:manage')) return true;
+    if ((p === 'customers:manage' || p === 'suppliers:manage') && perms.has('parties:manage'))
+      return true;
     if (p === 'expenses:manage' && perms.has('finance:expenses')) return true;
     if (p === 'payments:manage' && perms.has('finance:payments')) return true;
     if (p === 'distributions:manage' && perms.has('distribution:manage')) return true;
@@ -382,10 +434,7 @@ export function createRole(
   if (existingName) throw new AppError(400, 'يوجد دور مسجل بنفس هذا الاسم مسبقاً');
 
   const roleId = id();
-  const code = (
-    input.code?.trim().toUpperCase() ||
-    `ROLE_${Date.now().toString(36).toUpperCase()}`
-  );
+  const code = input.code?.trim().toUpperCase() || `ROLE_${Date.now().toString(36).toUpperCase()}`;
 
   const existingCode = one('SELECT id FROM roles WHERE code=?', code);
   if (existingCode) throw new AppError(400, 'رمز الدور مستخدم لدور آخر');

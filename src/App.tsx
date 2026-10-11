@@ -316,10 +316,20 @@ const navigation: { label: string; items: NavItem[] }[] = [
     label: 'إدارة الأعمال',
     items: [
       { to: '/sales', label: 'المبيعات', icon: ReceiptText, permission: 'documents:view' },
-      { to: '/purchases', label: 'المشتريات', icon: ShoppingBag, permission: 'documents:create_purchase' },
+      {
+        to: '/purchases',
+        label: 'المشتريات',
+        icon: ShoppingBag,
+        permission: 'documents:create_purchase',
+      },
       { to: '/products', label: 'المنتجات', icon: Package, permission: 'catalog:manage' },
       { to: '/inventory', label: 'المخزون', icon: Boxes, permission: 'inventory:view' },
-      { to: '/transfers', label: 'التحويلات بين الفروع', icon: ArrowRightLeft, permission: 'transfers:manage' },
+      {
+        to: '/transfers',
+        label: 'التحويلات بين الفروع',
+        icon: ArrowRightLeft,
+        permission: 'transfers:manage',
+      },
       { to: '/customers', label: 'العملاء', icon: Users, permission: 'parties:view' },
       { to: '/suppliers', label: 'الموردون', icon: Truck, permission: 'documents:create_purchase' },
       { to: '/branches', label: 'الفروع', icon: Store, permission: 'branches:manage' },
@@ -331,8 +341,18 @@ const navigation: { label: string; items: NavItem[] }[] = [
       { to: '/accounts', label: 'الخزائن والبنوك', icon: Building2, permission: 'finance:view' },
       { to: '/expenses', label: 'المصروفات', icon: Wallet, permission: 'finance:expenses' },
       { to: '/payments', label: 'المدفوعات', icon: ArrowLeftRight, permission: 'finance:payments' },
-      { to: '/reports', label: 'التقارير والتحليلات', icon: ChartNoAxesCombined, permission: 'reports:view' },
-      { to: '/distributions', label: 'التوزيعات والشركاء', icon: HandCoins, permission: 'distribution:manage' },
+      {
+        to: '/reports',
+        label: 'التقارير والتحليلات',
+        icon: ChartNoAxesCombined,
+        permission: 'reports:view',
+      },
+      {
+        to: '/distributions',
+        label: 'التوزيعات والشركاء',
+        icon: HandCoins,
+        permission: 'distribution:manage',
+      },
     ],
   },
 ];

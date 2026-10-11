@@ -88,8 +88,7 @@ export const documentSchema = z
   })
   .refine(
     (d) =>
-      (d.type !== 'SALE_RETURN' && d.type !== 'PURCHASE_RETURN') ||
-      Boolean(d.original_document_id),
+      (d.type !== 'SALE_RETURN' && d.type !== 'PURCHASE_RETURN') || Boolean(d.original_document_id),
     {
       message: 'المرتجع يجب أن يكون مرتبطاً بفاتورة أصلية',
       path: ['original_document_id'],
@@ -414,5 +413,3 @@ export const posCheckoutSchema = z
     }),
   })
   .strict();
-
-

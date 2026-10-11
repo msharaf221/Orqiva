@@ -302,7 +302,10 @@ export function approveShiftClosing(shiftId: string, raw: unknown, actor: Actor)
     // يتم إنشاء قيد مصروف تسوية عجز نقطة بيع تلقائياً وترحيله في مصروفات الفرع وحسابات الأرباح والخسائر
     if (difference < 0) {
       expenseId = id();
-      const shiftCashier = one<{ name: string }>('SELECT name FROM users WHERE id=?', summary.shift.user_id);
+      const shiftCashier = one<{ name: string }>(
+        'SELECT name FROM users WHERE id=?',
+        summary.shift.user_id,
+      );
       const cashierName = shiftCashier?.name || 'كاشير نقطة البيع';
       const shortageAmount = Math.abs(difference);
       const accountId = resolveDefaultAccountId('CASH', summary.shift.branch_id);
@@ -436,7 +439,10 @@ export function posCheckout(raw: unknown, actor: Actor) {
     } else {
       const shift = one<PosShift>("SELECT * FROM pos_shifts WHERE id=? AND status='OPEN'", shiftId);
       if (!shift) {
-        throw new AppError(409, 'الوردية المحددة غير صالحة أو مغلقة بالفعل أو بانتظار اعتماد الخزنة');
+        throw new AppError(
+          409,
+          'الوردية المحددة غير صالحة أو مغلقة بالفعل أو بانتظار اعتماد الخزنة',
+        );
       }
     }
 
@@ -483,8 +489,14 @@ export function posCheckout(raw: unknown, actor: Actor) {
     let changeDue = 0;
     if (input.payment.method !== 'CREDIT' && input.payment.amount_paid > 0) {
       const paymentAmount = Math.min(input.payment.amount_paid, postedDoc.total);
-      const paymentMethod = input.payment.method === 'CASH' ? 'CASH' : input.payment.method === 'CARD' ? 'CARD' : 'BANK';
-      const accountId = input.payment.account_id || resolveDefaultAccountId(paymentMethod, branch.id);
+      const paymentMethod =
+        input.payment.method === 'CASH'
+          ? 'CASH'
+          : input.payment.method === 'CARD'
+            ? 'CARD'
+            : 'BANK';
+      const accountId =
+        input.payment.account_id || resolveDefaultAccountId(paymentMethod, branch.id);
 
       addPayment(
         postedDoc.id,

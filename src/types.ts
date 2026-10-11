@@ -585,4 +585,3 @@ export interface AccountStatementEntry {
   balance: number;
   created_at: string;
 }
-

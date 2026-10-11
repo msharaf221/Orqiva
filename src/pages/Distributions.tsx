@@ -348,8 +348,9 @@ function EntryForm({
                 .filter((a) => a.active)
                 .map((a) => (
                   <option key={a.id} value={a.id}>
-                    {a.name} ({a.type === 'CASH' ? 'خزينة' : a.type === 'BANK' ? 'حساب بنكي' : 'محفظة'}) — الرصيد:{' '}
-                    {money(a.balance, 2)} ج.م
+                    {a.name} (
+                    {a.type === 'CASH' ? 'خزينة' : a.type === 'BANK' ? 'حساب بنكي' : 'محفظة'}) —
+                    الرصيد: {money(a.balance, 2)} ج.م
                   </option>
                 ))}
             </select>
@@ -1054,8 +1055,9 @@ function PayForm({
                 .filter((a) => a.active)
                 .map((a) => (
                   <option key={a.id} value={a.id}>
-                    {a.name} ({a.type === 'CASH' ? 'خزينة' : a.type === 'BANK' ? 'حساب بنكي' : 'محفظة'}) — الرصيد:{' '}
-                    {money(a.balance, 2)} ج.م
+                    {a.name} (
+                    {a.type === 'CASH' ? 'خزينة' : a.type === 'BANK' ? 'حساب بنكي' : 'محفظة'}) —
+                    الرصيد: {money(a.balance, 2)} ج.م
                   </option>
                 ))}
             </select>
