@@ -66,7 +66,7 @@ beforeAll(async () => {
 });
 beforeEach(() => {
   db.exec(
-    'DELETE FROM audit_logs; DELETE FROM distribution_payments; DELETE FROM distribution_lines; DELETE FROM distributions; DELETE FROM equity_entries; DELETE FROM stock_movements; DELETE FROM transfer_lines; DELETE FROM transfers; DELETE FROM payments; DELETE FROM document_lines; DELETE FROM documents; DELETE FROM sequences; DELETE FROM branch_stock; DELETE FROM branch_products; DELETE FROM products; DELETE FROM parties; DELETE FROM expenses;',
+    'DELETE FROM audit_logs; DELETE FROM distribution_payments; DELETE FROM distribution_lines; DELETE FROM distributions; DELETE FROM equity_entries; DELETE FROM cost_movements; DELETE FROM branch_cost; DELETE FROM stock_movements; DELETE FROM transfer_lines; DELETE FROM transfers; DELETE FROM payments; DELETE FROM document_lines; DELETE FROM documents; DELETE FROM sequences; DELETE FROM branch_stock; DELETE FROM branch_products; DELETE FROM products; DELETE FROM parties; DELETE FROM expenses;',
   );
   run(
     'INSERT INTO parties VALUES(?,?,?,?,?,?,?,?,?,?)',
@@ -147,7 +147,7 @@ describe('Real database migrations and security', () => {
 
   it('applies the SQL migration once and creates persistent relational tables', () => {
     migrate();
-    expect(all('SELECT * FROM schema_migrations')).toHaveLength(3);
+    expect(all('SELECT * FROM schema_migrations')).toHaveLength(8);
     expect(one<{ foreign_keys: number }>('PRAGMA foreign_keys')?.foreign_keys).toBe(1);
     expect(all("SELECT name FROM sqlite_master WHERE type='table'").length).toBeGreaterThanOrEqual(
       13,

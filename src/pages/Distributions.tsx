@@ -25,6 +25,7 @@ import type {
   DistributionStatus,
   Owner,
   PaymentMethod,
+  CashAccount,
 } from '../types';
 
 const statusLabels: Record<DistributionStatus, { label: string; cls: string }> = {
@@ -289,9 +290,11 @@ function EntryForm({
   onSaved: () => void;
 }) {
   const { busy, act } = useAction();
+  const accountsData = useData<CashAccount[]>('/cash-accounts');
   const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
+    const accId = f.get('account_id') ? String(f.get('account_id')) : undefined;
     void act(async () => {
       await api(`/owners/${owner.id}/entries`, 'POST', {
         kind: f.get('kind'),
@@ -299,6 +302,7 @@ function EntryForm({
         method: f.get('method'),
         date: f.get('date'),
         notes: f.get('notes'),
+        account_id: accId,
       });
       onSaved();
     }, 'تم تسجيل الحركة');
@@ -320,17 +324,35 @@ function EntryForm({
           <Field label="المبلغ (ج.م) *">
             <input name="amount" required type="number" min="0.01" step="0.01" dir="ltr" />
           </Field>
-          <Field label="طريقة الحركة *">
-            <select name="method" defaultValue="BANK">
-              {Object.entries(methods).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
+          <div className="form-row">
+            <Field label="طريقة الحركة *">
+              <select name="method" defaultValue="BANK">
+                {Object.entries(methods).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="التاريخ *">
+              <input type="date" name="date" required defaultValue={today()} />
+            </Field>
+          </div>
+          <Field
+            label="الحساب المالي / الخزينة"
+            hint="الخزينة أو الحساب البنكي للإيداع أو السحب (اختياري، يحدّد تلقائياً حسب الطريقة)"
+          >
+            <select name="account_id" defaultValue="">
+              <option value="">تلقائي حسب طريقة الحركة</option>
+              {(accountsData.data || [])
+                .filter((a) => a.active)
+                .map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name} ({a.type === 'CASH' ? 'خزينة' : a.type === 'BANK' ? 'حساب بنكي' : 'محفظة'}) — الرصيد:{' '}
+                    {money(a.balance, 2)} ج.م
+                  </option>
+                ))}
             </select>
-          </Field>
-          <Field label="التاريخ *">
-            <input type="date" name="date" required defaultValue={today()} />
           </Field>
           <Field label="ملاحظات">
             <input name="notes" maxLength={500} />
@@ -963,12 +985,14 @@ function PayForm({
   onPaid: () => void;
 }) {
   const { busy, act } = useAction();
+  const accountsData = useData<CashAccount[]>('/cash-accounts');
   // One key per form instance: a retried submit cannot pay the partner twice.
   const [requestKey] = useState(() => crypto.randomUUID());
   const remaining = line.amount - line.paid;
   const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
+    const accId = f.get('account_id') ? String(f.get('account_id')) : undefined;
     void act(async () => {
       await api(
         `/distributions/${distributionId}/payments`,
@@ -979,6 +1003,7 @@ function PayForm({
           method: f.get('method'),
           date: f.get('date'),
           reference: f.get('reference'),
+          account_id: accId,
         },
         requestKey,
       );
@@ -1005,17 +1030,35 @@ function PayForm({
               defaultValue={remaining / 100}
             />
           </Field>
-          <Field label="طريقة الصرف *">
-            <select name="method" defaultValue="BANK">
-              {Object.entries(methods).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
+          <div className="form-row">
+            <Field label="طريقة الصرف *">
+              <select name="method" defaultValue="BANK">
+                {Object.entries(methods).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="التاريخ *">
+              <input type="date" name="date" required defaultValue={today()} />
+            </Field>
+          </div>
+          <Field
+            label="الحساب المالي / الخزينة"
+            hint="الخزينة أو الحساب البنكي الذي يُصرف منه المبلغ (اختياري، يحدّد تلقائياً حسب الطريقة)"
+          >
+            <select name="account_id" defaultValue="">
+              <option value="">تلقائي حسب طريقة الصرف</option>
+              {(accountsData.data || [])
+                .filter((a) => a.active)
+                .map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name} ({a.type === 'CASH' ? 'خزينة' : a.type === 'BANK' ? 'حساب بنكي' : 'محفظة'}) — الرصيد:{' '}
+                    {money(a.balance, 2)} ج.م
+                  </option>
+                ))}
             </select>
-          </Field>
-          <Field label="التاريخ *">
-            <input type="date" name="date" required defaultValue={today()} />
           </Field>
           <Field label="المرجع">
             <input name="reference" maxLength={200} placeholder="رقم التحويل أو الإيصال" />

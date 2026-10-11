@@ -42,7 +42,8 @@ import {
   Status,
 } from '../lib';
 import { useBranch, withBranch } from '../branch';
-import type { Product, Party, PartyType, Movement, Document } from '../types';
+import type { Product, Party, PartyType, Movement, Document, CostMovement } from '../types';
+import { can } from '../auth';
 export function Products() {
   const { user } = useSession();
   const [params] = useSearchParams();
@@ -93,7 +94,7 @@ export function Products() {
             <Button variant="secondary" onClick={exportData}>
               <Download size={16} /> تصدير
             </Button>
-            {user.role === 'ADMIN' && (
+            {can(user, 'catalog:manage') && (
               <Button onClick={() => setEditing('new')}>
                 <Plus size={18} /> إضافة منتج
               </Button>
@@ -194,7 +195,12 @@ export function Products() {
                         <span className="category-tag">{p.category}</span>
                       </td>
                       <td className="num amount">{money(p.sale_price, 2)}</td>
-                      <td className="num muted">{money(p.cost_price, 2)}</td>
+                      <td className="num muted" title={p.avg_cost && p.avg_cost !== p.cost_price ? `التكلفة المرجعية: ${money(p.cost_price, 2)} ج.م` : undefined}>
+                        {money(p.avg_cost ?? p.cost_price, 2)}
+                        {p.avg_cost && p.avg_cost !== p.cost_price ? (
+                          <small className="cell-sub" style={{ display: 'block', color: 'var(--brand-main)' }}>مرجح</small>
+                        ) : null}
+                      </td>
                       <td>
                         <span className={'stock-badge ' + (p.stock <= p.min_stock ? 'low' : '')}>
                           <i />
@@ -203,7 +209,7 @@ export function Products() {
                       </td>
                       <td>
                         <div className="row-actions">
-                          {user.role === 'ADMIN' && (
+                          {can(user, 'catalog:manage') && (
                             <>
                               <button
                                 className="icon-btn"
@@ -425,7 +431,8 @@ export function Inventory() {
   const { activeId, isGroup, active, branches, defaultBranchId } = useBranch();
   const [adjustBranch, setAdjustBranch] = useState(defaultBranchId);
   const products = useData<Product[]>(withBranch('/products', activeId)),
-    movements = useData<Movement[]>(withBranch('/movements', activeId));
+    movements = useData<Movement[]>(withBranch('/movements', activeId)),
+    costMovements = useData<CostMovement[]>(can(user, 'inventory:view') ? withBranch('/cost-movements', activeId) : null);
   const [query, setQuery] = useState(params.get('q') || ''),
     [low, setLow] = useState(params.get('low') === '1'),
     [tab, setTab] = useState('levels'),
@@ -445,6 +452,11 @@ export function Inventory() {
   );
   const moves = (movements.data || []).filter((m) =>
     (m.product_name + m.sku + m.reason + (m.number || ''))
+      .toLowerCase()
+      .includes(query.toLowerCase()),
+  );
+  const costMoves = (costMovements.data || []).filter((cm) =>
+    (cm.product_name + cm.sku + cm.reason + (cm.document_id || '') + (cm.branch_name || ''))
       .toLowerCase()
       .includes(query.toLowerCase()),
   );
@@ -531,6 +543,14 @@ export function Inventory() {
             >
               سجل الحركات
             </button>
+            {can(user, 'inventory:view') && (
+              <button
+                className={tab === 'cost_movements' ? 'active' : ''}
+                onClick={() => setTab('cost_movements')}
+              >
+                سجل حركات التكلفة (WAC)
+              </button>
+            )}
           </div>
           <div className="table-filters">
             <SearchBox value={query} onChange={setQuery} placeholder="بحث في المخزون..." />
@@ -570,7 +590,7 @@ export function Inventory() {
                         <th>الحد الأدنى</th>
                         <th>قيمة المخزون</th>
                         <th>الحالة</th>
-                        {user.role === 'ADMIN' && <th>تسوية</th>}
+                        {can(user, 'inventory:adjust') && <th>تسوية</th>}
                       </tr>
                     </thead>
                     <tbody>
@@ -590,7 +610,7 @@ export function Inventory() {
                           </td>
                           <td className="num muted">{p.min_stock}</td>
                           <td className="num amount">
-                            {money(p.stock * p.cost_price)} <small>ج.م</small>
+                            {money(p.stock * (p.avg_cost ?? p.cost_price))} <small>ج.م</small>
                           </td>
                           <td>
                             <span
@@ -611,7 +631,7 @@ export function Inventory() {
                                   : 'متوفر'}
                             </span>
                           </td>
-                          {user.role === 'ADMIN' && (
+                          {can(user, 'inventory:adjust') && (
                             <td>
                               <button
                                 className="btn-small"
@@ -630,6 +650,66 @@ export function Inventory() {
                   </table>
                 </div>
                 <Pagination page={page} setPage={setPage} total={filtered.length} />
+              </>
+            )}
+          </>
+        ) : tab === 'cost_movements' ? (
+          <>
+            {!costMoves.length ? (
+              <Empty />
+            ) : (
+              <>
+                <div className="table-scroll">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>المنتج</th>
+                        {isGroup && <th>الفرع</th>}
+                        <th>التغير</th>
+                        <th>تكلفة الحركة</th>
+                        <th>المتوسط قبل</th>
+                        <th>المتوسط بعد</th>
+                        <th>السبب</th>
+                        <th>بواسطة</th>
+                        <th>تاريخ التسجيل</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {costMoves.slice((page - 1) * 8, page * 8).map((cm) => (
+                        <tr key={cm.id}>
+                          <td>
+                            <strong>{cm.product_name}</strong>
+                            <small className="cell-sub num">{cm.sku}</small>
+                          </td>
+                          {isGroup && <td>{cm.branch_name}</td>}
+                          <td>
+                            <span
+                              className={
+                                'movement-amount ' + (cm.delta_qty > 0 ? 'positive' : 'negative')
+                              }
+                              dir="ltr"
+                            >
+                              {cm.delta_qty > 0 ? '+' : ''}
+                              {cm.delta_qty}
+                            </span>
+                          </td>
+                          <td className="num">{money(cm.unit_cost, 2)}</td>
+                          <td className="num muted">{money(cm.avg_before, 2)}</td>
+                          <td className="num amount">
+                            <strong>{money(cm.avg_after, 2)}</strong>
+                          </td>
+                          <td>{cm.reason}</td>
+                          <td>{cm.user_name}</td>
+                          <td className="muted">{formatDate(cm.created_at, true)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <Pagination page={page} setPage={setPage} total={costMoves.length} />
+                <p className="table-bottom-note">
+                  سجل تطور التكلفة المتوسطة المرجحة (WAC) مع كل حركة شراء أو بيع أو تحويل أو تسوية.
+                </p>
               </>
             )}
           </>
@@ -765,7 +845,7 @@ export function Parties({ type }: { type: PartyType }) {
     [selected, setSelected] = useState<Party | null>(null),
     [archive, setArchive] = useState<Party | null>(null);
   const { busy, act } = useAction();
-  const editable = customer || user.role === 'ADMIN';
+  const editable = customer ? can(user, 'parties:manage') : (can(user, 'parties:manage') && can(user, 'documents:create_purchase'));
   useEffect(() => setQuery(params.get('q') || ''), [params]);
   useEffect(() => setPage(1), [query, archived]);
   const parties = data.data || [];
@@ -895,7 +975,7 @@ export function Parties({ type }: { type: PartyType }) {
                               <Pencil size={15} />
                             </button>
                           )}
-                          {user.role === 'ADMIN' && (
+                          {editable && (
                             <button
                               className="icon-btn"
                               onClick={() => setArchive(p)}

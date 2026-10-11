@@ -1,17 +1,18 @@
 import { all, one, run, transaction, id, now } from './db';
 import { equitySchema, ownerSchema } from './validation';
 import { AppError, audit, requireRow, type Actor } from './service';
+import { resolveDefaultAccountId, assertAccountFunds } from './accounts';
 import type { EquityEntry, Owner } from '../src/types';
 
 export const SHARE_TOTAL = 10000;
 
-/** Money in the group's single cash pool: collections and capital in; purchases, expenses,
- * withdrawals and distributions out. Bank and card receipts are pooled as well. */
+/** Money in the group's liquid cash pool across active accounts */
 export function cashBalance(): number {
   return one<{ cash: number }>(
     `SELECT
-      (SELECT COALESCE(SUM(p.amount),0) FROM payments p JOIN documents d ON d.id=p.document_id WHERE d.type='SALE')
-      - (SELECT COALESCE(SUM(p.amount),0) FROM payments p JOIN documents d ON d.id=p.document_id WHERE d.type='PURCHASE')
+      (SELECT COALESCE(SUM(initial_balance),0) FROM cash_accounts WHERE active=1)
+      + (SELECT COALESCE(SUM(p.amount),0) FROM payments p JOIN documents d ON d.id=p.document_id WHERE d.type IN ('SALE','PURCHASE_RETURN'))
+      - (SELECT COALESCE(SUM(p.amount),0) FROM payments p JOIN documents d ON d.id=p.document_id WHERE d.type IN ('PURCHASE','SALE_RETURN'))
       - (SELECT COALESCE(SUM(amount),0) FROM expenses)
       - (SELECT COALESCE(SUM(amount),0) FROM distribution_payments)
       + (SELECT COALESCE(SUM(amount),0) FROM equity_entries WHERE kind='CONTRIBUTION')
@@ -105,13 +106,15 @@ export function addEquityEntry(ownerId: string, raw: unknown, actor: Actor) {
   const owner = requireRow(one<Owner>('SELECT * FROM owners WHERE id=?', ownerId));
   const entryId = id();
   transaction(() => {
+    const accountId = input.account_id || resolveDefaultAccountId(input.method);
     if (input.kind === 'WITHDRAWAL') {
       const cash = cashBalance();
       if (input.amount > cash)
         throw new AppError(409, `الرصيد النقدي المتاح (${egp(cash)} ج.م) لا يكفي لهذا المسحوب`);
+      assertAccountFunds(accountId, input.amount, actor, input.override_overdraft);
     }
     run(
-      'INSERT INTO equity_entries(id,owner_id,kind,amount,method,date,notes,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?)',
+      'INSERT INTO equity_entries(id,owner_id,kind,amount,method,date,notes,created_by,created_at,account_id) VALUES(?,?,?,?,?,?,?,?,?,?)',
       entryId,
       ownerId,
       input.kind,
@@ -121,6 +124,7 @@ export function addEquityEntry(ownerId: string, raw: unknown, actor: Actor) {
       input.notes,
       actor.id,
       now(),
+      accountId,
     );
     audit(
       actor,
@@ -136,7 +140,10 @@ export function addEquityEntry(ownerId: string, raw: unknown, actor: Actor) {
 export function ownerLedger(ownerId: string) {
   const owner = requireRow(listOwners().find((o) => o.id === ownerId));
   const entries = all<EquityEntry>(
-    'SELECT * FROM equity_entries WHERE owner_id=? ORDER BY date DESC,created_at DESC',
+    `SELECT e.*, ca.name AS account_name
+     FROM equity_entries e
+     LEFT JOIN cash_accounts ca ON ca.id = e.account_id
+     WHERE e.owner_id=? ORDER BY e.date DESC, e.created_at DESC`,
     ownerId,
   );
   const distributions = all<{

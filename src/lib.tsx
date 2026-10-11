@@ -47,13 +47,19 @@ export const formatDate = (date: string, short = false) =>
   }).format(new Date(date));
 export const toCents = (value: FormDataEntryValue | null) => Math.round(Number(value) * 100);
 export const methods = { CASH: 'نقداً', BANK: 'تحويل بنكي', CARD: 'بطاقة بنكية' };
-export function useData<T>(url: string) {
+export function useData<T>(url: string | null) {
   const [data, setData] = useState<T | null>(null),
     [error, setError] = useState(''),
-    [loading, setLoading] = useState(true),
+    [loading, setLoading] = useState(Boolean(url)),
     [version, setVersion] = useState(0);
   const reload = useCallback(() => setVersion((v) => v + 1), []);
   useEffect(() => {
+    if (!url) {
+      setData(null);
+      setLoading(false);
+      setError('');
+      return;
+    }
     let alive = true;
     setLoading(true);
     setError('');
@@ -374,22 +380,25 @@ export function Empty({
   );
 }
 export function Status({ doc }: { doc: Document }) {
+  const isReturn = doc.type === 'SALE_RETURN' || doc.type === 'PURCHASE_RETURN';
   const status =
     doc.status === 'DRAFT'
       ? 'draft'
       : doc.status === 'CANCELLED'
         ? 'cancelled'
-        : doc.paid >= doc.total
+        : isReturn
           ? 'paid'
-          : doc.due_date < today()
-            ? 'overdue'
-            : doc.paid > 0
-              ? 'partial'
-              : 'pending';
-  const labels = {
+          : doc.paid >= doc.total
+            ? 'paid'
+            : doc.due_date < today()
+              ? 'overdue'
+              : doc.paid > 0
+                ? 'partial'
+                : 'pending';
+  const labels: Record<string, string> = {
     draft: 'مسودة',
     cancelled: 'ملغاة',
-    paid: 'مدفوعة',
+    paid: isReturn ? 'معتمد' : 'مدفوعة',
     overdue: 'متأخرة',
     partial: 'مدفوعة جزئياً',
     pending: 'بانتظار الدفع',

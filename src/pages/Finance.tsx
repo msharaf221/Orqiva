@@ -20,7 +20,12 @@ import {
   CreditCard,
   ArrowLeft,
   Filter,
+  ArrowRightLeft,
+  AlertTriangle,
+  Shield,
+  Trash2,
 } from 'lucide-react';
+import { PermissionsModal } from './PermissionsModal';
 import {
   api,
   useData,
@@ -47,7 +52,21 @@ import {
   methods,
 } from '../lib';
 import { useBranch, withBranch } from '../branch';
-import type { Expense, Payment, Document, Dashboard as DashboardData, User, Audit } from '../types';
+import type {
+  Expense,
+  Payment,
+  Document,
+  Dashboard as DashboardData,
+  User,
+  Audit,
+  CashAccount,
+  AccountType,
+  AccountTransfer,
+  AccountStatementEntry,
+  RoleDef,
+  PermissionDef,
+} from '../types';
+import { can } from '../auth';
 import { PaymentForm } from './Documents';
 import { RevenueChart } from './Dashboard';
 /** Who bears an expense: one branch, or every open branch by equal share or by the month's sales. */
@@ -60,6 +79,7 @@ export function Expenses() {
   const { user } = useSession();
   const { activeId, branches } = useBranch();
   const data = useData<Expense[]>(withBranch('/expenses', activeId));
+  const accountsData = useData<CashAccount[]>('/cash-accounts');
   const [query, setQuery] = useState(''),
     [category, setCategory] = useState('all'),
     [page, setPage] = useState(1),
@@ -81,6 +101,7 @@ export function Expenses() {
     const scoped = scope.startsWith('BRANCH:')
       ? { allocation: 'BRANCH', branch_id: scope.slice('BRANCH:'.length) }
       : { allocation: scope };
+    const accId = f.get('account_id') ? String(f.get('account_id')) : undefined;
     void act(async () => {
       await api('/expenses', 'POST', {
         title: f.get('title'),
@@ -89,10 +110,12 @@ export function Expenses() {
         date: f.get('date'),
         method: f.get('method'),
         notes: f.get('notes'),
+        account_id: accId,
         ...scoped,
       });
       setAdding(false);
       data.reload();
+      accountsData.reload();
     }, 'تم تسجيل المصروف');
   };
   return (
@@ -209,7 +232,10 @@ export function Expenses() {
                         <span className="category-tag">{e.category}</span>
                       </td>
                       <td className="muted">{formatDate(e.date, true)}</td>
-                      <td>{methods[e.method]}</td>
+                      <td>
+                        <div>{methods[e.method]}</div>
+                        {e.account_name && <small className="cell-sub">{e.account_name}</small>}
+                      </td>
                       <td className="num amount">
                         {money(e.amount, 2)} <small>ج.م</small>
                       </td>
@@ -314,6 +340,22 @@ export function Expenses() {
                   </select>
                 </Field>
               </div>
+              <Field
+                label="الحساب المالي / الخزينة"
+                hint="الخزينة أو الحساب البنكي الذي يُصرف منه المصروف (اختياري، يحدّد تلقائياً حسب الطريقة)"
+              >
+                <select name="account_id" defaultValue="">
+                  <option value="">تلقائي حسب طريقة الدفع</option>
+                  {(accountsData.data || [])
+                    .filter((a) => a.active)
+                    .map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name} ({a.type === 'CASH' ? 'خزينة' : a.type === 'BANK' ? 'حساب بنكي' : 'محفظة'}) — الرصيد:{' '}
+                        {money(a.balance, 2)} ج.م
+                      </option>
+                    ))}
+                </select>
+              </Field>
               <Field label="ملاحظات">
                 <textarea
                   name="notes"
@@ -490,7 +532,10 @@ export function Payments() {
                       <td className="num amount">
                         {money(p.amount, 2)} <small>ج.م</small>
                       </td>
-                      <td>{methods[p.method]}</td>
+                      <td>
+                        <div>{methods[p.method]}</div>
+                        {p.account_name && <small className="cell-sub">{p.account_name}</small>}
+                      </td>
                       <td className="num muted">{p.reference || '—'}</td>
                     </tr>
                   ))}
@@ -858,12 +903,21 @@ export function SettingsPage() {
               <small>الهوية وبيانات الفواتير</small>
             </div>
           </button>
-          {user.role === 'ADMIN' && (
+          {can(user, 'users:manage') && (
             <button onClick={() => setTab('users')} className={tab === 'users' ? 'active' : ''}>
               <Users size={19} />
               <div>
                 <strong>فريق العمل</strong>
-                <small>المستخدمون والصلاحيات</small>
+                <small>المستخدمون والأفرع</small>
+              </div>
+            </button>
+          )}
+          {can(user, 'users:manage') && (
+            <button onClick={() => setTab('roles')} className={tab === 'roles' ? 'active' : ''}>
+              <Shield size={19} />
+              <div>
+                <strong>الأدوار والصلاحيات</strong>
+                <small>تخصيص الصلاحيات والأدوار</small>
               </div>
             </button>
           )}
@@ -888,6 +942,8 @@ export function SettingsPage() {
             <CompanySettings />
           ) : tab === 'users' ? (
             <UserSettings />
+          ) : tab === 'roles' ? (
+            <RolesSettings />
           ) : (
             <SecuritySettings />
           )}
@@ -1067,25 +1123,49 @@ function UserSettings() {
   const { user } = useSession();
   const { branches } = useBranch();
   const data = useData<User[]>('/users');
+  const rolesData = useData<RoleDef[]>('/roles');
   const [adding, setAdding] = useState(false),
-    [editing, setEditing] = useState<User | null>(null);
+    [editing, setEditing] = useState<User | null>(null),
+    [customizing, setCustomizing] = useState<User | null>(null);
+  const [selectedRoleId, setSelectedRoleId] = useState<string>('');
   const { busy, act } = useAction();
+
+  const activeRole = rolesData.data?.find((r) => r.id === selectedRoleId);
+  const isSelectedAdmin = activeRole?.code === 'ADMIN';
+
+  const openAdd = () => {
+    setSelectedRoleId(rolesData.data?.find((r) => r.code === 'SALES')?.id || rolesData.data?.[0]?.id || '');
+    setAdding(true);
+  };
+
+  const openEdit = (u: User) => {
+    setEditing(u);
+    const matchedRole = rolesData.data?.find((r) => r.id === u.role_id || r.code === u.role);
+    setSelectedRoleId(matchedRole?.id || rolesData.data?.[0]?.id || '');
+  };
+
   const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
+    const chosenRoleId = String(f.get('role_id') || selectedRoleId);
+    const chosenRoleObj = rolesData.data?.find((r) => r.id === chosenRoleId);
+
     void act(async () => {
       if (editing)
         await api('/users/' + editing.id, 'PATCH', {
-          role: f.get('role'),
+          role: chosenRoleObj?.code,
+          role_id: chosenRoleId,
           active: f.get('active') === '1',
+          branch_ids: chosenRoleObj?.code === 'ADMIN' ? [] : f.getAll('branch_ids').map(String),
         });
       else
         await api('/users', 'POST', {
           name: f.get('name'),
           email: f.get('email'),
           password: f.get('password'),
-          role: f.get('role'),
-          branch_ids: f.getAll('branch_ids').map(String),
+          role: chosenRoleObj?.code || 'STAFF',
+          role_id: chosenRoleId,
+          branch_ids: chosenRoleObj?.code === 'ADMIN' ? [] : f.getAll('branch_ids').map(String),
         });
       setAdding(false);
       setEditing(null);
@@ -1098,9 +1178,9 @@ function UserSettings() {
         <div className="card-heading">
           <div>
             <h2>فريق العمل</h2>
-            <p>حدد من يمكنه الوصول إلى مساحة عملك.</p>
+            <p>إدارة أعضاء الفريق وتعيين أدوارهم وفروعهم.</p>
           </div>
-          <Button onClick={() => setAdding(true)}>
+          <Button onClick={openAdd}>
             <Plus size={16} /> مستخدم جديد
           </Button>
         </div>
@@ -1120,29 +1200,35 @@ function UserSettings() {
                   <span>{u.email}</span>
                 </div>
                 <span className={'badge ' + (u.active ? 'paid' : 'cancelled')}>
-                  {u.active ? (u.role === 'ADMIN' ? 'مدير' : 'موظف') : 'معطل'}
+                  {u.active ? (u.role_name || (u.role === 'ADMIN' ? 'مدير' : 'موظف')) : 'معطل'}
                 </span>
-                <button
-                  className="icon-btn"
-                  disabled={u.id === user.id}
-                  onClick={() => setEditing(u)}
-                  aria-label={'تعديل صلاحيات ' + u.name}
-                >
-                  <Pencil size={16} />
-                </button>
+                <div className="user-item-actions">
+                  <button
+                    className="icon-btn"
+                    disabled={u.id === user.id}
+                    onClick={() => setCustomizing(u)}
+                    title={'تخصيص الصلاحيات الفردية لـ ' + u.name}
+                    aria-label={'تخصيص صلاحيات ' + u.name}
+                  >
+                    <Shield size={16} />
+                  </button>
+                  <button
+                    className="icon-btn"
+                    disabled={u.id === user.id}
+                    onClick={() => openEdit(u)}
+                    aria-label={'تعديل صلاحيات ' + u.name}
+                  >
+                    <Pencil size={16} />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
         )}
         <div className="permissions-note">
-          <h3>كيف تعمل الصلاحيات؟</h3>
+          <h3>نظام الصلاحيات المخصص (RBAC)</h3>
           <p>
-            <b>مدير النظام:</b> جميع العمليات، إعدادات الشركة، إدارة المستخدمين وإلغاء الفواتير.
-          </p>
-          <p>
-            <b>موظف المبيعات:</b> الاطلاع على بيانات الأعمال والتقارير، إدارة العملاء، إنشاء واعتماد
-            فواتير المبيعات وتسجيل تحصيلاتها. لا يمكنه إدارة المشتريات أو المصروفات أو تسوية
-            المخزون.
+            يدعم النظام أدواراً مخصصة مع صلاحيات دقيقة لكل شاشة وعملية. يمكنك تخصيص الأدوار من تبويب <b>"الأدوار والصلاحيات"</b> أعلاه.
           </p>
         </div>
       </section>
@@ -1183,28 +1269,43 @@ function UserSettings() {
                   </Field>
                 </>
               )}
-              {!editing && (
+
+              <Field label="الدور والصلاحية *">
+                <select
+                  name="role_id"
+                  value={selectedRoleId}
+                  onChange={(e) => setSelectedRoleId(e.target.value)}
+                >
+                  {rolesData.data?.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name} ({r.code})
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              {!isSelectedAdmin && (
                 <div className="field branch-field">
-                  <span>الفروع المسموح بها (للموظف)</span>
+                  <span>الفروع المسموح بها لهذا المستخدم</span>
                   <div className="branch-checks">
                     {branches.map((b) => (
                       <label key={b.id} className="check-line">
-                        <input type="checkbox" name="branch_ids" value={b.id} />
+                        <input
+                          type="checkbox"
+                          name="branch_ids"
+                          value={b.id}
+                          defaultChecked={editing ? editing.branch_ids?.includes(b.id) : true}
+                        />
                         {b.name}
                       </label>
                     ))}
                   </div>
                   <small>
-                    المدير يرى كل الفروع تلقائياً. عدّل صلاحيات الفروع لاحقاً من صفحة كل فرع.
+                    مدير النظام يرى كل الفروع تلقائياً. لباقي الأدوار، حدد الفروع المسموح بالعمل عليها.
                   </small>
                 </div>
               )}
-              <Field label="الصلاحية">
-                <select name="role" defaultValue={editing?.role || 'STAFF'}>
-                  <option value="STAFF">موظف مبيعات</option>
-                  <option value="ADMIN">مدير النظام</option>
-                </select>
-              </Field>
+
               {editing && (
                 <Field label="حالة الحساب">
                   <select name="active" defaultValue={editing.active ? '1' : '0'}>
@@ -1233,7 +1334,274 @@ function UserSettings() {
           </form>
         </Modal>
       )}
+      {customizing && (
+        <PermissionsModal
+          targetUser={customizing}
+          onClose={() => setCustomizing(null)}
+          onSaved={() => {
+            setCustomizing(null);
+            data.reload();
+          }}
+        />
+      )}
     </>
+  );
+}
+
+function RolesSettings() {
+  const rolesData = useData<RoleDef[]>('/roles');
+  const permsData = useData<PermissionDef[]>('/permissions');
+  const [editingRole, setEditingRole] = useState<RoleDef | null>(null);
+  const [addingRole, setAddingRole] = useState(false);
+  const { act } = useAction();
+
+  const handleDelete = (role: RoleDef) => {
+    if (!window.confirm(`هل أنت متأكد من حذف الدور "${role.name}"؟`)) return;
+    void act(async () => {
+      await api(`/roles/${role.id}`, 'DELETE');
+      rolesData.reload();
+    }, 'تم حذف الدور بنجاح');
+  };
+
+  return (
+    <>
+      <section className="card settings-card">
+        <div className="card-heading">
+          <div>
+            <h2>الأدوار والصلاحيات (RBAC)</h2>
+            <p>أدوار مخصصة وصلاحيات دقيقة على مستوى كل عملية وشاشة في النظام.</p>
+          </div>
+          <Button onClick={() => setAddingRole(true)}>
+            <Plus size={16} /> دور جديد
+          </Button>
+        </div>
+
+        {rolesData.loading ? (
+          <Loading />
+        ) : rolesData.error ? (
+          <ErrorState message={rolesData.error} retry={rolesData.reload} />
+        ) : (
+          <div className="role-cards-grid">
+            {rolesData.data?.map((role) => (
+              <div className="role-card" key={role.id}>
+                <div className="role-card-header">
+                  <div className="role-card-title">
+                    <h3>{role.name}</h3>
+                    <span className="role-code-badge">{role.code}</span>
+                  </div>
+                  <span className={'badge ' + (role.is_system ? 'neutral' : 'tag')}>
+                    {role.is_system ? 'دور قياسي' : 'مخصص'}
+                  </span>
+                </div>
+                <p className="role-card-desc">{role.description || 'لا يوجد وصف محدد لهذا الدور'}</p>
+                <div className="role-card-meta">
+                  <span className="badge paid">
+                    {role.user_count || 0} مستخدم
+                  </span>
+                  <span className="muted" style={{ fontSize: '11px' }}>
+                    {role.code === 'ADMIN' ? 'كافة الصلاحيات (شامل)' : `${role.permissions.length} صلاحيات نشطة`}
+                  </span>
+                </div>
+                <div className="role-perms-summary">
+                  {role.permissions.slice(0, 4).map((p) => {
+                    const def = permsData.data?.find((item) => item.id === p);
+                    return (
+                      <span className="perm-pill" key={p}>
+                        {def?.name || p}
+                      </span>
+                    );
+                  })}
+                  {role.permissions.length > 4 && (
+                    <span className="perm-pill more">
+                      +{role.permissions.length - 4} أخرى
+                    </span>
+                  )}
+                </div>
+                <div className="role-card-actions">
+                  <Button
+                    variant="secondary"
+                    onClick={() => setEditingRole(role)}
+                    disabled={role.code === 'ADMIN'}
+                  >
+                    <Pencil size={14} /> تعديل
+                  </Button>
+                  {!role.is_system && (
+                    <Button
+                      variant="danger"
+                      onClick={() => handleDelete(role)}
+                      disabled={(role.user_count ?? 0) > 0}
+                    >
+                      <Trash2 size={14} /> حذف
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {(addingRole || editingRole) && (
+        <RoleModal
+          role={editingRole}
+          permissions={permsData.data || []}
+          onClose={() => {
+            setAddingRole(false);
+            setEditingRole(null);
+          }}
+          onSaved={() => {
+            setAddingRole(false);
+            setEditingRole(null);
+            rolesData.reload();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function RoleModal({
+  role,
+  permissions,
+  onClose,
+  onSaved,
+}: {
+  role: RoleDef | null;
+  permissions: PermissionDef[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { act, busy } = useAction();
+  const [selectedPerms, setSelectedPerms] = useState<string[]>(role?.permissions || []);
+
+  const groups = Array.from(new Set(permissions.map((p) => p.group)));
+
+  const togglePerm = (permId: string) => {
+    setSelectedPerms((prev) =>
+      prev.includes(permId) ? prev.filter((id) => id !== permId) : [...prev, permId],
+    );
+  };
+
+  const toggleGroup = (groupName: string) => {
+    const groupPermIds = permissions.filter((p) => p.group === groupName).map((p) => p.id);
+    const allSelected = groupPermIds.every((id) => selectedPerms.includes(id));
+    if (allSelected) {
+      setSelectedPerms((prev) => prev.filter((id) => !groupPermIds.includes(id)));
+    } else {
+      setSelectedPerms((prev) => Array.from(new Set([...prev, ...groupPermIds])));
+    }
+  };
+
+  const submit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!selectedPerms.length) {
+      alert('يجب تحديد صلاحية واحدة على الأقل');
+      return;
+    }
+    const f = new FormData(e.currentTarget);
+    const name = String(f.get('name') || '').trim();
+    const description = String(f.get('description') || '').trim();
+    const code = String(f.get('code') || '').trim();
+
+    void act(async () => {
+      if (role) {
+        await api(`/roles/${role.id}`, 'PUT', {
+          name,
+          description,
+          permissions: selectedPerms,
+        });
+      } else {
+        await api('/roles', 'POST', {
+          name,
+          code: code || undefined,
+          description,
+          permissions: selectedPerms,
+        });
+      }
+      onSaved();
+    }, 'تم حفظ الدور بنجاح');
+  };
+
+  return (
+    <Modal title={role ? `تعديل الدور: ${role.name}` : 'إنشاء دور جديد'} onClose={onClose}>
+      <form onSubmit={submit}>
+        <div className="modal-body form-grid">
+          <Field label="اسم الدور *">
+            <input name="name" defaultValue={role?.name} required maxLength={100} />
+          </Field>
+          {!role && (
+            <Field label="رمز الدور (اختياري)" hint="حروف إنجليزية كبيرة مثل ACCOUNTANT_LEAD">
+              <input name="code" maxLength={50} dir="ltr" />
+            </Field>
+          )}
+          <Field label="الوصف" hint="نبذة عن مهام هذا الدور ومسؤولياته">
+            <input name="description" defaultValue={role?.description} maxLength={300} />
+          </Field>
+
+          <div style={{ marginTop: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <strong>صلاحيات الدور ({selectedPerms.length} محددة) *</strong>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  className="perm-group-toggle"
+                  onClick={() => setSelectedPerms(permissions.map((p) => p.id))}
+                >
+                  تحديد الكل
+                </button>
+                <span className="muted">|</span>
+                <button
+                  type="button"
+                  className="perm-group-toggle"
+                  onClick={() => setSelectedPerms([])}
+                >
+                  إلغاء الكل
+                </button>
+              </div>
+            </div>
+
+            <div className="perms-group-grid">
+              {groups.map((group) => {
+                const groupPerms = permissions.filter((p) => p.group === group);
+                const allSelected = groupPerms.every((p) => selectedPerms.includes(p.id));
+                return (
+                  <div className="perm-group-box" key={group}>
+                    <div className="perm-group-header">
+                      <strong>{group}</strong>
+                      <button
+                        type="button"
+                        className="perm-group-toggle"
+                        onClick={() => toggleGroup(group)}
+                      >
+                        {allSelected ? 'إلغاء المجموعة' : 'تحديد المجموعة'}
+                      </button>
+                    </div>
+                    {groupPerms.map((perm) => (
+                      <label className="perm-check-item" key={perm.id}>
+                        <input
+                          type="checkbox"
+                          checked={selectedPerms.includes(perm.id)}
+                          onChange={() => togglePerm(perm.id)}
+                        />
+                        <span>{perm.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+        <div className="modal-footer">
+          <Button type="submit" busy={busy}>
+            حفظ الدور
+          </Button>
+          <Button type="button" variant="secondary" onClick={onClose}>
+            إلغاء
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 export function ActivityPage() {
@@ -1320,3 +1688,823 @@ export function ActivityPage() {
     </>
   );
 }
+
+// Cash & Bank Accounts (Treasury) -----------------------------------------------------------------
+
+export function CashAccountModal({
+  account,
+  onClose,
+  onSaved,
+}: {
+  account?: CashAccount | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { busy, act } = useAction();
+  const { branches } = useBranch();
+  const [type, setType] = useState<AccountType>(account?.type || 'CASH');
+
+  const submit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    const branchId = f.get('branch_id');
+    const payload = {
+      name: String(f.get('name')),
+      type: String(f.get('type')),
+      branch_id: branchId ? String(branchId) : undefined,
+      currency: 'EGP',
+      allow_negative: f.get('allow_negative') === '1' ? 1 : 0,
+      bank_name: String(f.get('bank_name') || ''),
+      account_number: String(f.get('account_number') || ''),
+      notes: String(f.get('notes') || ''),
+      ...(account
+        ? { active: f.get('active') === '1' ? 1 : 0 }
+        : { initial_balance: toCents(f.get('initial_balance')) }),
+    };
+
+    void act(async () => {
+      if (account) {
+        await api(`/cash-accounts/${account.id}`, 'PUT', payload);
+      } else {
+        await api('/cash-accounts', 'POST', payload);
+      }
+      onSaved();
+    }, account ? 'تم حفظ تعديلات الحساب' : 'تم إنشاء الحساب المالي بنجاح');
+  };
+
+  return (
+    <Modal
+      title={account ? `تعديل الحساب: ${account.name}` : 'إضافة حساب مالي أو خزينة'}
+      description="أدر الخزائن النقدية للفروع وحسابات البنوك مع تحديد سياسات السحب على المكشوف."
+      onClose={onClose}
+    >
+      <form onSubmit={submit}>
+        <div className="modal-body form-grid">
+          <Field label="اسم الحساب / الخزينة *">
+            <input
+              name="name"
+              required
+              maxLength={100}
+              defaultValue={account?.name || ''}
+              placeholder="مثال: خزينة فرع المعادي الرئيسية"
+            />
+          </Field>
+          <div className="form-row">
+            <Field label="نوع الحساب *">
+              <select
+                name="type"
+                value={type}
+                onChange={(e) => setType(e.target.value as AccountType)}
+              >
+                <option value="CASH">خزينة نقدية (Cash Drawer)</option>
+                <option value="BANK">حساب بنكي (Bank Account)</option>
+                <option value="WALLET">محفظة إلكترونية (E-Wallet)</option>
+              </select>
+            </Field>
+            <Field label="الفرع المرتبط">
+              <select name="branch_id" defaultValue={account?.branch_id || ''}>
+                <option value="">عام / المركز الرئيسي</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+
+          {type === 'BANK' && (
+            <div className="form-row">
+              <Field label="اسم البنك *">
+                <input
+                  name="bank_name"
+                  required
+                  maxLength={100}
+                  defaultValue={account?.bank_name || ''}
+                  placeholder="مثال: البنك الأهلي المصري"
+                />
+              </Field>
+              <Field label="رقم الحساب / IBAN">
+                <input
+                  name="account_number"
+                  maxLength={100}
+                  dir="ltr"
+                  defaultValue={account?.account_number || ''}
+                  placeholder="مثال: 1234567890123"
+                />
+              </Field>
+            </div>
+          )}
+
+          {!account && (
+            <Field label="الرصيد الافتتاحي (ج.م)">
+              <input
+                name="initial_balance"
+                type="number"
+                step="0.01"
+                min="0"
+                defaultValue="0.00"
+                placeholder="0.00"
+              />
+            </Field>
+          )}
+
+          <Field
+            label="سياسة السحب على المكشوف (Overdraft) *"
+            hint="منع السحب على المكشوف يرفض أي حركة صرف تتجاوز رصيد الحساب المتاح."
+          >
+            <select
+              name="allow_negative"
+              defaultValue={account ? String(account.allow_negative) : '0'}
+            >
+              <option value="0">منع السحب على المكشوف (الرصيد لا يقل عن صفر)</option>
+              <option value="1">السماح بالسحب على المكشوف (رصيد سالب مسموح)</option>
+            </select>
+          </Field>
+
+          {account && (
+            <Field label="حالة الحساب *">
+              <select name="active" defaultValue={String(account.active)}>
+                <option value="1">نشط ومتاح للعمليات</option>
+                <option value="0">مؤرشف / معطل</option>
+              </select>
+            </Field>
+          )}
+
+          <Field label="ملاحظات">
+            <textarea
+              name="notes"
+              maxLength={1000}
+              defaultValue={account?.notes || ''}
+              placeholder="وصف إضافي أو موقع الخزينة أو مسؤول العهدة..."
+            />
+          </Field>
+        </div>
+        <div className="modal-footer">
+          <Button type="submit" busy={busy}>
+            {account ? 'حفظ التعديلات' : 'إنشاء الحساب'}
+          </Button>
+          <Button type="button" variant="secondary" onClick={onClose}>
+            إلغاء
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+export function TransferModal({
+  accounts,
+  fromAccount,
+  onClose,
+  onSaved,
+}: {
+  accounts: CashAccount[];
+  fromAccount?: CashAccount | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { busy, act } = useAction();
+  const [fromId, setFromId] = useState(fromAccount?.id || accounts[0]?.id || '');
+  const [toId, setToId] = useState(
+    accounts.find((a) => a.id !== (fromAccount?.id || accounts[0]?.id))?.id || '',
+  );
+
+  const selectedFrom = accounts.find((a) => a.id === fromId);
+
+  const submit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    const amountVal = toCents(f.get('amount'));
+    if (fromId === toId) {
+      alert('لا يمكن التحويل لنفس الحساب');
+      return;
+    }
+    void act(async () => {
+      await api('/cash-accounts/transfers', 'POST', {
+        from_account_id: fromId,
+        to_account_id: toId,
+        amount: amountVal,
+        date: f.get('date'),
+        notes: f.get('notes'),
+      });
+      onSaved();
+    }, 'تم تنفيذ التحويل المالي وتحديث الأرصدة');
+  };
+
+  return (
+    <Modal
+      title="تحويل مالي بين الحسابات والخزائن"
+      description="نقل أموال بين خزينة وفرع، أو تغذية نقدية من البنك، أو إيداع إيرادات."
+      onClose={onClose}
+    >
+      <form onSubmit={submit}>
+        <div className="modal-body form-grid">
+          <div className="form-row">
+            <Field label="من حساب / خزينة *">
+              <select value={fromId} onChange={(e) => setFromId(e.target.value)}>
+                {accounts
+                  .filter((a) => a.active)
+                  .map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name} ({money(a.balance, 2)} ج.م)
+                    </option>
+                  ))}
+              </select>
+            </Field>
+            <Field label="إلى حساب / خزينة *">
+              <select value={toId} onChange={(e) => setToId(e.target.value)}>
+                {accounts
+                  .filter((a) => a.active && a.id !== fromId)
+                  .map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name} ({money(a.balance, 2)} ج.م)
+                    </option>
+                  ))}
+              </select>
+            </Field>
+          </div>
+
+          <div className="form-row">
+            <Field label="المبلغ المراد تحويله (ج.م) *">
+              <input
+                name="amount"
+                type="number"
+                step="0.01"
+                min="0.01"
+                required
+                max={
+                  selectedFrom && selectedFrom.allow_negative === 0
+                    ? selectedFrom.balance / 100
+                    : undefined
+                }
+                placeholder="0.00"
+              />
+            </Field>
+            <Field label="تاريخ التحويل *">
+              <input name="date" type="date" required defaultValue={today()} />
+            </Field>
+          </div>
+
+          {selectedFrom && selectedFrom.allow_negative === 0 && (
+            <div className="account-tag shield-ok" style={{ width: 'fit-content' }}>
+              <ShieldCheck size={14} />
+              الرصيد المتاح في الحساب المحوّل منه: {money(selectedFrom.balance, 2)} ج.م
+            </div>
+          )}
+
+          <Field label="ملاحظات التحويل">
+            <textarea
+              name="notes"
+              maxLength={1000}
+              placeholder="مثال: تغذية خزينة الفرع نقدياً من الحساب البنكي..."
+            />
+          </Field>
+        </div>
+        <div className="modal-footer">
+          <Button type="submit" busy={busy}>
+            تأكيد التحويل المالي
+          </Button>
+          <Button type="button" variant="secondary" onClick={onClose}>
+            إلغاء
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+export function StatementModal({
+  account,
+  onClose,
+}: {
+  account: CashAccount;
+  onClose: () => void;
+}) {
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const queryUrl = `/cash-accounts/${account.id}/statement${
+    from || to ? `?from=${from || '1970-01-01'}&to=${to || '2099-12-31'}` : ''
+  }`;
+  const { data, loading, error, reload } = useData<{
+    account: CashAccount;
+    entries: AccountStatementEntry[];
+  }>(queryUrl);
+
+  const entries = data?.entries || [];
+  const totalIn = entries.reduce((s, e) => s + e.in_amount, 0);
+  const totalOut = entries.reduce((s, e) => s + e.out_amount, 0);
+
+  const entryTypeLabels: Record<AccountStatementEntry['type'], { label: string; badge: string }> = {
+    INITIAL: { label: 'رصيد افتتاحي', badge: 'paid' },
+    SALE_PAYMENT: { label: 'تحصيل مبيعات', badge: 'paid' },
+    PURCHASE_PAYMENT: { label: 'سداد مشتريات', badge: 'pending' },
+    SALE_RETURN_REFUND: { label: 'رد مرتجع مبيعات', badge: 'pending' },
+    PURCHASE_RETURN_REFUND: { label: 'استرداد مرتجع مشتريات', badge: 'paid' },
+    EXPENSE: { label: 'مصروف تشغيلي', badge: 'pending' },
+    DISTRIBUTION: { label: 'توزيع أرباح', badge: 'pending' },
+    CONTRIBUTION: { label: 'إيداع رأس مال', badge: 'paid' },
+    WITHDRAWAL: { label: 'مسحوبات مالك', badge: 'pending' },
+    TRANSFER_IN: { label: 'تحويل وارد', badge: 'paid' },
+    TRANSFER_OUT: { label: 'تحويل صادر', badge: 'pending' },
+  };
+
+  return (
+    <Modal
+      title={`كشف حساب: ${account.name}`}
+      description={`${
+        account.type === 'CASH'
+          ? 'خزينة نقدية'
+          : account.type === 'BANK'
+            ? `حساب بنكي (${account.bank_name || 'عام'})`
+            : 'محفظة إلكترونية'
+      } · ${account.branch_name || 'عام / المركز الرئيسي'}`}
+      onClose={onClose}
+    >
+      <div className="modal-body">
+        <div className="statement-summary">
+          <div className="statement-sum-card">
+            <div className="statement-sum-label">الرصيد الافتتاحي</div>
+            <div className="statement-sum-val">{money(account.initial_balance, 2)} ج.م</div>
+          </div>
+          <div className="statement-sum-card">
+            <div className="statement-sum-label">إجمالي المقبوضات (الوارد)</div>
+            <div className="statement-sum-val in-flow">+{money(totalIn, 2)} ج.م</div>
+          </div>
+          <div className="statement-sum-card">
+            <div className="statement-sum-label">إجمالي المدفوعات (المنصرف)</div>
+            <div className="statement-sum-val out-flow">-{money(totalOut, 2)} ج.م</div>
+          </div>
+          <div className="statement-sum-card">
+            <div className="statement-sum-label">الرصيد الحالي</div>
+            <div className={`statement-sum-val ${account.balance < 0 ? 'out-flow' : 'in-flow'}`}>
+              {money(account.balance, 2)} ج.م
+            </div>
+          </div>
+        </div>
+
+        <div className="table-toolbar" style={{ marginTop: '12px' }}>
+          <div className="table-filters" style={{ width: '100%', display: 'flex', gap: '8px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <Field label="من تاريخ">
+              <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+            </Field>
+            <Field label="إلى تاريخ">
+              <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+            </Field>
+            {(from || to) && (
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setFrom('');
+                  setTo('');
+                }}
+              >
+                إلغاء التصفية
+              </Button>
+            )}
+            <Button
+              variant="secondary"
+              onClick={() =>
+                downloadCSV(
+                  `كشف-حساب-${account.name}`,
+                  ['التاريخ', 'النوع', 'البيان', 'المرجع', 'الوارد', 'المنصرف', 'الرصيد'],
+                  entries.map((e) => [
+                    e.date,
+                    entryTypeLabels[e.type]?.label || e.type,
+                    e.description,
+                    e.reference || '',
+                    e.in_amount / 100,
+                    e.out_amount / 100,
+                    e.balance / 100,
+                  ]),
+                )
+              }
+            >
+              <Download size={14} /> تصدير
+            </Button>
+          </div>
+        </div>
+
+        {error ? (
+          <ErrorState message={error} retry={reload} />
+        ) : loading ? (
+          <Loading />
+        ) : !entries.length ? (
+          <Empty description="لا توجد حركات مسجلة لهذا الحساب خلال الفترة المحددة" />
+        ) : (
+          <div className="table-scroll" style={{ maxHeight: '380px' }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>التاريخ</th>
+                  <th>نوع الحركة</th>
+                  <th>البيان والملاحظات</th>
+                  <th className="num">الوارد (+)</th>
+                  <th className="num">المنصرف (-)</th>
+                  <th className="num">الرصيد</th>
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map((e, idx) => (
+                  <tr key={e.id + '_' + idx}>
+                    <td className="num muted">{idx + 1}</td>
+                    <td className="muted">{formatDate(e.date, true)}</td>
+                    <td>
+                      <span className={`badge ${entryTypeLabels[e.type]?.badge || 'draft'}`}>
+                        {entryTypeLabels[e.type]?.label || e.type}
+                      </span>
+                    </td>
+                    <td>
+                      <div>{e.description}</div>
+                      {e.reference && <small className="cell-sub">{e.reference}</small>}
+                    </td>
+                    <td className="num in-flow">
+                      {e.in_amount > 0 ? `+${money(e.in_amount, 2)}` : '—'}
+                    </td>
+                    <td className="num out-flow">
+                      {e.out_amount > 0 ? `-${money(e.out_amount, 2)}` : '—'}
+                    </td>
+                    <td className="num amount">
+                      <strong>{money(e.balance, 2)}</strong> <small>ج.م</small>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+      <div className="modal-footer">
+        <Button variant="secondary" onClick={onClose}>
+          إغلاق
+        </Button>
+      </div>
+    </Modal>
+  );
+}
+
+export function Accounts() {
+  const { user } = useSession();
+  const { activeId } = useBranch();
+  const accountsData = useData<CashAccount[]>(withBranch('/cash-accounts', activeId));
+  const transfersData = useData<AccountTransfer[]>('/cash-accounts/transfers');
+
+  const [tab, setTab] = useState<'accounts' | 'transfers'>('accounts');
+  const [query, setQuery] = useState('');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [page, setPage] = useState(1);
+
+  const [addingAccount, setAddingAccount] = useState(false);
+  const [editingAccount, setEditingAccount] = useState<CashAccount | null>(null);
+  const [transferModal, setTransferModal] = useState<{
+    open: boolean;
+    fromAccount?: CashAccount | null;
+  }>({
+    open: false,
+  });
+  const [statementAccount, setStatementAccount] = useState<CashAccount | null>(null);
+
+  const accounts = accountsData.data || [];
+  const transfers = transfersData.data || [];
+
+  const filteredAccounts = accounts.filter(
+    (a) =>
+      (typeFilter === 'all' || a.type === typeFilter) &&
+      (a.name + (a.bank_name || '') + (a.account_number || '') + (a.notes || ''))
+        .toLowerCase()
+        .includes(query.toLowerCase()),
+  );
+
+  const filteredTransfers = transfers.filter((t) =>
+    (t.number + (t.from_account_name || '') + (t.to_account_name || '') + t.notes)
+      .toLowerCase()
+      .includes(query.toLowerCase()),
+  );
+
+  const totalLiquidity = accounts.reduce((s, a) => s + a.balance, 0);
+  const bankLiquidity = accounts
+    .filter((a) => a.type === 'BANK')
+    .reduce((s, a) => s + a.balance, 0);
+  const cashLiquidity = accounts
+    .filter((a) => a.type === 'CASH' || a.type === 'WALLET')
+    .reduce((s, a) => s + a.balance, 0);
+
+  const reloadAll = () => {
+    accountsData.reload();
+    transfersData.reload();
+  };
+
+  return (
+    <>
+      <PageHeader
+        eyebrow="إدارة السيولة النقدية والبنكية"
+        title="الخزائن والحسابات البنكية"
+        description="راقب أرصدة خزائن الفروع وحسابات البنوك، ونفّذ التحويلات المالية الداخلية مع كشف حساب تفصيلي لحظي."
+        actions={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() =>
+                downloadCSV(
+                  tab === 'accounts' ? 'الحسابات-المالية' : 'التحويلات-المالية',
+                  tab === 'accounts'
+                    ? ['الاسم', 'النوع', 'الفرع', 'الرصيد', 'السحب على المكشوف', 'الحالة']
+                    : ['رقم التحويل', 'من حساب', 'إلى حساب', 'المبلغ', 'التاريخ', 'ملاحظات'],
+                  tab === 'accounts'
+                    ? filteredAccounts.map((a) => [
+                        a.name,
+                        a.type === 'CASH' ? 'خزينة' : a.type === 'BANK' ? 'بنك' : 'محفظة',
+                        a.branch_name || 'عام',
+                        a.balance / 100,
+                        a.allow_negative ? 'مسموح' : 'ممنوع',
+                        a.active ? 'نشط' : 'مؤرشف',
+                      ])
+                    : filteredTransfers.map((t) => [
+                        t.number,
+                        t.from_account_name || '',
+                        t.to_account_name || '',
+                        t.amount / 100,
+                        t.date,
+                        t.notes,
+                      ]),
+                )
+              }
+            >
+              <Download size={16} /> تصدير
+            </Button>
+            {user.role === 'ADMIN' && (
+              <>
+                <Button variant="secondary" onClick={() => setTransferModal({ open: true })}>
+                  <ArrowRightLeft size={16} /> تحويل بين الحسابات
+                </Button>
+                <Button onClick={() => setAddingAccount(true)}>
+                  <Plus size={18} /> إضافة حساب مالي
+                </Button>
+              </>
+            )}
+          </>
+        }
+      />
+
+      <div className="stats-grid three">
+        <Stat
+          label="إجمالي السيولة المتاحة"
+          value={money(totalLiquidity)}
+          icon={<Wallet size={20} />}
+          tone={totalLiquidity >= 0 ? 'green' : 'amber'}
+          foot="مجموع أرصدة جميع الخزائن والبنوك"
+        />
+        <Stat
+          label="الأرصدة البنكية"
+          value={money(bankLiquidity)}
+          icon={<Building2 size={20} />}
+          tone="blue"
+          foot={`${accounts.filter((a) => a.type === 'BANK').length} حسابات بنكية`}
+        />
+        <Stat
+          label="أرصدة الخزائن النقدية والمحافظ"
+          value={money(cashLiquidity)}
+          icon={<Banknote size={20} />}
+          tone="amber"
+          foot={`${accounts.filter((a) => a.type !== 'BANK').length} خزائن نقدية ومحافظ`}
+        />
+      </div>
+
+      <section className="card">
+        <div className="table-toolbar">
+          <div className="tabs">
+            <button
+              className={tab === 'accounts' ? 'active' : ''}
+              onClick={() => {
+                setTab('accounts');
+                setPage(1);
+              }}
+            >
+              الحسابات والخزائن المالية ({accounts.length})
+            </button>
+            <button
+              className={tab === 'transfers' ? 'active' : ''}
+              onClick={() => {
+                setTab('transfers');
+                setPage(1);
+              }}
+            >
+              <ArrowRightLeft size={14} /> سجل التحويلات الداخلية ({transfers.length})
+            </button>
+          </div>
+          <div className="table-filters">
+            <SearchBox
+              value={query}
+              onChange={setQuery}
+              placeholder={tab === 'accounts' ? 'بحث عن حساب أو بنك...' : 'بحث في التحويلات...'}
+            />
+            {tab === 'accounts' && (
+              <select
+                className="filter-select"
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value)}
+              >
+                <option value="all">كل الأنواع</option>
+                <option value="CASH">خزائن نقدية</option>
+                <option value="BANK">حسابات بنكية</option>
+                <option value="WALLET">محافظ إلكترونية</option>
+              </select>
+            )}
+          </div>
+        </div>
+
+        {tab === 'accounts' ? (
+          accountsData.error ? (
+            <ErrorState message={accountsData.error} retry={accountsData.reload} />
+          ) : accountsData.loading ? (
+            <Loading />
+          ) : !filteredAccounts.length ? (
+            <Empty description="لا توجد حسابات مالية مسجلة بعد" />
+          ) : (
+            <div className="accounts-grid" style={{ padding: '16px' }}>
+              {filteredAccounts.map((acc) => (
+                <div key={acc.id} className={`account-card ${!acc.active ? 'archived' : ''}`}>
+                  <div className="account-header">
+                    <div className="account-meta">
+                      <div
+                        className={`account-avatar ${
+                          acc.type === 'CASH' ? 'cash' : acc.type === 'BANK' ? 'bank' : 'wallet'
+                        }`}
+                      >
+                        {acc.type === 'CASH' ? (
+                          <Wallet size={22} />
+                        ) : acc.type === 'BANK' ? (
+                          <Building2 size={22} />
+                        ) : (
+                          <CreditCard size={22} />
+                        )}
+                      </div>
+                      <div className="account-title-area">
+                        <h3>{acc.name}</h3>
+                        <div className="account-sub">
+                          <span>{acc.branch_name || 'عام · المركز الرئيسي'}</span>
+                          {acc.bank_name && <span>· {acc.bank_name}</span>}
+                        </div>
+                      </div>
+                    </div>
+                    <span
+                      className={`badge ${
+                        acc.type === 'CASH' ? 'paid' : acc.type === 'BANK' ? 'draft' : 'pending'
+                      }`}
+                    >
+                      {acc.type === 'CASH' ? 'خزينة' : acc.type === 'BANK' ? 'بنك' : 'محفظة'}
+                    </span>
+                  </div>
+
+                  <div className={`account-balance-box ${acc.balance < 0 ? 'negative' : ''}`}>
+                    <span className="account-balance-label">الرصيد المتاح</span>
+                    <span className={`account-balance-val ${acc.balance < 0 ? 'negative' : ''}`}>
+                      {money(acc.balance, 2)} <small>ج.م</small>
+                    </span>
+                  </div>
+
+                  <div className="account-info-tags">
+                    {acc.allow_negative === 0 ? (
+                      <span className="account-tag shield-ok">
+                        <ShieldCheck size={12} /> منع السحب على المكشوف
+                      </span>
+                    ) : (
+                      <span className="account-tag shield-warn">
+                        <AlertTriangle size={12} /> سحب مكشوف مسموح
+                      </span>
+                    )}
+                    {acc.account_number && (
+                      <span className="account-tag" dir="ltr">
+                        #{acc.account_number}
+                      </span>
+                    )}
+                  </div>
+
+                  {acc.notes && (
+                    <div
+                      className="muted cell-sub"
+                      style={{ marginBottom: '14px', fontSize: '11px' }}
+                    >
+                      {acc.notes}
+                    </div>
+                  )}
+
+                  <div className="account-actions">
+                    <Button
+                      variant="secondary"
+                      onClick={() => setStatementAccount(acc)}
+                    >
+                      <ReceiptText size={14} /> كشف الحساب
+                    </Button>
+                    {user.role === 'ADMIN' && (
+                      <>
+                        <Button
+                          variant="secondary"
+                          onClick={() => setTransferModal({ open: true, fromAccount: acc })}
+                        >
+                          <ArrowRightLeft size={14} /> تحويل
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          onClick={() => setEditingAccount(acc)}
+                        >
+                          <Pencil size={14} />
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        ) : transfersData.error ? (
+          <ErrorState message={transfersData.error} retry={transfersData.reload} />
+        ) : transfersData.loading ? (
+          <Loading />
+        ) : !filteredTransfers.length ? (
+          <Empty description="لم يتم تسجيل أي تحويلات بين الحسابات حتى الآن" />
+        ) : (
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>رقم التحويل</th>
+                  <th>التاريخ</th>
+                  <th>من حساب</th>
+                  <th>إلى حساب</th>
+                  <th className="num">المبلغ</th>
+                  <th>الملاحظات</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredTransfers
+                  .slice((page - 1) * 10, page * 10)
+                  .map((t) => (
+                    <tr key={t.id}>
+                      <td className="num">
+                        <strong>{t.number}</strong>
+                      </td>
+                      <td className="muted">{formatDate(t.date, true)}</td>
+                      <td>
+                        <span className="account-tag">{t.from_account_name}</span>
+                      </td>
+                      <td>
+                        <span className="account-tag in-flow">{t.to_account_name}</span>
+                      </td>
+                      <td className="num amount">
+                        <strong>{money(t.amount, 2)}</strong> <small>ج.م</small>
+                      </td>
+                      <td className="muted notes-cell">{t.notes || '—'}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+            <Pagination page={page} setPage={setPage} total={filteredTransfers.length} size={10} />
+          </div>
+        )}
+      </section>
+
+      {addingAccount && (
+        <CashAccountModal
+          onClose={() => setAddingAccount(false)}
+          onSaved={() => {
+            setAddingAccount(false);
+            reloadAll();
+          }}
+        />
+      )}
+
+      {editingAccount && (
+        <CashAccountModal
+          account={editingAccount}
+          onClose={() => setEditingAccount(null)}
+          onSaved={() => {
+            setEditingAccount(null);
+            reloadAll();
+          }}
+        />
+      )}
+
+      {transferModal.open && (
+        <TransferModal
+          accounts={accounts}
+          fromAccount={transferModal.fromAccount}
+          onClose={() => setTransferModal({ open: false })}
+          onSaved={() => {
+            setTransferModal({ open: false });
+            reloadAll();
+          }}
+        />
+      )}
+
+      {statementAccount && (
+        <StatementModal
+          account={statementAccount}
+          onClose={() => setStatementAccount(null)}
+        />
+      )}
+    </>
+  );
+}
+

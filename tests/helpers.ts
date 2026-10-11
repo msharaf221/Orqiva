@@ -29,6 +29,8 @@ export async function seedUsers() {
     1,
     new Date().toISOString(),
   );
+  run("INSERT OR REPLACE INTO user_roles(user_id,role_id) VALUES('admin','role_admin')");
+  run("INSERT OR REPLACE INTO user_roles(user_id,role_id) VALUES('staff','role_sales')");
   run("INSERT INTO user_branches(user_id,branch_id) VALUES('staff','main')");
 }
 
@@ -41,12 +43,21 @@ export async function signIn(email: string) {
 /** Clears business data between tests. The HQ branch, the default owner and the users remain. */
 export function resetBusinessData() {
   db.exec(`
+    DELETE FROM user_permission_overrides;
     DELETE FROM audit_logs; DELETE FROM distribution_payments; DELETE FROM distribution_lines;
-    DELETE FROM distributions; DELETE FROM equity_entries; DELETE FROM stock_movements;
+    DELETE FROM distributions; DELETE FROM equity_entries; DELETE FROM cost_movements;
+    DELETE FROM branch_cost; DELETE FROM stock_movements;
     DELETE FROM transfer_lines; DELETE FROM transfers; DELETE FROM payments;
     DELETE FROM document_lines; DELETE FROM documents; DELETE FROM sequences;
+    DELETE FROM pos_cash_movements; DELETE FROM pos_shifts;
     DELETE FROM branch_stock; DELETE FROM branch_products; DELETE FROM products;
-    DELETE FROM parties; DELETE FROM expenses;
+    DELETE FROM expenses;
+    DELETE FROM parties WHERE id<>'walk-in-customer';
+    DELETE FROM account_transfers;
+    DELETE FROM cash_accounts WHERE id NOT IN ('acc_def_cash', 'acc_def_bank');
+    UPDATE cash_accounts SET initial_balance=0, allow_negative=1, active=1;
+    DELETE FROM user_roles WHERE user_id NOT IN ('admin', 'staff');
+    DELETE FROM roles WHERE is_system=0;
     DELETE FROM user_branches WHERE branch_id<>'main';
     DELETE FROM branches WHERE id<>'main';
     UPDATE branches SET active=1, closed_on=NULL, opened_on='2000-01-01' WHERE id='main';
@@ -54,7 +65,9 @@ export function resetBusinessData() {
     UPDATE owners SET share_bps=10000, active=1 WHERE id='owner-main';
   `);
   run("DELETE FROM user_branches WHERE user_id='staff'");
-  run("INSERT INTO user_branches(user_id,branch_id) VALUES('staff','main')");
+  run(
+    "INSERT OR IGNORE INTO user_branches(user_id,branch_id) SELECT 'staff','main' WHERE EXISTS (SELECT 1 FROM users WHERE id='staff')",
+  );
 }
 
 /** True when every balance equals the sum of its stock movements (the ledger reconciles). */

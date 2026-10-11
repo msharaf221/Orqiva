@@ -10,6 +10,7 @@ import {
   type Actor,
   type ProductRow,
 } from './service';
+import { effectiveCost } from './cost';
 import { accessibleBranchIds, scopeSql, writableBranch, type Scope } from './scope';
 import type { Branch, Transfer, TransferLine, TransferSuggestion } from '../src/types';
 
@@ -134,9 +135,8 @@ export function shipTransfer(transferId: string, actor: Actor) {
     if (!to.active) throw new AppError(409, 'الفرع المستلم مؤرشف؛ لا يمكن الشحن إليه');
     const lines = all<TransferLine>('SELECT * FROM transfer_lines WHERE transfer_id=?', transferId);
     for (const line of lines) {
-      const product = requireRow(
-        one<ProductRow>('SELECT * FROM products WHERE id=?', line.product_id),
-      );
+      // Snapshot the WAC at the time of shipment (not the reference cost_price)
+      const wac = effectiveCost(from.id, line.product_id);
       moveStock({
         branchId: from.id,
         productId: line.product_id,
@@ -145,7 +145,7 @@ export function shipTransfer(transferId: string, actor: Actor) {
         actor,
         transferId,
       });
-      run('UPDATE transfer_lines SET unit_cost=? WHERE id=?', product.cost_price, line.id);
+      run('UPDATE transfer_lines SET unit_cost=? WHERE id=?', wac, line.id);
     }
     run(
       "UPDATE transfers SET status='IN_TRANSIT',shipped_by=?,shipped_at=? WHERE id=?",
@@ -184,6 +184,8 @@ export function receiveTransfer(transferId: string, raw: unknown, actor: Actor) 
           reason: `استلام من ${transfer.from_branch_name}`,
           actor,
           transferId,
+          // Pass the WAC that was snapshotted at shipment time
+          unitCost: line.unit_cost,
         });
       run('UPDATE transfer_lines SET quantity_received=? WHERE id=?', quantity, line.id);
     }
@@ -228,6 +230,8 @@ export function cancelTransfer(transferId: string, actor: Actor) {
           reason: `إلغاء تحويل ${transfer.number}`,
           actor,
           transferId,
+          // Return at the snapshotted WAC
+          unitCost: line.unit_cost,
         });
     }
     run("UPDATE transfers SET status='CANCELLED',cancelled_at=? WHERE id=?", now(), transferId);

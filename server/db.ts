@@ -1,4 +1,5 @@
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
+export type { SQLInputValue };
 import { mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -24,15 +25,36 @@ export function one<T>(sql: string, ...params: SQLInputValue[]): T | undefined {
 export function run(sql: string, ...params: SQLInputValue[]) {
   return db.prepare(sql).run(...params);
 }
+let txDepth = 0;
 export function transaction<T>(fn: () => T): T {
-  db.exec('BEGIN IMMEDIATE');
+  const depth = txDepth++;
+  const spName = `tx_${depth}`;
+  if (depth === 0) {
+    db.exec('BEGIN IMMEDIATE');
+  } else {
+    db.exec(`SAVEPOINT ${spName}`);
+  }
   try {
     const value = fn();
-    db.exec('COMMIT');
+    if (depth === 0) {
+      db.exec('COMMIT');
+    } else {
+      db.exec(`RELEASE SAVEPOINT ${spName}`);
+    }
     return value;
   } catch (error) {
-    db.exec('ROLLBACK');
+    try {
+      if (depth === 0) {
+        db.exec('ROLLBACK');
+      } else {
+        db.exec(`ROLLBACK TO SAVEPOINT ${spName}`);
+      }
+    } catch {
+      // ignore secondary rollback errors
+    }
     throw error;
+  } finally {
+    txDepth--;
   }
 }
 /**

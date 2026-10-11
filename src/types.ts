@@ -1,6 +1,146 @@
-export type Role = 'ADMIN' | 'STAFF';
-export type DocType = 'SALE' | 'PURCHASE';
+export type Role =
+  | 'ADMIN'
+  | 'BRANCH_MANAGER'
+  | 'GENERAL_ACCOUNTANT'
+  | 'TREASURY_ACCOUNTANT'
+  | 'CASHIER'
+  | 'ACCOUNTANT'
+  | 'SALES'
+  | 'WAREHOUSE'
+  | 'VIEWER'
+  | 'STAFF'
+  | (string & {});
+
+export type PermissionKey =
+  | 'sales:view'
+  | 'sales:create'
+  | 'sales:post'
+  | 'sales:cancel'
+  | 'pos:access'
+  | 'pos:shift_open'
+  | 'pos:shift_close'
+  | 'pos:cash_movement'
+  | 'pos:discount'
+  | 'purchases:view'
+  | 'purchases:create'
+  | 'purchases:post'
+  | 'purchases:cancel'
+  | 'products:view'
+  | 'products:manage'
+  | 'inventory:view'
+  | 'inventory:adjust'
+  | 'transfers:manage'
+  | 'customers:manage'
+  | 'suppliers:manage'
+  | 'parties:view'
+  | 'parties:manage'
+  | 'expenses:manage'
+  | 'payments:manage'
+  | 'reports:view'
+  | 'distributions:manage'
+  | 'branches:manage'
+  | 'users:manage'
+  | 'company:manage'
+  | 'audit:view'
+  | (string & {});
+
+export type PosShiftStatus = 'OPEN' | 'PENDING_REVIEW' | 'CLOSED';
+export type PosCashMovementType = 'IN' | 'OUT';
+
+export interface PosShift {
+  id: string;
+  number: string;
+  branch_id: string;
+  user_id: string;
+  status: PosShiftStatus;
+  opened_at: string;
+  closed_at: string | null;
+  opening_cash: number;
+  expected_cash: number;
+  closing_cash: number | null;
+  difference: number;
+  cashier_declared_cash?: number | null;
+  reviewed_by?: string | null;
+  reviewer_name?: string | null;
+  review_notes?: string;
+  discrepancy_expense_id?: string | null;
+  notes: string;
+  created_at: string;
+  user_name?: string;
+  branch_name?: string;
+}
+
+export interface PosCashMovement {
+  id: string;
+  shift_id: string;
+  type: PosCashMovementType;
+  amount: number;
+  reason: string;
+  created_by: string;
+  created_at: string;
+  user_name?: string;
+}
+
+export interface PosShiftSummary {
+  shift: PosShift;
+  cash_sales: number;
+  card_sales: number;
+  bank_sales: number;
+  credit_sales: number;
+  total_sales: number;
+  sales_count: number;
+  cash_in: number;
+  cash_out: number;
+  opening_cash: number;
+  expected_cash: number;
+  closing_cash: number | null;
+  difference: number;
+  cashier_declared_cash?: number | null;
+  discrepancy_expense_id?: string | null;
+  movements: PosCashMovement[];
+}
+
+export interface PosCartLine {
+  product_id: string;
+  name: string;
+  sku: string;
+  unit: string;
+  unit_price: number;
+  quantity: number;
+  stock: number;
+  line_discount: number;
+}
+
+export interface PermissionDef {
+  id: string;
+  name: string;
+  group: string;
+}
+
+export interface RoleDef {
+  id: string;
+  name: string;
+  code: string;
+  description: string;
+  is_system: number;
+  created_at: string;
+  permissions: string[];
+  user_count?: number;
+}
+
+export type DocType = 'SALE' | 'PURCHASE' | 'SALE_RETURN' | 'PURCHASE_RETURN';
 export type PartyType = 'CUSTOMER' | 'SUPPLIER';
+
+export interface ReturnableLine {
+  product_id: string;
+  name: string;
+  sku: string;
+  quantity: number;
+  unit_price: number;
+  cost_price: number;
+  already_returned: number;
+  returnable: number;
+}
 export type PaymentMethod = 'CASH' | 'BANK' | 'CARD';
 export type BranchKind = 'HQ' | 'STORE' | 'WAREHOUSE' | 'ONLINE';
 export type ExpenseAllocation = 'BRANCH' | 'EQUAL' | 'REVENUE';
@@ -11,6 +151,10 @@ export interface User {
   name: string;
   email: string;
   role: Role;
+  role_id?: string;
+  role_name?: string;
+  permissions?: string[];
+  overrides?: Record<string, boolean>;
   active: number;
   created_at: string;
   branch_ids?: string[];
@@ -68,6 +212,8 @@ export interface Product {
   min_stock: number;
   active: number;
   created_at: string;
+  /** Effective Weighted Average Cost (WAC) — defaults to cost_price if not yet computed */
+  avg_cost?: number;
   /** Branch-scoped reads: 1 when the product is sellable in the selected branch. */
   available?: number;
   branch_id?: string;
@@ -111,6 +257,8 @@ export interface Payment {
   party_name?: string;
   type?: DocType;
   branch_name?: string;
+  account_id?: string | null;
+  account_name?: string | null;
 }
 export interface Document {
   id: string;
@@ -125,6 +273,9 @@ export interface Document {
   party_phone?: string;
   party_address?: string;
   party_tax_number?: string;
+  original_document_id?: string | null;
+  original_document_number?: string | null;
+  pos_shift_id?: string | null;
   date: string;
   due_date: string;
   subtotal: number;
@@ -151,6 +302,8 @@ export interface Expense {
   branch_id: string | null;
   branch_name?: string | null;
   allocation: ExpenseAllocation;
+  account_id?: string | null;
+  account_name?: string | null;
 }
 export interface Movement {
   id: string;
@@ -164,6 +317,23 @@ export interface Movement {
   created_at: string;
   branch_name?: string;
   transfer_number?: string | null;
+}
+export interface CostMovement {
+  id: string;
+  branch_id: string;
+  branch_name: string;
+  product_id: string;
+  product_name: string;
+  sku: string;
+  delta_qty: number;
+  unit_cost: number;
+  avg_before: number;
+  avg_after: number;
+  reason: string;
+  document_id: string | null;
+  transfer_id: string | null;
+  user_name: string;
+  created_at: string;
 }
 export interface Audit {
   id: string;
@@ -353,5 +523,66 @@ export interface StockMatrix {
     cost_price: number;
     total: number;
     by_branch: Record<string, number>;
+    /** WAC per branch — COALESCE(avg_cost, reference cost_price) */
+    wac_by_branch: Record<string, number>;
   }[];
 }
+
+export type AccountType = 'CASH' | 'BANK' | 'WALLET';
+
+export interface CashAccount {
+  id: string;
+  name: string;
+  type: AccountType;
+  branch_id: string | null;
+  branch_name?: string | null;
+  currency: string;
+  account_number: string;
+  bank_name: string;
+  initial_balance: number;
+  allow_negative: number;
+  active: number;
+  notes: string;
+  created_at: string;
+  balance: number;
+  total_in?: number;
+  total_out?: number;
+}
+
+export interface AccountTransfer {
+  id: string;
+  number: string;
+  from_account_id: string;
+  from_account_name?: string;
+  to_account_id: string;
+  to_account_name?: string;
+  amount: number;
+  date: string;
+  notes: string;
+  created_by: string;
+  created_at: string;
+}
+
+export interface AccountStatementEntry {
+  id: string;
+  date: string;
+  type:
+    | 'INITIAL'
+    | 'SALE_PAYMENT'
+    | 'PURCHASE_PAYMENT'
+    | 'SALE_RETURN_REFUND'
+    | 'PURCHASE_RETURN_REFUND'
+    | 'EXPENSE'
+    | 'DISTRIBUTION'
+    | 'CONTRIBUTION'
+    | 'WITHDRAWAL'
+    | 'TRANSFER_IN'
+    | 'TRANSFER_OUT';
+  description: string;
+  reference: string;
+  in_amount: number;
+  out_amount: number;
+  balance: number;
+  created_at: string;
+}
+

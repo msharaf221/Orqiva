@@ -549,8 +549,13 @@ function StockMatrixCard() {
                 </td>
                 {branches.map((b) => {
                   const qty = r.by_branch[b.id] ?? 0;
+                  const wac = r.wac_by_branch?.[b.id];
                   return (
-                    <td key={b.id} className={'num ' + (qty ? '' : 'muted')}>
+                    <td
+                      key={b.id}
+                      className={'num ' + (qty ? '' : 'muted')}
+                      title={wac ? `متوسط التكلفة: ${money(wac, 2)} ج.م` : undefined}
+                    >
                       {qty || '—'}
                     </td>
                   );

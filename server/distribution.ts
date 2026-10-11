@@ -5,6 +5,7 @@ import { AppError, audit, nextNumber, requireRow, type Actor } from './service';
 import { largestRemainder } from './allocation';
 import { branchResults } from './reports';
 import { cashBalance, egp, SHARE_TOTAL } from './owners';
+import { resolveDefaultAccountId, assertAccountFunds } from './accounts';
 import type { BranchResult, Distribution, DistributionPreview } from '../src/types';
 
 /** Statutory-style reserve taken from positive profit before anything reaches owners (5%). */
@@ -87,8 +88,10 @@ export function distributionDetail(distributionId: string): Distribution {
     distributionId,
   );
   const payments = all<NonNullable<Distribution['payments']>[number]>(
-    `SELECT p.id,p.line_id,l.owner_name,p.amount,p.method,p.date,p.reference
-     FROM distribution_payments p JOIN distribution_lines l ON l.id=p.line_id
+    `SELECT p.id,p.line_id,l.owner_name,p.amount,p.method,p.date,p.reference,p.account_id,ca.name AS account_name
+     FROM distribution_payments p
+     JOIN distribution_lines l ON l.id=p.line_id
+     LEFT JOIN cash_accounts ca ON ca.id=p.account_id
      WHERE l.distribution_id=? ORDER BY p.date DESC,p.created_at DESC`,
     distributionId,
   );
@@ -276,8 +279,10 @@ export function payDistribution(
     const cash = cashBalance();
     if (input.amount > cash)
       throw new AppError(409, `الرصيد النقدي المتاح (${egp(cash)} ج.م) لا يكفي لصرف هذا المبلغ`);
+    const accountId = input.account_id || resolveDefaultAccountId(input.method);
+    assertAccountFunds(accountId, input.amount, actor, input.override_overdraft);
     run(
-      'INSERT INTO distribution_payments(id,line_id,amount,method,date,reference,request_key,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?)',
+      'INSERT INTO distribution_payments(id,line_id,amount,method,date,reference,request_key,created_by,created_at,account_id) VALUES(?,?,?,?,?,?,?,?,?,?)',
       id(),
       line.id,
       input.amount,
@@ -287,6 +292,7 @@ export function payDistribution(
       key || null,
       actor.id,
       now(),
+      accountId,
     );
     run('UPDATE distribution_lines SET paid=paid+? WHERE id=?', input.amount, line.id);
     const open = one<{ open: number }>(

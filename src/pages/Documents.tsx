@@ -18,6 +18,7 @@ import {
   Package,
   CircleCheck,
   FileText,
+  RotateCcw,
 } from 'lucide-react';
 import {
   api,
@@ -47,44 +48,76 @@ import {
   methods,
 } from '../lib';
 import { GROUP, useBranch, withBranch } from '../branch';
-import type { Document, DocType, Product, Party } from '../types';
+import type { Document, DocType, Product, Party, ReturnableLine, CashAccount } from '../types';
+import { can } from '../auth';
 export function Documents({ type }: { type: DocType }) {
   const sale = type === 'SALE';
   const path = sale ? '/sales' : '/purchases';
+  const returnType: DocType = sale ? 'SALE_RETURN' : 'PURCHASE_RETURN';
   const { user } = useSession();
   const [params] = useSearchParams();
   const { activeId, isGroup } = useBranch();
-  const data = useData<Document[]>(withBranch('/documents?type=' + type, activeId));
+  const [kind, setKind] = useState<'invoices' | 'returns'>('invoices');
+  const currentType = kind === 'returns' ? returnType : type;
+  const data = useData<Document[]>(withBranch('/documents?type=' + currentType, activeId));
   const [query, setQuery] = useState(''),
     [status, setStatus] = useState(params.get('status') || 'all'),
     [page, setPage] = useState(1);
-  const allowed = sale || user.role === 'ADMIN';
+  const allowed = sale ? can(user, 'documents:view') : can(user, 'documents:create_purchase');
   useEffect(() => setStatus(params.get('status') || 'all'), [params]);
-  useEffect(() => setPage(1), [query, status]);
+  useEffect(() => setPage(1), [query, status, kind]);
   const documents = data.data || [];
   const posted = documents.filter((d) => d.status === 'POSTED');
-  const filtered = documents.filter(
-    (d) =>
-      (d.number + ' ' + d.party_name).toLowerCase().includes(query.toLowerCase()) &&
-      (status === 'all' ||
-        (status === 'draft' && d.status === 'DRAFT') ||
-        (status === 'cancelled' && d.status === 'CANCELLED') ||
-        (status === 'paid' && d.status === 'POSTED' && d.paid >= d.total) ||
-        (status === 'unpaid' && d.status === 'POSTED' && d.paid < d.total) ||
-        (status === 'overdue' &&
-          d.status === 'POSTED' &&
-          d.paid < d.total &&
-          d.due_date < today())),
-  );
+  const filtered = documents.filter((d) => {
+    const text = (
+      d.number +
+      ' ' +
+      d.party_name +
+      (d.original_document_number ? ' ' + d.original_document_number : '')
+    ).toLowerCase();
+    if (!text.includes(query.toLowerCase())) return false;
+    if (status === 'all') return true;
+    if (status === 'draft') return d.status === 'DRAFT';
+    if (status === 'cancelled') return d.status === 'CANCELLED';
+    if (kind === 'returns') {
+      if (status === 'posted') return d.status === 'POSTED';
+      return true;
+    }
+    if (status === 'paid') return d.status === 'POSTED' && d.paid >= d.total;
+    if (status === 'unpaid') return d.status === 'POSTED' && d.paid < d.total;
+    if (status === 'overdue')
+      return d.status === 'POSTED' && d.paid < d.total && d.due_date < today();
+    return true;
+  });
   return (
     <>
       <PageHeader
-        eyebrow={sale ? 'من أول فاتورة، إلى النمو' : 'توريدات تدعم أعمالك'}
-        title={sale ? 'فواتير المبيعات' : 'فواتير المشتريات'}
+        eyebrow={
+          kind === 'returns'
+            ? sale
+              ? 'إدارة المرتجعات وإشعارات الدائن'
+              : 'إدارة مرتجعات المشتريات وإشعارات المدين'
+            : sale
+              ? 'من أول فاتورة، إلى النمو'
+              : 'توريدات تدعم أعمالك'
+        }
+        title={
+          kind === 'returns'
+            ? sale
+              ? 'مرتجعات المبيعات (إشعارات دائن)'
+              : 'مرتجعات المشتريات (إشعارات مدين)'
+            : sale
+              ? 'فواتير المبيعات'
+              : 'فواتير المشتريات'
+        }
         description={
-          sale
-            ? 'أنشئ فواتيرك، تابع التحصيل، وحافظ على وضوح حساباتك.'
-            : 'أدر مشترياتك ومستحقات الموردين، مع تحديث المخزون تلقائياً.'
+          kind === 'returns'
+            ? sale
+              ? 'سجل المرتجعات الصادرة للعملاء مع تسوية أرصدة الحسابات وتحديث المخزون وتكلفة البضاعة المباعة.'
+              : 'سجل مرتجعات المشتريات للموردين واسترداد قيمتها وتخفيض المخزون.'
+            : sale
+              ? 'أنشئ فواتيرك، تابع التحصيل، وحافظ على وضوح حساباتك.'
+              : 'أدر مشترياتك ومستحقات الموردين، مع تحديث المخزون تلقائياً.'
         }
         actions={
           <>
@@ -92,33 +125,59 @@ export function Documents({ type }: { type: DocType }) {
               variant="secondary"
               onClick={() =>
                 downloadCSV(
-                  sale ? 'المبيعات' : 'المشتريات',
-                  [
-                    'رقم الفاتورة',
-                    sale ? 'العميل' : 'المورد',
-                    'التاريخ',
-                    'الاستحقاق',
-                    'الحالة',
-                    'الإجمالي',
-                    'المدفوع',
-                    'المستحق',
-                  ],
-                  filtered.map((d) => [
-                    d.number,
-                    d.party_name,
-                    d.date,
-                    d.due_date,
-                    d.status,
-                    d.total / 100,
-                    d.paid / 100,
-                    d.status === 'POSTED' ? (d.total - d.paid) / 100 : 0,
-                  ]),
+                  kind === 'returns'
+                    ? sale
+                      ? 'مرتجعات-المبيعات'
+                      : 'مرتجعات-المشتريات'
+                    : sale
+                      ? 'المبيعات'
+                      : 'المشتريات',
+                  kind === 'returns'
+                    ? [
+                        'رقم الإشعار',
+                        'الفاتورة الأصلية',
+                        sale ? 'العميل' : 'المورد',
+                        'التاريخ',
+                        'الحالة',
+                        'الإجمالي',
+                      ]
+                    : [
+                        'رقم الفاتورة',
+                        sale ? 'العميل' : 'المورد',
+                        'التاريخ',
+                        'الاستحقاق',
+                        'الحالة',
+                        'الإجمالي',
+                        'المدفوع',
+                        'المستحق',
+                      ],
+                  filtered.map((d) =>
+                    kind === 'returns'
+                      ? [
+                          d.number,
+                          d.original_document_number || '—',
+                          d.party_name,
+                          d.date,
+                          d.status,
+                          d.total / 100,
+                        ]
+                      : [
+                          d.number,
+                          d.party_name,
+                          d.date,
+                          d.due_date,
+                          d.status,
+                          d.total / 100,
+                          d.paid / 100,
+                          d.status === 'POSTED' ? (d.total - d.paid) / 100 : 0,
+                        ],
+                  ),
                 )
               }
             >
               <Download size={16} /> تصدير
             </Button>
-            {allowed && (
+            {kind === 'invoices' && allowed && (
               <Link to={path + '/new'} className="btn btn-primary">
                 <Plus size={18} /> فاتورة جديدة
               </Link>
@@ -127,63 +186,104 @@ export function Documents({ type }: { type: DocType }) {
         }
       />
       <div className="stats-grid three">
-        <Stat
-          label={sale ? 'إجمالي المبيعات المعتمدة' : 'إجمالي المشتريات المعتمدة'}
-          value={money(posted.reduce((s, d) => s + d.total, 0))}
-          icon={<ReceiptText size={20} />}
-          foot="جميع الفترات · شامل الضريبة"
-        />
-        <Stat
-          label={sale ? 'المبالغ المحصّلة' : 'المبالغ المسدّدة'}
-          value={money(posted.reduce((s, d) => s + d.paid, 0))}
-          icon={<Wallet size={20} />}
-          tone="blue"
-          foot="الدفعات المسجلة على الفواتير"
-        />
-        <Stat
-          label="الرصيد المستحق"
-          value={money(posted.reduce((s, d) => s + d.total - d.paid, 0))}
-          icon={<Clock3 size={20} />}
-          tone="amber"
-          foot="فواتير معتمدة بانتظار التسوية"
-        />
+        {kind === 'returns' ? (
+          <>
+            <Stat
+              label={sale ? 'إجمالي إشعارات الدائن المعتمدة' : 'إجمالي إشعارات المدين المعتمدة'}
+              value={money(posted.reduce((s, d) => s + d.total, 0))}
+              icon={<RotateCcw size={20} />}
+              foot="إجمالي قيمة المرتجعات شامل الضريبة"
+            />
+            <Stat
+              label="الإشعارات المعتمدة"
+              value={posted.length.toString()}
+              icon={<ReceiptText size={20} />}
+              tone="blue"
+              foot="مرتجعات مسجلة في المخزون والحسابات"
+            />
+            <Stat
+              label="مسودات قيد المراجعة"
+              value={documents.filter((d) => d.status === 'DRAFT').length.toString()}
+              icon={<Clock3 size={20} />}
+              tone="amber"
+              foot="إشعارات بانتظار الاعتماد"
+            />
+          </>
+        ) : (
+          <>
+            <Stat
+              label={sale ? 'إجمالي المبيعات المعتمدة' : 'إجمالي المشتريات المعتمدة'}
+              value={money(posted.reduce((s, d) => s + d.total, 0))}
+              icon={<ReceiptText size={20} />}
+              foot="جميع الفترات · شامل الضريبة"
+            />
+            <Stat
+              label={sale ? 'المبالغ المحصّلة' : 'المبالغ المسدّدة'}
+              value={money(posted.reduce((s, d) => s + d.paid, 0))}
+              icon={<Wallet size={20} />}
+              tone="blue"
+              foot="الدفعات المسجلة على الفواتير"
+            />
+            <Stat
+              label="الرصيد المستحق"
+              value={money(posted.reduce((s, d) => s + d.total - d.paid, 0))}
+              icon={<Clock3 size={20} />}
+              tone="amber"
+              foot="فواتير معتمدة بانتظار التسوية"
+            />
+          </>
+        )}
       </div>
       <section className="card">
         <div className="table-toolbar">
           <div className="tabs">
-            <button className={status === 'all' ? 'active' : ''} onClick={() => setStatus('all')}>
-              كل الفواتير <span className="num">{documents.length}</span>
+            <button
+              className={kind === 'invoices' ? 'active' : ''}
+              onClick={() => {
+                setKind('invoices');
+                setStatus('all');
+              }}
+            >
+              {sale ? 'فواتير المبيعات' : 'فواتير المشتريات'}
             </button>
             <button
-              className={status === 'draft' ? 'active' : ''}
-              onClick={() => setStatus('draft')}
+              className={kind === 'returns' ? 'active' : ''}
+              onClick={() => {
+                setKind('returns');
+                setStatus('all');
+              }}
             >
-              المسودات
-            </button>
-            <button
-              className={status === 'unpaid' ? 'active' : ''}
-              onClick={() => setStatus('unpaid')}
-            >
-              غير المسددة
+              <RotateCcw size={13} />
+              {sale ? 'مرتجعات المبيعات (إشعارات دائن)' : 'مرتجعات المشتريات (إشعارات مدين)'}
             </button>
           </div>
           <div className="table-filters">
             <SearchBox
               value={query}
               onChange={setQuery}
-              placeholder="بحث برقم الفاتورة أو الحساب..."
+              placeholder={
+                kind === 'returns'
+                  ? 'بحث برقم الإشعار أو الفاتورة أو الطرف...'
+                  : 'بحث برقم الفاتورة أو الحساب...'
+              }
             />
             <select
               className="filter-select"
               value={status}
               onChange={(e) => setStatus(e.target.value)}
-              aria-label="حالة الفاتورة"
+              aria-label="حالة المستند"
             >
               <option value="all">كل الحالات</option>
               <option value="draft">مسودة</option>
-              <option value="paid">مدفوعة</option>
-              <option value="unpaid">غير مسددة</option>
-              <option value="overdue">متأخرة</option>
+              {kind === 'returns' ? (
+                <option value="posted">معتمد</option>
+              ) : (
+                <>
+                  <option value="paid">مدفوعة</option>
+                  <option value="unpaid">غير مسددة</option>
+                  <option value="overdue">متأخرة</option>
+                </>
+              )}
               <option value="cancelled">ملغاة</option>
             </select>
           </div>
@@ -194,8 +294,16 @@ export function Documents({ type }: { type: DocType }) {
           <Loading />
         ) : !filtered.length ? (
           <Empty
+            title={kind === 'returns' ? 'لا توجد إشعارات مرتجع' : undefined}
+            description={
+              kind === 'returns'
+                ? sale
+                  ? 'يتم إصدار إشعار دائن من داخل تفاصيل أي فاتورة مبيعات معتمدة.'
+                  : 'يتم إصدار إشعار مدين من داخل تفاصيل أي فاتورة مشتريات معتمدة.'
+                : undefined
+            }
             action={
-              allowed ? (
+              kind === 'invoices' && allowed ? (
                 <Link to={path + '/new'} className="btn btn-primary">
                   <Plus size={16} /> إنشاء فاتورة
                 </Link>
@@ -208,12 +316,13 @@ export function Documents({ type }: { type: DocType }) {
               <table>
                 <thead>
                   <tr>
-                    <th>رقم الفاتورة</th>
+                    <th>{kind === 'returns' ? 'رقم الإشعار' : 'رقم الفاتورة'}</th>
+                    {kind === 'returns' && <th>الفاتورة الأصلية</th>}
                     <th>{sale ? 'العميل' : 'المورد'}</th>
                     <th>التاريخ</th>
-                    <th>الاستحقاق</th>
-                    <th>الإجمالي</th>
-                    <th>المتبقي</th>
+                    {kind === 'invoices' && <th>الاستحقاق</th>}
+                    <th>{kind === 'returns' ? 'قيمة المرتجع' : 'الإجمالي'}</th>
+                    {kind === 'invoices' && <th>المتبقي</th>}
                     <th>الحالة</th>
                     <th />
                   </tr>
@@ -226,6 +335,21 @@ export function Documents({ type }: { type: DocType }) {
                           {d.number}
                         </Link>
                       </td>
+                      {kind === 'returns' && (
+                        <td>
+                          {d.original_document_id ? (
+                            <Link
+                              className="num"
+                              style={{ textDecoration: 'underline' }}
+                              to={path + '/' + d.original_document_id}
+                            >
+                              {d.original_document_number || 'الفاتورة الأصلية'}
+                            </Link>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                      )}
                       <td>
                         <div className="person-cell">
                           <Initials name={d.party_name} tone={i} />
@@ -236,11 +360,15 @@ export function Documents({ type }: { type: DocType }) {
                         </div>
                       </td>
                       <td className="muted no-wrap">{formatDate(d.date, true)}</td>
-                      <td className="muted no-wrap">{formatDate(d.due_date, true)}</td>
+                      {kind === 'invoices' && (
+                        <td className="muted no-wrap">{formatDate(d.due_date, true)}</td>
+                      )}
                       <td className="num amount">{money(d.total, 2)}</td>
-                      <td className="num muted">
-                        {d.status === 'POSTED' ? money(d.total - d.paid, 2) : '—'}
-                      </td>
+                      {kind === 'invoices' && (
+                        <td className="num muted">
+                          {d.status === 'POSTED' ? money(d.total - d.paid, 2) : '—'}
+                        </td>
+                      )}
                       <td>
                         <Status doc={d} />
                       </td>
@@ -368,7 +496,8 @@ function Editor({ type, existing }: { type: DocType; existing?: Document }) {
       navigate(path + '/' + doc.id);
     });
   };
-  if (!sale && user.role !== 'ADMIN') return <Empty title="هذه الصفحة متاحة لمدير النظام" />;
+  if (!sale && !can(user, 'documents:create_purchase'))
+    return <Empty title="هذه الصفحة متاحة لمدير النظام أو من لديه صلاحية المشتريات" />;
   if (products.error || parties.error)
     return (
       <ErrorState
@@ -688,24 +817,52 @@ function Editor({ type, existing }: { type: DocType; existing?: Document }) {
 }
 export function DocumentDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { company, user } = useSession();
   const data = useData<Document>('/documents/' + id);
   const { busy, act } = useAction();
   const [confirm, setConfirm] = useState<'post' | 'cancel' | null>(null),
-    [payment, setPayment] = useState(false);
+    [payment, setPayment] = useState(false),
+    [returnModal, setReturnModal] = useState(false);
   const doc = data.data;
+
+  const isSale = doc ? doc.type === 'SALE' || doc.type === 'SALE_RETURN' : true;
+  const isReturn = doc ? doc.type === 'SALE_RETURN' || doc.type === 'PURCHASE_RETURN' : false;
+  const path = isSale ? '/sales' : '/purchases';
+  const editable = isSale ? can(user, 'documents:create_sale') : can(user, 'documents:create_purchase');
+
+  const linkedReturnsData = useData<Document[]>(
+    doc && !isReturn ? '/documents?original_document_id=' + doc.id : null,
+  );
+  const linkedReturns = linkedReturnsData.data || [];
+
   if (data.error) return <ErrorState message={data.error} retry={data.reload} />;
   if (!doc || data.loading) return <Loading />;
-  const sale = doc.type === 'SALE',
-    path = sale ? '/sales' : '/purchases',
-    editable = sale || user.role === 'ADMIN';
+
+  const docTypeLabel =
+    doc.type === 'SALE'
+      ? 'فاتورة مبيعات'
+      : doc.type === 'PURCHASE'
+        ? 'فاتورة مشتريات'
+        : doc.type === 'SALE_RETURN'
+          ? 'إشعار دائن (مرتجع مبيعات)'
+          : 'إشعار مدين (مرتجع مشتريات)';
+
+  const eyebrow = isSale
+    ? isReturn
+      ? 'المبيعات / إشعار دائن'
+      : 'المبيعات / تفاصيل الفاتورة'
+    : isReturn
+      ? 'المشتريات / إشعار مدين'
+      : 'المشتريات / تفاصيل الفاتورة';
+
   return (
     <>
       <div className="no-print">
         <PageHeader
-          eyebrow={sale ? 'المبيعات / تفاصيل الفاتورة' : 'المشتريات / تفاصيل الفاتورة'}
+          eyebrow={eyebrow}
           title={doc.number}
-          description={`${sale ? 'فاتورة مبيعات' : 'فاتورة مشتريات'} · ${doc.party_name}`}
+          description={`${docTypeLabel} · ${doc.party_name}`}
           actions={
             <>
               <Link className="btn btn-secondary" to={path}>
@@ -714,17 +871,29 @@ export function DocumentDetail() {
               <Button variant="secondary" onClick={() => window.print()}>
                 <Printer size={16} /> طباعة
               </Button>
+              {isReturn && doc.original_document_id && (
+                <Link to={path + '/' + doc.original_document_id} className="btn btn-secondary">
+                  <ArrowRight size={16} /> الفاتورة الأصلية ({doc.original_document_number})
+                </Link>
+              )}
               {doc.status === 'DRAFT' && editable && (
                 <>
-                  <Link to={path + '/' + doc.id + '/edit'} className="btn btn-secondary">
-                    <Pencil size={16} /> تعديل
-                  </Link>
+                  {!isReturn && (
+                    <Link to={path + '/' + doc.id + '/edit'} className="btn btn-secondary">
+                      <Pencil size={16} /> تعديل
+                    </Link>
+                  )}
                   <Button onClick={() => setConfirm('post')}>
-                    <Check size={17} /> اعتماد الفاتورة
+                    <Check size={17} /> {isReturn ? 'اعتماد المرتجع' : 'اعتماد الفاتورة'}
                   </Button>
                 </>
               )}
-              {doc.status === 'POSTED' && doc.paid < doc.total && editable && (
+              {!isReturn && doc.status === 'POSTED' && editable && (
+                <Button variant="secondary" onClick={() => setReturnModal(true)}>
+                  <RotateCcw size={16} /> إصدار مرتجع
+                </Button>
+              )}
+              {!isReturn && doc.status === 'POSTED' && doc.paid < doc.total && editable && (
                 <Button onClick={() => setPayment(true)}>
                   <Plus size={17} /> تسجيل دفعة
                 </Button>
@@ -735,7 +904,75 @@ export function DocumentDetail() {
         {doc.status === 'DRAFT' && (
           <div className="info-banner document-info">
             <FileText size={19} />
-            <span>هذه الفاتورة مسودة. لم يتم تحديث المخزون أو احتساب أي مستحقات بعد.</span>
+            <span>
+              {isReturn
+                ? 'هذا الإشعار مسودة. لن يتم تعديل المخزون أو تسوية الحساب حتى يتم اعتماده.'
+                : 'هذه الفاتورة مسودة. لم يتم تحديث المخزون أو احتساب أي مستحقات بعد.'}
+            </span>
+          </div>
+        )}
+        {isReturn && (
+          <div className="info-banner document-info" style={{ borderColor: 'var(--border)' }}>
+            <RotateCcw size={19} />
+            <span>
+              مرتجع مرتبط بالفاتورة رقم{' '}
+              <Link
+                to={path + '/' + doc.original_document_id}
+                style={{ fontWeight: 600, textDecoration: 'underline' }}
+              >
+                {doc.original_document_number || 'الفاتورة الأصلية'}
+              </Link>{' '}
+              —{' '}
+              {doc.type === 'SALE_RETURN'
+                ? 'إشعار دائن يخفض رصيد العميل ويعيد البضاعة للمخزون بتكلفة COGS الأصلية.'
+                : 'إشعار مدين يخفض رصيد المورد ويسحب البضاعة من المخزون بسعر الشراء الأصلي.'}
+            </span>
+          </div>
+        )}
+        {!isReturn && linkedReturns.length > 0 && (
+          <div
+            className="card linked-returns-card no-print"
+            style={{ marginBottom: '1.25rem', padding: '1rem' }}
+          >
+            <div className="card-heading" style={{ marginBottom: '0.75rem' }}>
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
+                <RotateCcw size={16} /> المرتجعات الصادرة عن هذه الفاتورة ({linkedReturns.length})
+              </h3>
+            </div>
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>رقم الإشعار</th>
+                    <th>التاريخ</th>
+                    <th>قيمة المرتجع</th>
+                    <th>الحالة</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {linkedReturns.map((r) => (
+                    <tr key={r.id}>
+                      <td>
+                        <Link className="invoice-number num" to={path + '/' + r.id}>
+                          {r.number}
+                        </Link>
+                      </td>
+                      <td className="muted">{formatDate(r.date, true)}</td>
+                      <td className="num amount">{money(r.total, 2)}</td>
+                      <td>
+                        <Status doc={r} />
+                      </td>
+                      <td>
+                        <Link className="btn-small" to={path + '/' + r.id}>
+                          عرض الإشعار <ArrowLeft size={13} />
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
@@ -754,14 +991,27 @@ export function DocumentDetail() {
               {company?.tax_number && <p>الرقم الضريبي: {company.tax_number}</p>}
             </div>
             <div className="invoice-title">
-              <span>{sale ? 'فاتورة مبيعات' : 'فاتورة مشتريات'}</span>
+              <span>{docTypeLabel}</span>
               <h2 className="num">{doc.number}</h2>
               <Status doc={doc} />
+              {doc.original_document_number && (
+                <div className="muted cell-sub" style={{ marginTop: '4px', fontSize: '11px' }}>
+                  عن الفاتورة: <strong>{doc.original_document_number}</strong>
+                </div>
+              )}
             </div>
           </div>
           <div className="invoice-parties">
             <div>
-              <span className="eyebrow">{sale ? 'فاتورة إلى' : 'المورد'}</span>
+              <span className="eyebrow">
+                {isSale
+                  ? isReturn
+                    ? 'إشعار دائن إلى'
+                    : 'فاتورة إلى'
+                  : isReturn
+                    ? 'إشعار مدين إلى'
+                    : 'المورد'}
+              </span>
               <h3>{doc.party_name}</h3>
               <p>{doc.party_address}</p>
               <p dir="ltr">{doc.party_phone}</p>
@@ -770,13 +1020,21 @@ export function DocumentDetail() {
             </div>
             <div className="invoice-dates">
               <div>
-                <span>تاريخ الفاتورة</span>
+                <span>{isReturn ? 'تاريخ الإشعار' : 'تاريخ الفاتورة'}</span>
                 <strong>{formatDate(doc.date)}</strong>
               </div>
-              <div>
-                <span>تاريخ الاستحقاق</span>
-                <strong>{formatDate(doc.due_date)}</strong>
-              </div>
+              {!isReturn && (
+                <div>
+                  <span>تاريخ الاستحقاق</span>
+                  <strong>{formatDate(doc.due_date)}</strong>
+                </div>
+              )}
+              {isReturn && doc.original_document_number && (
+                <div>
+                  <span>الفاتورة الأصلية</span>
+                  <strong className="num">{doc.original_document_number}</strong>
+                </div>
+              )}
               <div>
                 <span>العملة</span>
                 <strong>جنيه مصري (EGP)</strong>
@@ -789,7 +1047,7 @@ export function DocumentDetail() {
                 <tr>
                   <th>#</th>
                   <th>الوصف</th>
-                  <th>الكمية</th>
+                  <th>{isReturn ? 'الكمية المرتجعة' : 'الكمية'}</th>
                   <th>سعر الوحدة</th>
                   <th>الإجمالي</th>
                 </tr>
@@ -821,85 +1079,125 @@ export function DocumentDetail() {
                 <span>الإجمالي قبل الضريبة</span>
                 <strong className="num">{money(doc.subtotal, 2)}</strong>
               </div>
-              <div>
-                <span>الخصم</span>
-                <span className="num">{money(doc.discount, 2)}</span>
-              </div>
+              {doc.discount > 0 && (
+                <div>
+                  <span>الخصم</span>
+                  <span className="num">{money(doc.discount, 2)}</span>
+                </div>
+              )}
               <div>
                 <span>القيمة المضافة ({doc.tax_rate / 100}%)</span>
                 <span className="num">{money(doc.tax, 2)}</span>
               </div>
               <div className="grand-total">
-                <span>الإجمالي</span>
+                <span>{isReturn ? 'إجمالي المرتجع' : 'الإجمالي'}</span>
                 <strong className="num">
                   {money(doc.total, 2)} <small>ج.م</small>
                 </strong>
               </div>
-              <div>
-                <span>المدفوع</span>
-                <span className="num">{money(doc.paid, 2)}</span>
-              </div>
-              {doc.status === 'POSTED' && (
-                <div className="balance-row">
-                  <span>المتبقي</span>
-                  <strong className="num">
-                    {money(doc.total - doc.paid, 2)} <small>ج.م</small>
-                  </strong>
-                </div>
+              {!isReturn && (
+                <>
+                  <div>
+                    <span>المدفوع</span>
+                    <span className="num">{money(doc.paid, 2)}</span>
+                  </div>
+                  {doc.status === 'POSTED' && (
+                    <div className="balance-row">
+                      <span>المتبقي</span>
+                      <strong className="num">
+                        {money(doc.total - doc.paid, 2)} <small>ج.م</small>
+                      </strong>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
           <div className="invoice-signoff">
-            <span>فاتورة صادرة من نظام أوركيفا</span>
+            <span>{isReturn ? 'إشعار صادر من نظام أوركيفا' : 'فاتورة صادرة من نظام أوركيفا'}</span>
             <span>وثيقة داخلية — ليست فاتورة إلكترونية معتمدة لدى الضرائب</span>
           </div>
         </section>
         <aside className="document-side no-print">
-          <section className="card">
-            <div className="card-heading">
-              <h2>
-                <CreditCard size={18} /> سجل الدفعات
-              </h2>
-              <span className="count-chip num">{doc.payments?.length || 0}</span>
-            </div>
-            {doc.payments?.length ? (
-              <div className="payment-list">
-                {doc.payments.map((p) => (
-                  <div key={p.id} className="payment-item">
-                    <div>
-                      <span className="payment-check">
-                        <Check size={15} />
-                      </span>
-                      <strong className="num">
-                        {money(p.amount, 2)} <small>ج.م</small>
-                      </strong>
+          {!isReturn ? (
+            <section className="card">
+              <div className="card-heading">
+                <h2>
+                  <CreditCard size={18} /> سجل الدفعات
+                </h2>
+                <span className="count-chip num">{doc.payments?.length || 0}</span>
+              </div>
+              {doc.payments?.length ? (
+                <div className="payment-list">
+                  {doc.payments.map((p) => (
+                    <div key={p.id} className="payment-item">
+                      <div>
+                        <span className="payment-check">
+                          <Check size={15} />
+                        </span>
+                        <strong className="num">
+                          {money(p.amount, 2)} <small>ج.م</small>
+                        </strong>
+                      </div>
+                      <p>
+                        {methods[p.method]} · {formatDate(p.date, true)}
+                      </p>
+                      {p.reference && <small>{p.reference}</small>}
                     </div>
-                    <p>
-                      {methods[p.method]} · {formatDate(p.date, true)}
-                    </p>
-                    {p.reference && <small>{p.reference}</small>}
-                  </div>
-                ))}
+                  ))}
+                </div>
+              ) : (
+                <div className="side-empty">
+                  <Wallet size={27} />
+                  <p>لم تُسجّل دفعات بعد</p>
+                  <span>ستظهر الدفعات هنا بعد تسجيلها.</span>
+                </div>
+              )}
+            </section>
+          ) : (
+            <section className="card">
+              <div className="card-heading">
+                <h2>
+                  <RotateCcw size={18} /> أثر الإشعار المحاسبي
+                </h2>
               </div>
-            ) : (
-              <div className="side-empty">
-                <Wallet size={27} />
-                <p>لم تُسجّل دفعات بعد</p>
-                <span>ستظهر الدفعات هنا بعد تسجيلها.</span>
+              <div
+                style={{
+                  fontSize: '12px',
+                  lineHeight: 1.6,
+                  color: 'var(--muted)',
+                  padding: '4px 0',
+                }}
+              >
+                {doc.status === 'POSTED' ? (
+                  <p>
+                    {isSale
+                      ? `تم اعتماد هذا الإشعار وتخفيض مديونية العميل بمبلغ ${money(doc.total, 2)} وإعادة الأصناف إلى مخزون الفرع بتكلفة COGS الأصلية.`
+                      : `تم اعتماد هذا الإشعار وتخفيض مستحقات المورد بمبلغ ${money(doc.total, 2)} وسحب الأصناف من مخزون الفرع بسعر الشراء الأصلي.`}
+                  </p>
+                ) : doc.status === 'CANCELLED' ? (
+                  <p>هذا الإشعار ملغى ولا يؤثر على المخزون أو الحسابات.</p>
+                ) : (
+                  <p>هذا الإشعار مسودة. عند الاعتماد سيتم تعديل الحسابات والمخزون تلقائياً.</p>
+                )}
               </div>
-            )}
-          </section>
+            </section>
+          )}
           <section className="card detail-status">
             <h3>حالة المستند</h3>
             <Status doc={doc} />
             <p>
               {doc.status === 'DRAFT'
-                ? 'مسودة قابلة للتعديل.'
+                ? isReturn
+                  ? 'مسودة إشعار قابلة للمراجعة والاعتماد.'
+                  : 'مسودة قابلة للتعديل.'
                 : doc.status === 'CANCELLED'
                   ? 'هذا المستند ملغى ولا يؤثر على حساباتك.'
-                  : 'فاتورة معتمدة. تم تحديث المخزون وسجل المستحقات.'}
+                  : isReturn
+                    ? 'إشعار معتمد. تم تعديل المخزون ورصيد الحساب.'
+                    : 'فاتورة معتمدة. تم تحديث المخزون وسجل المستحقات.'}
             </p>
-            {user.role === 'ADMIN' && doc.status !== 'CANCELLED' && (
+            {can(user, 'documents:cancel') && doc.status !== 'CANCELLED' && (
               <>
                 <div className="divider" />
                 <Button
@@ -908,7 +1206,7 @@ export function DocumentDetail() {
                   disabled={doc.paid > 0}
                   onClick={() => setConfirm('cancel')}
                 >
-                  <Ban size={16} /> إلغاء الفاتورة
+                  <Ban size={16} /> {isReturn ? 'إلغاء الإشعار' : 'إلغاء الفاتورة'}
                 </Button>
                 {doc.paid > 0 && <small>لا يمكن إلغاء فاتورة لها دفعات مسجلة.</small>}
               </>
@@ -926,12 +1224,32 @@ export function DocumentDetail() {
           }}
         />
       )}
+      {returnModal && (
+        <ReturnModal
+          doc={doc}
+          onClose={() => setReturnModal(false)}
+          onCreated={(newDocId) => {
+            setReturnModal(false);
+            navigate(path + '/' + newDocId);
+          }}
+        />
+      )}
       {confirm && (
         <Confirm
-          title={confirm === 'post' ? 'اعتماد الفاتورة' : 'إلغاء الفاتورة'}
+          title={
+            confirm === 'post'
+              ? isReturn
+                ? 'اعتماد إشعار المرتجع'
+                : 'اعتماد الفاتورة'
+              : isReturn
+                ? 'إلغاء إشعار المرتجع'
+                : 'إلغاء الفاتورة'
+          }
           description={
             confirm === 'post'
-              ? `سيتم تثبيت الفاتورة ${doc.number} وتحديث المخزون. لن تتمكن من تعديلها بعد الاعتماد.`
+              ? isReturn
+                ? `سيتم تثبيت إشعار المرتجع ${doc.number} وتعديل المخزون وحساب العميل/المورد. لن تتمكن من التراجع إلا بالإلغاء.`
+                : `سيتم تثبيت الفاتورة ${doc.number} وتحديث المخزون. لن تتمكن من تعديلها بعد الاعتماد.`
               : 'سيتم إلغاء المستند وعكس حركة المخزون إن كان معتمداً. لا يمكن التراجع عن هذا الإجراء.'
           }
           busy={busy}
@@ -943,7 +1261,13 @@ export function DocumentDetail() {
                 setConfirm(null);
                 data.reload();
               },
-              confirm === 'post' ? 'تم اعتماد الفاتورة' : 'تم إلغاء الفاتورة',
+              confirm === 'post'
+                ? isReturn
+                  ? 'تم اعتماد إشعار المرتجع بنجاح'
+                  : 'تم اعتماد الفاتورة'
+                : isReturn
+                  ? 'تم إلغاء إشعار المرتجع'
+                  : 'تم إلغاء الفاتورة',
             )
           }
         />
@@ -961,10 +1285,12 @@ export function PaymentForm({
   onSaved: () => void;
 }) {
   const { busy, act } = useAction();
+  const accountsData = useData<CashAccount[]>('/cash-accounts');
   const [requestKey] = useState(() => crypto.randomUUID());
   const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
+    const accId = f.get('account_id') ? String(f.get('account_id')) : undefined;
     void act(async () => {
       await api(
         `/documents/${doc.id}/payments`,
@@ -974,6 +1300,7 @@ export function PaymentForm({
           method: f.get('method'),
           date: f.get('date'),
           reference: f.get('reference'),
+          account_id: accId,
         },
         requestKey,
       );
@@ -1025,6 +1352,22 @@ export function PaymentForm({
               />
             </Field>
           </div>
+          <Field
+            label="الحساب المالي / الخزينة"
+            hint="الخزينة أو الحساب البنكي الذي تتم من خلاله الحركة (اختياري، يحدّد تلقائياً حسب الطريقة)"
+          >
+            <select name="account_id" defaultValue="">
+              <option value="">تلقائي حسب طريقة الدفع</option>
+              {(accountsData.data || [])
+                .filter((a) => a.active)
+                .map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name} ({a.type === 'CASH' ? 'خزينة' : a.type === 'BANK' ? 'حساب بنكي' : 'محفظة'}) — الرصيد:{' '}
+                    {money(a.balance, 2)} ج.م
+                  </option>
+                ))}
+            </select>
+          </Field>
           <Field label="رقم المرجع (اختياري)">
             <input name="reference" maxLength={200} placeholder="رقم التحويل البنكي أو الإيصال" />
           </Field>
@@ -1038,6 +1381,241 @@ export function PaymentForm({
         <div className="modal-footer">
           <Button type="submit" busy={busy}>
             تأكيد تسجيل الدفعة
+          </Button>
+          <Button type="button" variant="secondary" onClick={onClose}>
+            إلغاء
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+export function ReturnModal({
+  doc,
+  onClose,
+  onCreated,
+}: {
+  doc: Document;
+  onClose: () => void;
+  onCreated: (newDocId: string) => void;
+}) {
+  const isSale = doc.type === 'SALE';
+  const data = useData<ReturnableLine[]>('/documents/' + doc.id + '/returnable');
+  const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [notes, setNotes] = useState('');
+  const { busy, act } = useAction();
+  const lines = data.data || [];
+
+  const handleQtyChange = (productId: string, val: number, max: number) => {
+    const clamped = Math.max(0, Math.min(val, max));
+    setQuantities((prev) => ({ ...prev, [productId]: clamped }));
+  };
+
+  const returnAll = () => {
+    const next: Record<string, number> = {};
+    for (const l of lines) {
+      if (l.returnable > 0) next[l.product_id] = l.returnable;
+    }
+    setQuantities(next);
+  };
+
+  const resetAll = () => {
+    setQuantities({});
+  };
+
+  const totalReturnUnits = Object.values(quantities).reduce((s, q) => s + (q || 0), 0);
+  const subtotal = lines.reduce((acc, l) => {
+    const q = quantities[l.product_id] || 0;
+    return acc + q * l.unit_price;
+  }, 0);
+  const tax = Math.round((subtotal * (doc.tax_rate || 0)) / 10000);
+  const total = subtotal + tax;
+
+  const submit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (totalReturnUnits <= 0) return;
+
+    const returnLines = lines
+      .map((l) => ({
+        product_id: l.product_id,
+        quantity: quantities[l.product_id] || 0,
+        unit_price: l.unit_price,
+      }))
+      .filter((l) => l.quantity > 0);
+
+    void act(async () => {
+      const created = await api<Document>('/documents', 'POST', {
+        type: isSale ? 'SALE_RETURN' : 'PURCHASE_RETURN',
+        branch_id: doc.branch_id,
+        party_id: doc.party_id,
+        original_document_id: doc.id,
+        date: today(),
+        due_date: today(),
+        tax_rate: doc.tax_rate,
+        discount: 0,
+        notes: notes || `مرتجع عن الفاتورة ${doc.number}`,
+        lines: returnLines,
+      });
+      onCreated(created.id);
+    }, isSale ? 'تم إنشاء إشعار الدائن كمسودة' : 'تم إنشاء إشعار المدين كمسودة');
+  };
+
+  return (
+    <Modal
+      title={isSale ? 'إصدار إشعار دائن (مرتجع مبيعات)' : 'إصدار إشعار مدين (مرتجع مشتريات)'}
+      description={`عن الفاتورة ${doc.number} · ${doc.party_name}`}
+      onClose={onClose}
+    >
+      <form onSubmit={submit}>
+        <div className="modal-body form-grid">
+          {data.loading ? (
+            <Loading />
+          ) : data.error ? (
+            <ErrorState message={data.error} retry={data.reload} />
+          ) : !lines.some((l) => l.returnable > 0) ? (
+            <div className="side-empty">
+              <CircleCheck size={32} />
+              <p>تم إرجاع كامل أصناف هذه الفاتورة</p>
+              <span>لا توجد كميات متبقية قابلة للإرجاع.</span>
+            </div>
+          ) : (
+            <>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}
+              >
+                <span style={{ fontSize: '12px', color: 'var(--muted)' }}>
+                  حدد الكميات المراد إرجاعها من كل بند:
+                </span>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={returnAll}
+                    style={{ fontSize: '11px', padding: '4px 8px' }}
+                  >
+                    إرجاع كامل المتبقي
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={resetAll}
+                    style={{ fontSize: '11px', padding: '4px 8px' }}
+                  >
+                    تصفير
+                  </Button>
+                </div>
+              </div>
+              <div className="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>المنتج</th>
+                      <th>الكمية بالفاتورة</th>
+                      <th>المرتجع سابقاً</th>
+                      <th>المتاح للإرجاع</th>
+                      <th>سعر الوحدة</th>
+                      <th style={{ width: '110px' }}>كمية الإرجاع</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lines.map((l) => {
+                      const cur = quantities[l.product_id] ?? 0;
+                      return (
+                        <tr key={l.product_id}>
+                          <td>
+                            <strong>{l.name}</strong>
+                            <small className="cell-sub num">{l.sku}</small>
+                          </td>
+                          <td className="num">{l.quantity}</td>
+                          <td className="num muted">{l.already_returned}</td>
+                          <td
+                            className="num"
+                            style={{
+                              fontWeight: 600,
+                              color: l.returnable > 0 ? '#4c7345' : 'inherit',
+                            }}
+                          >
+                            {l.returnable}
+                          </td>
+                          <td className="num">{money(l.unit_price, 2)}</td>
+                          <td>
+                            <input
+                              type="number"
+                              min="0"
+                              max={l.returnable}
+                              step="1"
+                              disabled={l.returnable === 0}
+                              value={cur === 0 ? '' : cur}
+                              onChange={(e) =>
+                                handleQtyChange(
+                                  l.product_id,
+                                  parseInt(e.target.value) || 0,
+                                  l.returnable,
+                                )
+                              }
+                              placeholder="0"
+                              style={{ width: '100%', textAlign: 'center', padding: '5px' }}
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div
+                style={{
+                  background: 'var(--bg-subtle, #f8faf6)',
+                  padding: '12px 16px',
+                  borderRadius: '6px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                    إجمالي الوحدات المرتجعة:
+                  </div>
+                  <strong className="num">{totalReturnUnits} وحدة</strong>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', color: 'var(--muted)' }}>قبل الضريبة:</div>
+                  <strong className="num">{money(subtotal, 2)} ج.م</strong>
+                </div>
+                {doc.tax_rate > 0 && (
+                  <div>
+                    <div style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                      الضريبة ({doc.tax_rate / 100}%):
+                    </div>
+                    <strong className="num">{money(tax, 2)} ج.م</strong>
+                  </div>
+                )}
+                <div>
+                  <div style={{ fontSize: '11px', color: 'var(--muted)' }}>صافي قيمة الإشعار:</div>
+                  <strong className="num amount" style={{ fontSize: '15px' }}>
+                    {money(total, 2)} ج.م
+                  </strong>
+                </div>
+              </div>
+              <Field label="ملاحظات أو سبب الإرجاع">
+                <input
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder={`مرتجع عن الفاتورة ${doc.number}`}
+                />
+              </Field>
+            </>
+          )}
+        </div>
+        <div className="modal-footer">
+          <Button type="submit" busy={busy} disabled={totalReturnUnits <= 0}>
+            {isSale ? 'إنشاء إشعار الدائن' : 'إنشاء إشعار المدين'}
           </Button>
           <Button type="button" variant="secondary" onClick={onClose}>
             إلغاء

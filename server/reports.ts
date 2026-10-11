@@ -25,14 +25,23 @@ export function branchResults(from: string, to: string): Map<string, BranchResul
   );
   const sales = new Map(
     all<{ branch_id: string; sales: number }>(
-      "SELECT d.branch_id,SUM(d.subtotal-d.discount) sales FROM documents d WHERE d.type='SALE' AND d.status='POSTED' AND d.date BETWEEN ? AND ? GROUP BY d.branch_id",
+      `SELECT d.branch_id,
+        SUM(CASE WHEN d.type='SALE' THEN (d.subtotal-d.discount) ELSE -(d.subtotal-d.discount) END) sales
+       FROM documents d
+       WHERE d.type IN ('SALE','SALE_RETURN') AND d.status='POSTED' AND d.date BETWEEN ? AND ?
+       GROUP BY d.branch_id`,
       from,
       to,
     ).map((r) => [r.branch_id, r.sales]),
   );
   const costs = new Map(
     all<{ branch_id: string; cost: number }>(
-      "SELECT d.branch_id,SUM(l.quantity*l.cost_price) cost FROM document_lines l JOIN documents d ON d.id=l.document_id WHERE d.type='SALE' AND d.status='POSTED' AND d.date BETWEEN ? AND ? GROUP BY d.branch_id",
+      `SELECT d.branch_id,
+        SUM(CASE WHEN d.type='SALE' THEN (l.quantity*l.cost_price) ELSE -(l.quantity*l.cost_price) END) cost
+       FROM document_lines l
+       JOIN documents d ON d.id=l.document_id
+       WHERE d.type IN ('SALE','SALE_RETURN') AND d.status='POSTED' AND d.date BETWEEN ? AND ?
+       GROUP BY d.branch_id`,
       from,
       to,
     ).map((r) => [r.branch_id, r.cost]),
@@ -68,13 +77,15 @@ export function report(from: string, to: string, scope: Scope, withActivity: boo
   const pays = scopeSql('d.branch_id', scope);
   const clause = "d.status='POSTED' AND d.date BETWEEN ? AND ?";
   const sales = scalar(
-    `SELECT SUM(d.subtotal-d.discount) value FROM documents d WHERE d.type='SALE' AND ${clause} AND ${docs.sql}`,
+    `SELECT SUM(CASE WHEN d.type='SALE' THEN (d.subtotal-d.discount) ELSE -(d.subtotal-d.discount) END) value
+     FROM documents d WHERE d.type IN ('SALE','SALE_RETURN') AND ${clause} AND ${docs.sql}`,
     from,
     to,
     ...docs.params,
   );
   const purchases = scalar(
-    `SELECT SUM(d.subtotal-d.discount) value FROM documents d WHERE d.type='PURCHASE' AND ${clause} AND ${docs.sql}`,
+    `SELECT SUM(CASE WHEN d.type='PURCHASE' THEN (d.subtotal-d.discount) ELSE -(d.subtotal-d.discount) END) value
+     FROM documents d WHERE d.type IN ('PURCHASE','PURCHASE_RETURN') AND ${clause} AND ${docs.sql}`,
     from,
     to,
     ...docs.params,
@@ -82,7 +93,8 @@ export function report(from: string, to: string, scope: Scope, withActivity: boo
   const rows = allocationRowsFor(from, to, scope);
   const expenses = rows.reduce((s, r) => s + r.amount, 0);
   const cost = scalar(
-    `SELECT SUM(l.quantity*l.cost_price) value FROM document_lines l JOIN documents d ON d.id=l.document_id WHERE d.type='SALE' AND ${clause} AND ${docs.sql}`,
+    `SELECT SUM(CASE WHEN d.type='SALE' THEN (l.quantity*l.cost_price) ELSE -(l.quantity*l.cost_price) END) value
+     FROM document_lines l JOIN documents d ON d.id=l.document_id WHERE d.type IN ('SALE','SALE_RETURN') AND ${clause} AND ${docs.sql}`,
     from,
     to,
     ...docs.params,
@@ -104,13 +116,17 @@ export function report(from: string, to: string, scope: Scope, withActivity: boo
   const prevFrom = new Date(fromTime - days * 86400000).toISOString().slice(0, 10);
   const prevTo = new Date(fromTime - 86400000).toISOString().slice(0, 10);
   const previous = scalar(
-    `SELECT SUM(d.subtotal-d.discount) value FROM documents d WHERE d.type='SALE' AND d.status='POSTED' AND d.date BETWEEN ? AND ? AND ${docs.sql}`,
+    `SELECT SUM(CASE WHEN d.type='SALE' THEN (d.subtotal-d.discount) ELSE -(d.subtotal-d.discount) END) value
+     FROM documents d WHERE d.type IN ('SALE','SALE_RETURN') AND d.status='POSTED' AND d.date BETWEEN ? AND ? AND ${docs.sql}`,
     prevFrom,
     prevTo,
     ...docs.params,
   );
   const daily = all<{ date: string; type: string; amount: number }>(
-    `SELECT d.date,d.type,SUM(d.subtotal-d.discount) amount FROM documents d WHERE ${clause} AND ${docs.sql} GROUP BY d.date,d.type`,
+    `SELECT d.date,
+       CASE WHEN d.type IN ('SALE','SALE_RETURN') THEN 'SALE' ELSE 'PURCHASE' END type,
+       SUM(CASE WHEN d.type IN ('SALE','PURCHASE') THEN (d.subtotal-d.discount) ELSE -(d.subtotal-d.discount) END) amount
+     FROM documents d WHERE ${clause} AND ${docs.sql} GROUP BY d.date, 2`,
     from,
     to,
     ...docs.params,
@@ -128,6 +144,15 @@ export function report(from: string, to: string, scope: Scope, withActivity: boo
   const expenseByCategory = new Map<string, number>();
   for (const r of rows)
     expenseByCategory.set(r.category, (expenseByCategory.get(r.category) ?? 0) + r.amount);
+  // Stock value uses WAC (avg_cost) where available, falls back to reference cost_price
+  const stockValue = scalar(
+    `SELECT SUM(bs.quantity * COALESCE(NULLIF(bc.avg_cost,0), p.cost_price)) value
+     FROM branch_stock bs
+     JOIN products p ON p.id=bs.product_id
+     LEFT JOIN branch_cost bc ON bc.branch_id=bs.branch_id AND bc.product_id=bs.product_id
+     WHERE ${stock.sql}`,
+    ...stock.params,
+  );
   return {
     sales,
     purchases,
@@ -146,10 +171,7 @@ export function report(from: string, to: string, scope: Scope, withActivity: boo
       `SELECT SUM(d.total-d.paid) value FROM documents d WHERE d.type='PURCHASE' AND d.status='POSTED' AND ${docs.sql}`,
       ...docs.params,
     ),
-    stockValue: scalar(
-      `SELECT SUM(bs.quantity*p.cost_price) value FROM branch_stock bs JOIN products p ON p.id=bs.product_id WHERE ${stock.sql}`,
-      ...stock.params,
-    ),
+    stockValue,
     productCount: scalar(
       `SELECT COUNT(DISTINCT bp.product_id) value FROM branch_products bp JOIN products p ON p.id=bp.product_id WHERE bp.active=1 AND p.active=1 AND ${listed.sql}`,
       ...listed.params,
@@ -220,7 +242,12 @@ export function groupOverview(from: string, to: string): GroupOverview {
   );
   const stock = new Map(
     all<{ branch_id: string; units: number; value: number }>(
-      'SELECT bs.branch_id,SUM(bs.quantity) units,SUM(bs.quantity*p.cost_price) value FROM branch_stock bs JOIN products p ON p.id=bs.product_id GROUP BY bs.branch_id',
+      `SELECT bs.branch_id,SUM(bs.quantity) units,
+        SUM(bs.quantity * COALESCE(NULLIF(bc.avg_cost,0), p.cost_price)) value
+       FROM branch_stock bs
+       JOIN products p ON p.id=bs.product_id
+       LEFT JOIN branch_cost bc ON bc.branch_id=bs.branch_id AND bc.product_id=bs.product_id
+       GROUP BY bs.branch_id`,
     ).map((r) => [r.branch_id, r]),
   );
   const lowCount = new Map<string, number>();
@@ -301,6 +328,13 @@ export function stockMatrix(scope: Scope): StockMatrix {
   const products = all<{ id: string; sku: string; name: string; unit: string; cost_price: number }>(
     'SELECT id,sku,name,unit,cost_price FROM products WHERE active=1 ORDER BY name',
   );
+  // Fetch WAC per (branch, product) for accurate inventory valuation
+  const wacMap = new Map<string, number>();
+  for (const r of all<{ branch_id: string; product_id: string; avg_cost: number }>(
+    'SELECT branch_id, product_id, avg_cost FROM branch_cost WHERE avg_cost > 0',
+  )) {
+    wacMap.set(`${r.branch_id}:${r.product_id}`, r.avg_cost);
+  }
   return {
     branches,
     rows: products.map((p) => {
@@ -308,6 +342,9 @@ export function stockMatrix(scope: Scope): StockMatrix {
       for (const c of cells)
         if (c.product_id === p.id && visible.has(c.branch_id)) byBranch[c.branch_id] = c.quantity;
       const total = Object.values(byBranch).reduce((s, q) => s + q, 0);
+      // Use WAC where available, otherwise reference cost
+      const effectiveCostForProduct = (branchId: string) =>
+        wacMap.get(`${branchId}:${p.id}`) ?? p.cost_price;
       return {
         product_id: p.id,
         sku: p.sku,
@@ -316,6 +353,10 @@ export function stockMatrix(scope: Scope): StockMatrix {
         cost_price: p.cost_price,
         total,
         by_branch: byBranch,
+        // WAC per branch for the matrix
+        wac_by_branch: Object.fromEntries(
+          Object.keys(byBranch).map((bId) => [bId, effectiveCostForProduct(bId)]),
+        ),
       };
     }),
   };

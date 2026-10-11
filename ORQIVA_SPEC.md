@@ -129,3 +129,105 @@ Dashboard; searchable/paginated products; inventory balances and movements; cust
 Statutory/general-ledger accounting with double-entry journals, Egyptian e-invoicing integration, tax filing, sales/purchase returns and credit notes, payment refunds, editing recorded expenses, payroll, manufacturing, multi-company (separate legal entities with separate books), multicurrency, intercompany transfer pricing, bank accounts per branch, several stock locations inside one branch, fractional stock, batch/serial tracking, weighted-average/FIFO costing, attachments, bulk import, third-party integrations, MFA, password-reset email and horizontal scaling. These are not hidden placeholders or buttons promising unimplemented actions.
 
 Operational deployment requires HTTPS, unique credentials, backup scheduling and recovery testing, network access controls, proxy/rate-limit review and accountant approval of the chosen financial policies. Audit records can be changed by someone with direct server/database access; they are not a cryptographic immutable ledger.
+
+## Implemented in v1.1 — Weighted Average Cost (WAC)
+
+- **Schema Migration `004_weighted_avg_cost.sql`**: Added `branch_cost` table (`branch_id`, `product_id`, `avg_cost`, `total_value`, `updated_at`) and immutable `cost_movements` audit ledger.
+- **Weighted Average Calculation (`server/cost.ts`)**:
+  - Purchase invoices blend new batches into local branch average: `new_avg = round((old_value + qty * unit_price) / new_qty)`.
+  - Sales snapshot the exact WAC at sale time into `document_lines.cost_price` for accurate Cost of Goods Sold (COGS).
+  - Outflows reduce `total_value` proportionally while keeping unit average stable.
+  - Branch transfers convey sending branch's WAC to receiving branch, where it is blended upon receipt.
+  - Sales cancellation reverses stock at snapshotted COGS.
+- **Reports and Dashboards (`server/reports.ts`)**:
+  - Stock valuation reflects real WAC per branch (`COALESCE(NULLIF(bc.avg_cost, 0), p.cost_price)`).
+  - Gross profit and margins reflect realized COGS from posted document lines.
+  - Stock matrix provides branch-level WAC visibility.
+- **Audit & UI Visibility (`src/pages/Catalog.tsx`, `src/pages/Branches.tsx`)**:
+  - Full cost movement history visible via `/api/cost-movements` and dedicated inventory tab for admins.
+  - Products catalog shows current effective WAC alongside catalog reference cost.
+
+## Implemented in v1.2 — Sales & Purchase Returns (Credit & Debit Notes)
+
+- **Schema Migration `005_returns_and_notes.sql`**:
+  - Upgraded `documents.type` to support `SALE`, `PURCHASE`, `SALE_RETURN` (Credit Note), and `PURCHASE_RETURN` (Debit Note).
+  - Added `original_document_id` referencing parent invoices with indexing.
+- **Return Engine & Validation (`server/returns.ts`, `server/validation.ts`)**:
+  - `getReturnableLines`: Computes cumulative returned quantities across previous returns and calculates remaining returnable limits per product line.
+  - `validateReturnLines`: Enforces that return prices match original line prices, returned products exist on original invoice, quantities are strictly positive, and cumulative return amounts do not exceed the original invoice.
+  - Blocks original invoice cancellation if non-cancelled returns exist against it.
+- **Financial & Inventory Reversals (`server/service.ts`, `server/cost.ts`, `server/reports.ts`)**:
+  - **Sales Returns (`SALE_RETURN` / Credit Note `CN-` prefix)**: Restores items into branch inventory at original sold COGS (`recordCostIn`), decreases customer debt, and nets out sales revenue and COGS in financial reports and gross margin calculations.
+  - **Purchase Returns (`PURCHASE_RETURN` / Debit Note `DN-` prefix)**: Verifies available physical stock before returning, removes items from branch inventory and cost valuation (`recordCostOut`), decreases supplier payables, and nets out procurement cost.
+  - Cancelling an approved return cleanly reverses the inventory and balance adjustments.
+- **Frontend & Printable UI (`src/pages/Documents.tsx`, `src/lib.tsx`)**:
+  - Dedicated "المرتجعات" tab in Sales and Purchases lists with status filtering and original invoice links.
+  - Interactive "إصدار مرتجع" modal on posted invoices displaying returnable lines, one-click full return ("إرجاع كامل المتبقي"), and real-time total recalculation.
+  - Direct bi-directional navigation between invoices and credit/debit notes.
+  - Document detail and printing styles tailored for Credit Notes and Debit Notes (`#invoice-print`).
+
+## Implemented in v1.3 — Cash & Bank Accounts (الخزائن والحسابات البنكية)
+
+- **Schema Migration `006_cash_accounts.sql`**:
+  - Added `cash_accounts` table (`id`, `name`, `type` ['CASH', 'BANK', 'WALLET', 'OTHER'], `account_number`, `bank_name`, `branch_name`, `initial_balance`, `allow_negative`, `is_active`, `notes`, `created_at`).
+  - Added `account_transfers` table (`id`, `transfer_number`, `from_account_id`, `to_account_id`, `amount`, `date`, `notes`, `created_by`, `created_at`).
+  - Seeded default fallback accounts: `acc_def_cash` ("الخزينة الرئيسية") and `acc_def_bank` ("الحساب البنكي الرئيسي") with `allow_negative = 1` for zero-friction migration and backward compatibility.
+  - Linked `payments.account_id`, `expenses.account_id`, `distribution_payments.account_id`, and `equity_entries.account_id` to `cash_accounts` with cascading validation.
+- **Account Engine & Liquidity Control (`server/accounts.ts`)**:
+  - Real-time balance calculations reflecting initial balance, customer/supplier invoice payments, owner contributions/withdrawals, operational expenses, profit distribution payouts, and inter-account transfers.
+  - Overdraft protection: Custom accounts strictly enforce `assertAccountFunds` preventing negative balances when `allow_negative = 0`, with permission checks allowing administrator override when allowed.
+  - Inter-account fund transfers (`transferFunds`) with transactional balance verification, audit logging, and automated sequential numbering (`TRF-YYYY-NNNN`).
+  - Chronological account statement ledger (`getAccountStatement`) computing running balances across all transaction types with initial balance anchor.
+- **Transaction Routing Integration (`server/service.ts`, `server/owners.ts`, `server/distribution.ts`, `server/app.ts`)**:
+  - Document invoice payments (sales & purchases) route to designated accounts (defaulting to cash/bank).
+  - General and shared operational expenses deduct funds from designated source accounts.
+  - Owner capital contributions and withdrawals route through selected accounts while maintaining group-level cash validation.
+  - Owner profit distributions route through selected accounts with dual funds validation.
+- **Frontend & Ledger UI (`src/pages/Finance.tsx`, `src/pages/Documents.tsx`, `src/pages/Distributions.tsx`, `src/types.ts`)**:
+  - Dedicated "الخزائن والبنوك" management page under Financial Management (`/accounts`).
+  - Account cards grid displaying real-time balance, account type, bank details, and overdraft flags.
+  - Inter-account transfer modal with instant source/destination selection and fund verification.
+  - Full account statement ledger modal with chronological entry breakdown, debit/credit indicators, running balance, and counterparty metadata.
+  - Account selection integrated directly into payment modals, expense creation, owner equity management, and distribution payouts.
+
+## Implemented in v1.4 — Granular RBAC (الصلاحيات المخصصة وأدوار المستخدمين)
+
+- **Schema Migration `007_granular_rbac.sql`**:
+  - Added `roles` table (`id`, `name`, `code`, `description`, `is_system`, `created_at`).
+  - Added `role_permissions` join table (`role_id`, `permission`).
+  - Added `user_roles` join table (`user_id`, `role_id`) which seamlessly links users to granular roles while preserving the legacy `users` table schema and strict SQLite `CHECK(role IN ('ADMIN','STAFF'))` constraint.
+  - Seeded 6 predefined system roles:
+    1. `role_admin` (`ADMIN` - مدير النظام): صلاحيات كاملة وغير مقيدة على كافة أقسام وفروع النظام.
+    2. `role_branch_mgr` (`BRANCH_MANAGER` - مدير فرع): إدارة العمليات اليومية والمبيعات والمشتريات والمخزون للفروع التابعة.
+    3. `role_accountant` (`ACCOUNTANT` - محاسب): إدارة الحسابات النقدية والخزائن والمصروفات ومقبوضات ومدفوعات الفواتير والتقارير المالية.
+    4. `role_sales` (`SALES` - مبيعات): إصدار فواتير المبيعات وعرض العملاء وتحصيل الدفعات.
+    5. `role_warehouse` (`WAREHOUSE` - مخزني): إدارة المخزون والتحويلات بين الفروع واستلام بضائع المشتريات.
+    6. `role_viewer` (`VIEWER` - مشاهد): صلاحية استعراض البيانات والتقارير فقط دون تعديل.
+  - Automatic migration backfill associating existing `ADMIN` users with `role_admin` and `STAFF` users with `role_sales`.
+- **RBAC Engine & Authorization Middleware (`server/rbac.ts`)**:
+  - Defined 21 granular permissions organized across 7 logical modules:
+    - **المستندات**: `documents:view`, `documents:create_sale`, `documents:create_purchase`, `documents:post`, `documents:cancel`.
+    - **المخزون**: `inventory:view`, `inventory:adjust`, `catalog:manage`, `transfers:manage`.
+    - **جهات التعامل**: `parties:view`, `parties:manage`.
+    - **المالية**: `finance:view`, `finance:payments`, `finance:expenses`, `finance:accounts`.
+    - **التقارير**: `reports:view`, `reports:group_overview`.
+    - **الشركاء**: `distribution:manage`.
+    - **الإدارة**: `branches:manage`, `users:manage`.
+  - Express authorization middleware `requirePermission(permission)` enforcing access control with informative Arabic errors (HTTP 403).
+  - Role management operations: `listRoles`, `getRole`, `createRole`, `updateRole`, and `deleteRole`.
+  - Safeguards: System roles cannot be deleted; roles currently assigned to users cannot be deleted until users are reassigned.
+- **Backend API Protection (`server/app.ts`, `server/validation.ts`)**:
+  - `GET /api/permissions`: Returns complete permission catalog grouped by domain.
+  - `GET /api/roles`, `GET /api/roles/:id`, `POST /api/roles`, `PUT /api/roles/:id`, `DELETE /api/roles/:id`: Full role management endpoints.
+  - Every business operation protected by corresponding granular permissions (documents, inventory, catalog, branches, transfers, expenses, accounts, and reports).
+  - User session tokens load active user permissions and role details dynamically on login and authentication.
+- **Frontend & Permission Control (`src/auth.ts`, `src/types.ts`, `src/styles.css`, `src/App.tsx`, `src/pages/Finance.tsx`, `src/pages/Documents.tsx`, `src/pages/Catalog.tsx`)**:
+  - Dynamic permission helper `can(user, permission)` evaluating user capabilities on the fly.
+  - Sidebar and navigation bar dynamically adapt, rendering only accessible modules and views.
+  - Document actions conditionally rendered (e.g., cancellation disabled for users lacking `documents:cancel`).
+  - Added dedicated "الأدوار والصلاحيات" tab in Settings:
+    - Visual roles card grid displaying role details, code, and user assignment counters.
+    - Role creation and editing modal with module-grouped permission checkboxes and system role protections.
+  - User creation and editing modal upgraded with dynamic role selector and branch access assignments.
+
+

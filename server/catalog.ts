@@ -25,12 +25,15 @@ export function listProducts(scope: Scope): Product[] {
         COALESCE(bp.min_stock,p.min_stock) min_stock,
         COALESCE(bs.quantity,0) stock,
         COALESCE(bp.active,0) available,
+        COALESCE(NULLIF(bc.avg_cost,0), p.cost_price) avg_cost,
         ? branch_id,
         (SELECT name FROM branches WHERE id=?) branch_name
       FROM products p
       LEFT JOIN branch_products bp ON bp.product_id=p.id AND bp.branch_id=?
       LEFT JOIN branch_stock bs ON bs.product_id=p.id AND bs.branch_id=?
+      LEFT JOIN branch_cost bc ON bc.product_id=p.id AND bc.branch_id=?
       ORDER BY p.active DESC,p.created_at DESC`,
+      branchId,
       branchId,
       branchId,
       branchId,
@@ -42,10 +45,17 @@ export function listProducts(scope: Scope): Product[] {
   return all<Product>(
     `SELECT p.id,p.sku,p.name,p.category,p.unit,p.sale_price,p.cost_price,p.min_stock,p.active,p.created_at,
       COALESCE((SELECT SUM(bs.quantity) FROM branch_stock bs WHERE bs.product_id=p.id AND ${stock.sql}),0) stock,
-      (SELECT COUNT(*) FROM branch_products bp WHERE bp.product_id=p.id AND bp.active=1 AND ${listed.sql}) available
+      (SELECT COUNT(*) FROM branch_products bp WHERE bp.product_id=p.id AND bp.active=1 AND ${listed.sql}) available,
+      COALESCE((
+        SELECT CAST(ROUND(SUM(bc.total_value)*1.0 / NULLIF(SUM(bs.quantity),0)) AS INTEGER)
+        FROM branch_stock bs
+        LEFT JOIN branch_cost bc ON bc.branch_id=bs.branch_id AND bc.product_id=bs.product_id
+        WHERE bs.product_id=p.id AND ${stock.sql}
+      ), p.cost_price) avg_cost
     FROM products p ORDER BY p.active DESC,p.created_at DESC`,
     ...stock.params,
     ...listed.params,
+    ...stock.params,
   );
 }
 
@@ -83,6 +93,8 @@ export function createProduct(raw: unknown, actor: Actor) {
         delta: p.stock,
         reason: 'رصيد افتتاحي',
         actor,
+        // Use the reference cost as the initial WAC
+        unitCost: p.cost_price,
       });
     audit(actor, 'إضافة منتج', 'PRODUCT', productId, p.name);
   });
@@ -124,6 +136,9 @@ export function adjustStock(productId: string, raw: unknown, actor: Actor) {
       delta: input.quantity,
       reason: input.reason,
       actor,
+      // For positive adjustments use the product's reference cost to seed/update WAC.
+      // Negative adjustments don't change WAC (handled by recordCostOut).
+      unitCost: input.quantity > 0 ? product.cost_price : undefined,
     });
     audit(
       actor,

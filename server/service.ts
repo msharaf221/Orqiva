@@ -3,6 +3,9 @@ import { documentSchema, paymentSchema } from './validation';
 import { z } from 'zod';
 import { AppError } from './errors';
 import { writableBranch, type Actor } from './scope';
+import { effectiveCost, recordCostIn, recordCostOut } from './cost';
+import { validateReturnLines } from './returns';
+import { resolveDefaultAccountId, assertAccountFunds } from './accounts';
 import type { Document, DocLine, Party, Payment, Branch } from '../src/types';
 
 export { AppError } from './errors';
@@ -81,6 +84,10 @@ export function moveStock(input: {
   actor: Pick<Actor, 'id'>;
   documentId?: string | null;
   transferId?: string | null;
+  /** Unit cost for WAC recalculation. Required for inflows; ignored for outflows. */
+  unitCost?: number;
+  /** When true, skip WAC update (used by cancel reversal to avoid double-counting). */
+  skipCost?: boolean;
 }) {
   const product = requireRow(
     one<{ name: string }>('SELECT name FROM products WHERE id=?', input.productId),
@@ -115,6 +122,36 @@ export function moveStock(input: {
     input.actor.id,
     now(),
   );
+  // Update WAC unless caller explicitly skips it
+  if (!input.skipCost) {
+    if (input.delta > 0) {
+      // Inflow: recalculate WAC
+      const unitCost = input.unitCost ?? effectiveCost(input.branchId, input.productId);
+      recordCostIn({
+        branchId: input.branchId,
+        productId: input.productId,
+        qty: input.delta,
+        unitCost,
+        currentQty: next,
+        reason: input.reason,
+        actor: input.actor,
+        documentId: input.documentId,
+        transferId: input.transferId,
+      });
+    } else {
+      // Outflow: avg stays the same, only total_value shrinks
+      recordCostOut({
+        branchId: input.branchId,
+        productId: input.productId,
+        qty: -input.delta,
+        currentQty: next,
+        reason: input.reason,
+        actor: input.actor,
+        documentId: input.documentId,
+        transferId: input.transferId,
+      });
+    }
+  }
 }
 
 /** A product can be sold or bought in a branch only when that branch's assortment lists it. */
@@ -130,7 +167,10 @@ export function assertAssortment(branchId: string, productId: string, productNam
 export function documentDetail(documentId: string) {
   const doc = requireRow(
     one<Document>(
-      `SELECT d.*,p.name party_name,p.phone party_phone,p.address party_address,p.tax_number party_tax_number,b.name branch_name,b.code branch_code FROM documents d JOIN parties p ON p.id=d.party_id JOIN branches b ON b.id=d.branch_id WHERE d.id=?`,
+      `SELECT d.*,p.name party_name,p.phone party_phone,p.address party_address,p.tax_number party_tax_number,
+        b.name branch_name,b.code branch_code,
+        (SELECT number FROM documents WHERE id=d.original_document_id) original_document_number
+       FROM documents d JOIN parties p ON p.id=d.party_id JOIN branches b ON b.id=d.branch_id WHERE d.id=?`,
       documentId,
     ),
   );
@@ -138,30 +178,73 @@ export function documentDetail(documentId: string) {
     ...doc,
     lines: all<DocLine>('SELECT * FROM document_lines WHERE document_id=?', documentId),
     payments: all<Payment>(
-      'SELECT * FROM payments WHERE document_id=? ORDER BY date DESC,created_at DESC',
+      `SELECT p.*, ca.name AS account_name
+       FROM payments p
+       LEFT JOIN cash_accounts ca ON ca.id = p.account_id
+       WHERE p.document_id=? ORDER BY p.date DESC, p.created_at DESC`,
       documentId,
     ),
   };
 }
 
-function prepareDocument(input: z.infer<typeof documentSchema>, branch: Branch) {
+function prepareDocument(
+  input: z.infer<typeof documentSchema>,
+  branch: Branch,
+  existingDocId?: string,
+) {
+  const isCustomerDoc = input.type === 'SALE' || input.type === 'SALE_RETURN';
+  const expectedPartyType = isCustomerDoc ? 'CUSTOMER' : 'SUPPLIER';
   const party = requireRow(
     one<Party>('SELECT * FROM parties WHERE id=? AND active=1', input.party_id),
   );
-  if (party.type !== (input.type === 'SALE' ? 'CUSTOMER' : 'SUPPLIER'))
+  if (party.type !== expectedPartyType)
     throw new AppError(400, 'نوع الحساب لا يتوافق مع الفاتورة');
   if (new Set(input.lines.map((l) => l.product_id)).size !== input.lines.length)
     throw new AppError(400, 'المنتج مكرر في الفاتورة؛ عدّل الكمية بدلاً من تكراره');
+
+  if (input.type === 'SALE_RETURN' || input.type === 'PURCHASE_RETURN') {
+    if (!input.original_document_id) {
+      throw new AppError(400, 'المرتجع يجب أن يرتبط بفاتورة أصلية');
+    }
+    const orig = requireRow(
+      one<Document>('SELECT * FROM documents WHERE id=?', input.original_document_id),
+    );
+    if (orig.status !== 'POSTED') {
+      throw new AppError(400, 'لا يمكن عمل مرتجع إلا لفاتورة معتمدة');
+    }
+    const expectedOrigType = input.type === 'SALE_RETURN' ? 'SALE' : 'PURCHASE';
+    if (orig.type !== expectedOrigType) {
+      throw new AppError(400, 'نوع الفاتورة الأصلية لا يطابق نوع المرتجع');
+    }
+    if (orig.party_id !== input.party_id) {
+      throw new AppError(400, 'طرف التعامل لا يطابق طرف الفاتورة الأصلية');
+    }
+    validateReturnLines(input.original_document_id, input.lines, existingDocId ?? null);
+  }
+
   const lines = input.lines.map((line) => {
     const product = requireRow(
       one<ProductRow>('SELECT * FROM products WHERE id=? AND active=1', line.product_id),
     );
     assertAssortment(branch.id, product.id, product.name);
+
+    let costPrice = product.cost_price;
+    if (input.original_document_id) {
+      const origLine = one<{ cost_price: number; unit_price: number }>(
+        'SELECT cost_price, unit_price FROM document_lines WHERE document_id=? AND product_id=?',
+        input.original_document_id,
+        line.product_id,
+      );
+      if (origLine) {
+        costPrice = origLine.cost_price;
+      }
+    }
+
     return {
       ...line,
       name: product.name,
       sku: product.sku,
-      cost_price: product.cost_price,
+      cost_price: costPrice,
       total: line.quantity * line.unit_price,
     };
   });
@@ -178,7 +261,7 @@ export function saveDocument(raw: unknown, actor: Actor, existingId?: string) {
   const input = documentSchema.parse(raw);
   return transaction(() => {
     const branch = writableBranch(actor, input.branch_id);
-    const computed = prepareDocument(input, branch);
+    const computed = prepareDocument(input, branch, existingId);
     let documentId = existingId;
     if (documentId) {
       const existing = requireRow(one<Document>('SELECT * FROM documents WHERE id=?', documentId));
@@ -187,9 +270,10 @@ export function saveDocument(raw: unknown, actor: Actor, existingId?: string) {
       // Moving a draft to another branch requires access to both branches.
       if (existing.branch_id !== branch.id) writableBranch(actor, existing.branch_id);
       run(
-        'UPDATE documents SET branch_id=?,party_id=?,date=?,due_date=?,subtotal=?,discount=?,tax_rate=?,tax=?,total=?,notes=? WHERE id=?',
+        'UPDATE documents SET branch_id=?,party_id=?,original_document_id=?,date=?,due_date=?,subtotal=?,discount=?,tax_rate=?,tax=?,total=?,notes=? WHERE id=?',
         branch.id,
         input.party_id,
+        input.original_document_id ?? null,
         input.date,
         input.due_date,
         computed.subtotal,
@@ -203,16 +287,22 @@ export function saveDocument(raw: unknown, actor: Actor, existingId?: string) {
       run('DELETE FROM document_lines WHERE document_id=?', documentId);
     } else {
       documentId = id();
-      const prefix = (input.type === 'SALE' ? 'INV' : 'PO') + '-' + branch.code;
+      let prefixType = 'INV';
+      if (input.type === 'SALE') prefixType = 'INV';
+      else if (input.type === 'PURCHASE') prefixType = 'PO';
+      else if (input.type === 'SALE_RETURN') prefixType = 'CN';
+      else if (input.type === 'PURCHASE_RETURN') prefixType = 'DN';
+      const prefix = prefixType + '-' + branch.code;
       const number = nextNumber(prefix, input.date.slice(0, 4));
       run(
-        'INSERT INTO documents(id,number,type,status,branch_id,party_id,date,due_date,subtotal,discount,tax_rate,tax,total,paid,notes,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,?)',
+        'INSERT INTO documents(id,number,type,status,branch_id,party_id,original_document_id,date,due_date,subtotal,discount,tax_rate,tax,total,paid,notes,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,?)',
         documentId,
         number,
         input.type,
         'DRAFT',
         branch.id,
         input.party_id,
+        input.original_document_id ?? null,
         input.date,
         input.due_date,
         computed.subtotal,
@@ -250,25 +340,80 @@ export function postDocument(documentId: string, actor: Actor) {
     writableBranch(actor, doc.branch_id);
     const party = requireRow(one<Party>('SELECT * FROM parties WHERE id=?', doc.party_id));
     if (!party.active) throw new AppError(409, 'الحساب مؤرشف؛ أعد تفعيله قبل الاعتماد');
+
+    if (doc.type === 'SALE_RETURN' || doc.type === 'PURCHASE_RETURN') {
+      validateReturnLines(doc.original_document_id!, doc.lines, doc.id);
+    }
+
     for (const line of doc.lines) {
       const product = requireRow(
         one<ProductRow>('SELECT * FROM products WHERE id=?', line.product_id),
       );
       if (!product.active) throw new AppError(409, `المنتج ${product.name} مؤرشف`);
       assertAssortment(doc.branch_id, product.id, product.name);
-      moveStock({
-        branchId: doc.branch_id,
-        productId: product.id,
-        delta: doc.type === 'SALE' ? -line.quantity : line.quantity,
-        reason: doc.type === 'SALE' ? 'بيع' : 'شراء',
-        actor,
-        documentId,
-      });
-      if (doc.type === 'SALE')
-        run('UPDATE document_lines SET cost_price=? WHERE id=?', product.cost_price, line.id);
+
+      if (doc.type === 'SALE') {
+        // Snapshot WAC as COGS before reducing stock
+        const wac = effectiveCost(doc.branch_id, product.id);
+        run('UPDATE document_lines SET cost_price=? WHERE id=?', wac, line.id);
+        moveStock({
+          branchId: doc.branch_id,
+          productId: product.id,
+          delta: -line.quantity,
+          reason: 'بيع ' + doc.number,
+          actor,
+          documentId,
+        });
+      } else if (doc.type === 'PURCHASE') {
+        // PURCHASE: inflow — use the line's unit_price as purchase cost
+        moveStock({
+          branchId: doc.branch_id,
+          productId: product.id,
+          delta: line.quantity,
+          reason: 'شراء ' + doc.number,
+          actor,
+          documentId,
+          unitCost: line.unit_price,
+        });
+      } else if (doc.type === 'SALE_RETURN') {
+        // Customer returns goods to branch: stock increases
+        // WAC restored at line's snapshotted COGS from original sale
+        moveStock({
+          branchId: doc.branch_id,
+          productId: product.id,
+          delta: line.quantity,
+          reason: 'مرتجع بيع ' + doc.number,
+          actor,
+          documentId,
+          unitCost: line.cost_price,
+        });
+      } else if (doc.type === 'PURCHASE_RETURN') {
+        // Goods leave branch back to supplier: stock decreases
+        const current = branchStock(doc.branch_id, product.id);
+        if (current < line.quantity) {
+          throw new AppError(
+            409,
+            `المخزون الحالي (${current}) لا يكفي لمرتجع المشتريات (${line.quantity})`,
+          );
+        }
+        moveStock({
+          branchId: doc.branch_id,
+          productId: product.id,
+          delta: -line.quantity,
+          reason: 'مرتجع شراء ' + doc.number,
+          actor,
+          documentId,
+        });
+      }
     }
     run("UPDATE documents SET status='POSTED' WHERE id=?", documentId);
-    audit(actor, 'اعتماد فاتورة', doc.type, documentId, doc.number);
+    audit(
+      actor,
+      doc.type === 'SALE' || doc.type === 'PURCHASE' ? 'اعتماد فاتورة' : 'اعتماد مرتجع',
+      doc.type,
+      documentId,
+      doc.number,
+    );
     return documentDetail(documentId);
   });
 }
@@ -282,27 +427,83 @@ export function cancelDocument(documentId: string, actor: Actor) {
         409,
         'لا يمكن إلغاء فاتورة لها دفعات مسجلة. رد المبالغ غير مدعوم في هذه النسخة.',
       );
+
+    // Prevent cancelling an invoice that has active returns
+    const activeReturns = all<Document>(
+      "SELECT id, number FROM documents WHERE original_document_id=? AND status<>'CANCELLED'",
+      documentId,
+    );
+    if (activeReturns.length > 0) {
+      throw new AppError(
+        409,
+        `لا يمكن إلغاء الفاتورة؛ يوجد لها مرتجع (${activeReturns[0].number}) غير ملغى. ألغِ المرتجع أولاً.`,
+      );
+    }
+
     writableBranch(actor, doc.branch_id);
     if (doc.status === 'POSTED')
       for (const line of doc.lines) {
         const product = requireRow(
           one<ProductRow>('SELECT * FROM products WHERE id=?', line.product_id),
         );
-        const delta = doc.type === 'SALE' ? line.quantity : -line.quantity;
         const current = branchStock(doc.branch_id, product.id);
-        if (current + delta < 0)
-          throw new AppError(409, 'تعذر عكس المخزون؛ الكمية الحالية لا تسمح بالإلغاء');
-        moveStock({
-          branchId: doc.branch_id,
-          productId: product.id,
-          delta,
-          reason: 'إلغاء ' + doc.number,
-          actor,
-          documentId: doc.id,
-        });
+
+        if (doc.type === 'SALE') {
+          // Reversal of a sale: items return to branch (+delta)
+          moveStock({
+            branchId: doc.branch_id,
+            productId: product.id,
+            delta: line.quantity,
+            reason: 'إلغاء ' + doc.number,
+            actor,
+            documentId: doc.id,
+            unitCost: line.cost_price,
+          });
+        } else if (doc.type === 'PURCHASE') {
+          // Reversal of a purchase: items leave branch (-delta)
+          if (current - line.quantity < 0)
+            throw new AppError(409, 'تعذر عكس المخزون؛ الكمية الحالية لا تسمح بالإلغاء');
+          moveStock({
+            branchId: doc.branch_id,
+            productId: product.id,
+            delta: -line.quantity,
+            reason: 'إلغاء ' + doc.number,
+            actor,
+            documentId: doc.id,
+          });
+        } else if (doc.type === 'SALE_RETURN') {
+          // Reversal of a sale return: items leave branch again (-delta)
+          if (current - line.quantity < 0)
+            throw new AppError(409, 'تعذر عكس المخزون؛ الكمية الحالية لا تسمح بإلغاء المرتجع');
+          moveStock({
+            branchId: doc.branch_id,
+            productId: product.id,
+            delta: -line.quantity,
+            reason: 'إلغاء ' + doc.number,
+            actor,
+            documentId: doc.id,
+          });
+        } else if (doc.type === 'PURCHASE_RETURN') {
+          // Reversal of a purchase return: items return to branch (+delta)
+          moveStock({
+            branchId: doc.branch_id,
+            productId: product.id,
+            delta: line.quantity,
+            reason: 'إلغاء ' + doc.number,
+            actor,
+            documentId: doc.id,
+            unitCost: line.cost_price,
+          });
+        }
       }
     run("UPDATE documents SET status='CANCELLED' WHERE id=?", documentId);
-    audit(actor, 'إلغاء فاتورة', doc.type, documentId, doc.number);
+    audit(
+      actor,
+      doc.type === 'SALE' || doc.type === 'PURCHASE' ? 'إلغاء فاتورة' : 'إلغاء مرتجع',
+      doc.type,
+      documentId,
+      doc.number,
+    );
     return documentDetail(documentId);
   });
 }
@@ -340,8 +541,12 @@ export function addPayment(documentId: string, raw: unknown, actor: Actor, reque
     if (input.date < doc.date) throw new AppError(400, 'تاريخ الدفع لا يمكن أن يسبق الفاتورة');
     if (input.amount > doc.total - doc.paid)
       throw new AppError(400, 'المبلغ أكبر من الرصيد المستحق');
+    const accountId = input.account_id || resolveDefaultAccountId(input.method, doc.branch_id);
+    if (doc.type === 'PURCHASE' || doc.type === 'SALE_RETURN') {
+      assertAccountFunds(accountId, input.amount, actor, input.override_overdraft);
+    }
     run(
-      'INSERT INTO payments(id,document_id,amount,method,date,reference,created_by,created_at,request_key) VALUES(?,?,?,?,?,?,?,?,?)',
+      'INSERT INTO payments(id,document_id,amount,method,date,reference,created_by,created_at,request_key,account_id) VALUES(?,?,?,?,?,?,?,?,?,?)',
       id(),
       documentId,
       input.amount,
@@ -351,6 +556,7 @@ export function addPayment(documentId: string, raw: unknown, actor: Actor, reque
       actor.id,
       now(),
       key || null,
+      accountId,
     );
     run('UPDATE documents SET paid=paid+? WHERE id=?', input.amount, documentId);
     audit(actor, 'تسجيل دفعة', doc.type, documentId, doc.number);

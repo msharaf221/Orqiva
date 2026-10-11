@@ -29,6 +29,7 @@ import {
   Sparkles,
   CircleHelp,
   ArrowUpRight,
+  Building2,
 } from 'lucide-react';
 import { BranchProvider, BranchSwitcher, useBranch, withBranch } from './branch';
 import {
@@ -49,7 +50,9 @@ import {
 } from './lib';
 import type { User, Company, Product, Party, Document, Dashboard as DashboardData } from './types';
 import { ApiError } from './api';
+import { can } from './auth';
 const Dashboard = lazy(() => import('./pages/Dashboard').then((m) => ({ default: m.Dashboard })));
+const POS = lazy(() => import('./pages/POS').then((m) => ({ default: m.POS })));
 const Products = lazy(() => import('./pages/Catalog').then((m) => ({ default: m.Products })));
 const Inventory = lazy(() => import('./pages/Catalog').then((m) => ({ default: m.Inventory })));
 const Parties = lazy(() => import('./pages/Catalog').then((m) => ({ default: m.Parties })));
@@ -61,6 +64,7 @@ const DocumentDetail = lazy(() =>
   import('./pages/Documents').then((m) => ({ default: m.DocumentDetail })),
 );
 const Expenses = lazy(() => import('./pages/Finance').then((m) => ({ default: m.Expenses })));
+const Accounts = lazy(() => import('./pages/Finance').then((m) => ({ default: m.Accounts })));
 const Payments = lazy(() => import('./pages/Finance').then((m) => ({ default: m.Payments })));
 const Reports = lazy(() => import('./pages/Finance').then((m) => ({ default: m.Reports })));
 const SettingsPage = lazy(() =>
@@ -280,29 +284,55 @@ function Authenticated({ user, onLogout }: { user: User; onLogout: () => void })
     </SessionContext.Provider>
   );
 }
-type NavItem = { to: string; label: string; icon: typeof Package; adminOnly?: boolean };
+const ROLE_NAMES: Record<string, string> = {
+  ADMIN: 'مدير النظام',
+  BRANCH_MANAGER: 'مدير فرع',
+  GENERAL_ACCOUNTANT: 'محاسب عام',
+  TREASURY_ACCOUNTANT: 'محاسب خزنة',
+  CASHIER: 'كاشير نقطة بيع',
+  STAFF: 'موظف مبيعات',
+  ACCOUNTANT: 'محاسب',
+  SALES: 'مبيعات',
+  WAREHOUSE: 'مخزني',
+  VIEWER: 'مشاهد',
+};
+
+type NavItem = {
+  to: string;
+  label: string;
+  icon: typeof Package;
+  adminOnly?: boolean;
+  permission?: string;
+};
 const navigation: { label: string; items: NavItem[] }[] = [
-  { label: 'نظرة عامة', items: [{ to: '/', label: 'لوحة التحكم', icon: LayoutDashboard }] },
+  {
+    label: 'نظرة عامة',
+    items: [
+      { to: '/', label: 'لوحة التحكم', icon: LayoutDashboard },
+      { to: '/pos', label: 'نقطة البيع (POS)', icon: Store, permission: 'pos:access' },
+    ],
+  },
   {
     label: 'إدارة الأعمال',
     items: [
-      { to: '/sales', label: 'المبيعات', icon: ReceiptText },
-      { to: '/purchases', label: 'المشتريات', icon: ShoppingBag },
-      { to: '/products', label: 'المنتجات', icon: Package },
-      { to: '/inventory', label: 'المخزون', icon: Boxes },
-      { to: '/transfers', label: 'التحويلات بين الفروع', icon: ArrowRightLeft },
-      { to: '/customers', label: 'العملاء', icon: Users },
-      { to: '/suppliers', label: 'الموردون', icon: Truck },
-      { to: '/branches', label: 'الفروع', icon: Store, adminOnly: true },
+      { to: '/sales', label: 'المبيعات', icon: ReceiptText, permission: 'documents:view' },
+      { to: '/purchases', label: 'المشتريات', icon: ShoppingBag, permission: 'documents:create_purchase' },
+      { to: '/products', label: 'المنتجات', icon: Package, permission: 'catalog:manage' },
+      { to: '/inventory', label: 'المخزون', icon: Boxes, permission: 'inventory:view' },
+      { to: '/transfers', label: 'التحويلات بين الفروع', icon: ArrowRightLeft, permission: 'transfers:manage' },
+      { to: '/customers', label: 'العملاء', icon: Users, permission: 'parties:view' },
+      { to: '/suppliers', label: 'الموردون', icon: Truck, permission: 'documents:create_purchase' },
+      { to: '/branches', label: 'الفروع', icon: Store, permission: 'branches:manage' },
     ],
   },
   {
     label: 'الإدارة المالية',
     items: [
-      { to: '/expenses', label: 'المصروفات', icon: Wallet },
-      { to: '/payments', label: 'المدفوعات', icon: ArrowLeftRight },
-      { to: '/reports', label: 'التقارير والتحليلات', icon: ChartNoAxesCombined },
-      { to: '/distributions', label: 'التوزيعات والشركاء', icon: HandCoins, adminOnly: true },
+      { to: '/accounts', label: 'الخزائن والبنوك', icon: Building2, permission: 'finance:view' },
+      { to: '/expenses', label: 'المصروفات', icon: Wallet, permission: 'finance:expenses' },
+      { to: '/payments', label: 'المدفوعات', icon: ArrowLeftRight, permission: 'finance:payments' },
+      { to: '/reports', label: 'التقارير والتحليلات', icon: ChartNoAxesCombined, permission: 'reports:view' },
+      { to: '/distributions', label: 'التوزيعات والشركاء', icon: HandCoins, permission: 'distribution:manage' },
     ],
   },
 ];
@@ -355,7 +385,11 @@ function Layout() {
             <div className="nav-group" key={group.label}>
               <div className="nav-label">{group.label}</div>
               {group.items
-                .filter((item) => !item.adminOnly || user.role === 'ADMIN')
+                .filter((item) => {
+                  if (item.adminOnly && user.role !== 'ADMIN') return false;
+                  if (item.permission && !can(user, item.permission)) return false;
+                  return true;
+                })
                 .map((item) => (
                   <NavLink
                     key={item.to}
@@ -402,7 +436,7 @@ function Layout() {
               </span>
               <div>
                 <strong>{user.name}</strong>
-                <span>{user.role === 'ADMIN' ? 'مدير النظام' : 'موظف مبيعات'}</span>
+                <span>{user.role_name || ROLE_NAMES[user.role] || user.role}</span>
               </div>
               <ChevronDown size={15} />
             </button>
@@ -433,6 +467,14 @@ function Layout() {
             <strong>{heading}</strong>
           </div>
           <div className="topbar-actions">
+            <Link
+              to="/pos"
+              className="topbar-pos-link"
+              title="الدخول المباشر لشاشة نقطة البيع (POS)"
+            >
+              <Store size={16} />
+              <span>نقطة البيع (POS)</span>
+            </Link>
             <button className="global-search" onClick={() => setSearch(true)}>
               <Search size={16} />
               <span>ابحث في مساحة العمل...</span>
@@ -460,6 +502,7 @@ function Layout() {
           <Suspense fallback={<Loading />}>
             <Routes>
               <Route path="/" element={<Dashboard />} />
+              <Route path="/pos" element={<POS />} />
               <Route path="/products" element={<Products />} />
               <Route path="/inventory" element={<Inventory />} />
               <Route path="/customers" element={<Parties type="CUSTOMER" key="customers" />} />
@@ -478,19 +521,20 @@ function Layout() {
               <Route path="/transfers" element={<Transfers />} />
               <Route
                 path="/branches"
-                element={user.role === 'ADMIN' ? <Branches /> : <Navigate to="/" />}
+                element={can(user, 'branches:manage') ? <Branches /> : <Navigate to="/" />}
               />
               <Route
                 path="/distributions"
-                element={user.role === 'ADMIN' ? <Distributions /> : <Navigate to="/" />}
+                element={can(user, 'distribution:manage') ? <Distributions /> : <Navigate to="/" />}
               />
+              <Route path="/accounts" element={<Accounts />} />
               <Route path="/expenses" element={<Expenses />} />
               <Route path="/payments" element={<Payments />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route
                 path="/activity"
-                element={user.role === 'ADMIN' ? <ActivityPage /> : <Navigate to="/" />}
+                element={can(user, 'users:manage') ? <ActivityPage /> : <Navigate to="/" />}
               />
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>

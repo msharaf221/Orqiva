@@ -59,9 +59,10 @@ export const adjustSchema = z
   .strict();
 export const documentSchema = z
   .object({
-    type: z.enum(['SALE', 'PURCHASE']),
+    type: z.enum(['SALE', 'PURCHASE', 'SALE_RETURN', 'PURCHASE_RETURN']),
     branch_id: id(),
     party_id: id(),
+    original_document_id: id().optional().nullable(),
     date,
     due_date: date,
     discount: money.default(0),
@@ -84,13 +85,24 @@ export const documentSchema = z
   .refine((d) => d.due_date >= d.date, {
     message: 'تاريخ الاستحقاق يجب أن يكون بعد تاريخ الفاتورة',
     path: ['due_date'],
-  });
+  })
+  .refine(
+    (d) =>
+      (d.type !== 'SALE_RETURN' && d.type !== 'PURCHASE_RETURN') ||
+      Boolean(d.original_document_id),
+    {
+      message: 'المرتجع يجب أن يكون مرتبطاً بفاتورة أصلية',
+      path: ['original_document_id'],
+    },
+  );
 export const paymentSchema = z
   .object({
     amount: money.refine((n) => n > 0, 'المبلغ يجب أن يكون أكبر من صفر'),
     method: paymentMethod,
     date,
     reference: optionalText(200),
+    account_id: id().nullable().optional(),
+    override_overdraft: z.boolean().optional(),
   })
   .strict();
 export const expenseSchema = z
@@ -103,6 +115,8 @@ export const expenseSchema = z
     notes: optionalText(2000),
     allocation: z.enum(['BRANCH', 'EQUAL', 'REVENUE']).default('BRANCH'),
     branch_id: id().nullable().optional(),
+    account_id: id().nullable().optional(),
+    override_overdraft: z.boolean().optional(),
   })
   .strict()
   .superRefine((e, ctx) => {
@@ -140,8 +154,34 @@ export const userSchema = z
       .max(200)
       .transform((s) => s.toLowerCase()),
     password: z.string().min(10).max(128),
-    role: z.enum(['ADMIN', 'STAFF']),
+    role: z.string().min(1).max(50).default('STAFF'),
+    role_id: id().optional(),
     branch_ids: z.array(id()).max(200).default([]),
+  })
+  .strict();
+
+export const createRoleSchema = z
+  .object({
+    name: text(100),
+    code: z
+      .string()
+      .trim()
+      .toUpperCase()
+      .regex(/^[A-Z0-9_]{2,50}$/, 'رمز الدور: أحرف إنجليزية وأرقام وشرطة سفلية')
+      .optional(),
+    description: optionalText(300),
+    permissions: z.array(z.string().min(1).max(100)).min(1, 'يجب تحديد صلاحية واحدة على الأقل'),
+  })
+  .strict();
+
+export const updateRoleSchema = z
+  .object({
+    name: text(100).optional(),
+    description: optionalText(300).optional(),
+    permissions: z
+      .array(z.string().min(1).max(100))
+      .min(1, 'يجب تحديد صلاحية واحدة على الأقل')
+      .optional(),
   })
   .strict();
 
@@ -235,6 +275,8 @@ export const equitySchema = z
     method: paymentMethod,
     date,
     notes: optionalText(500),
+    account_id: id().nullable().optional(),
+    override_overdraft: z.boolean().optional(),
   })
   .strict();
 export const distributionSchema = z
@@ -260,5 +302,117 @@ export const distributionPaymentSchema = z
     method: paymentMethod,
     date,
     reference: optionalText(200),
+    account_id: id().nullable().optional(),
+    override_overdraft: z.boolean().optional(),
   })
   .strict();
+
+export const accountType = z.enum(['CASH', 'BANK', 'WALLET']);
+
+export const cashAccountSchema = z
+  .object({
+    name: text(100),
+    type: accountType,
+    branch_id: id().nullable().optional(),
+    currency: z.string().trim().max(10).default('EGP'),
+    account_number: optionalText(100),
+    bank_name: optionalText(100),
+    initial_balance: money.default(0),
+    allow_negative: z.union([z.literal(0), z.literal(1)]).default(0),
+    notes: optionalText(1000),
+  })
+  .strict();
+
+export const updateCashAccountSchema = z
+  .object({
+    name: text(100),
+    branch_id: id().nullable().optional(),
+    account_number: optionalText(100),
+    bank_name: optionalText(100),
+    allow_negative: z.union([z.literal(0), z.literal(1)]),
+    active: z.union([z.literal(0), z.literal(1)]),
+    notes: optionalText(1000),
+  })
+  .strict();
+
+export const accountTransferSchema = z
+  .object({
+    from_account_id: id(),
+    to_account_id: id(),
+    amount: money.refine((n) => n > 0, 'المبلغ يجب أن يكون أكبر من صفر'),
+    date,
+    notes: optionalText(1000),
+    override_overdraft: z.boolean().optional(),
+  })
+  .strict()
+  .refine((t) => t.from_account_id !== t.to_account_id, {
+    message: 'لا يمكن التحويل من الحساب إلى نفسه',
+    path: ['to_account_id'],
+  });
+
+export const posShiftOpenSchema = z
+  .object({
+    branch_id: id(),
+    opening_cash: money.refine((n) => n >= 0, 'المبلغ الافتتاحي لا يمكن أن يكون سالباً'),
+    notes: optionalText(500),
+  })
+  .strict();
+
+export const posCashMovementSchema = z
+  .object({
+    type: z.enum(['IN', 'OUT']),
+    amount: money.refine((n) => n > 0, 'المبلغ يجب أن يكون أكبر من صفر'),
+    reason: text(200),
+  })
+  .strict();
+
+export const posShiftSubmitSchema = z
+  .object({
+    declared_cash: money.refine((n) => n >= 0, 'المبلغ الفعلي لا يمكن أن يكون سالباً'),
+    notes: optionalText(500),
+  })
+  .strict();
+
+export const posShiftApproveSchema = z
+  .object({
+    closing_cash: money.refine((n) => n >= 0, 'المبلغ المعتمد لا يمكن أن يكون سالباً'),
+    review_notes: optionalText(500),
+  })
+  .strict();
+
+export const posShiftCloseSchema = z
+  .object({
+    closing_cash: money.refine((n) => n >= 0, 'المبلغ النهائي لا يمكن أن يكون سالباً'),
+    notes: optionalText(500),
+    review_notes: optionalText(500),
+  })
+  .strict();
+
+export const posCheckoutSchema = z
+  .object({
+    branch_id: id(),
+    shift_id: id().optional(),
+    party_id: id().default('walk-in-customer'),
+    date,
+    discount: money.default(0),
+    notes: optionalText(500),
+    lines: z
+      .array(
+        z.object({
+          product_id: id(),
+          quantity: z.number().int().min(1).max(10000),
+          unit_price: money.refine((n) => n >= 0),
+        }),
+      )
+      .min(1, 'يجب إضافة صنف واحد على الأقل في السلة'),
+    payment: z.object({
+      method: z.enum(['CASH', 'BANK', 'CARD', 'CREDIT']),
+      amount_tendered: money.refine((n) => n >= 0),
+      amount_paid: money.refine((n) => n >= 0),
+      reference: optionalText(100),
+      account_id: id().nullable().optional(),
+    }),
+  })
+  .strict();
+
+
