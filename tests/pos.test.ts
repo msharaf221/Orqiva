@@ -323,4 +323,37 @@ describe('Odoo-like Fast POS Interface & Shifts', () => {
     expect(expenseEntry?.amount).toBe(700);
     expect(expenseEntry?.title).toContain('عجز نقدية وردية');
   });
+
+  it('approves submitted shift using verified_cash payload alias', async () => {
+    // 1. Open shift
+    const openRes = await cashier
+      .post('/api/pos/shifts/open')
+      .set(header)
+      .send({ branch_id: 'main', opening_cash: 5000 })
+      .expect(201);
+
+    const shiftId = openRes.body.id;
+
+    // 2. Submit shift
+    await cashier
+      .post(`/api/pos/shifts/${shiftId}/submit`)
+      .set(header)
+      .send({ declared_cash: 5000 })
+      .expect(200);
+
+    // 3. Admin approves using verified_cash
+    const admin = await signIn('admin@test.local');
+    const approveRes = await admin
+      .post(`/api/pos/shifts/${shiftId}/approve`)
+      .set(header)
+      .send({
+        verified_cash: 5000,
+        review_notes: 'مطابقة تامة باستخدام verified_cash',
+      })
+      .expect(200);
+
+    expect(approveRes.body.status).toBe('CLOSED');
+    expect(approveRes.body.closing_cash).toBe(5000);
+    expect(approveRes.body.difference).toBe(0);
+  });
 });

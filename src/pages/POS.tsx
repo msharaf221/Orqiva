@@ -25,6 +25,12 @@ import {
 import { api, Button, Field, Loading, Modal, money, useAction, useSession, useToast } from '../lib';
 import { useBranch } from '../branch';
 import type { PosShift, PosShiftSummary, Product, Party } from '../types';
+import {
+  BarcodeSvg,
+  QrCodeSvg,
+  triggerThermalPrint,
+  generateInvoiceQrData,
+} from '../receipt-components';
 
 interface PosProduct extends Product {
   stock: number;
@@ -1526,124 +1532,146 @@ function ShiftHandoverSlipModal({
   cashierName: string;
   onClose: () => void;
 }) {
-  const handlePrint = () => {
-    document.body.classList.add('printing-pos-receipt');
-    const cleanup = () => {
-      document.body.classList.remove('printing-pos-receipt');
-      window.removeEventListener('afterprint', cleanup);
-    };
-    window.addEventListener('afterprint', cleanup);
-    window.print();
-    setTimeout(() => {
-      document.body.classList.remove('printing-pos-receipt');
-    }, 1500);
-  };
-
   const declaredCents =
     shift.cashier_declared_cash ?? summary.cashier_declared_cash ?? summary.expected_cash;
   const diffCents = declaredCents - summary.expected_cash;
+
+  const openedDateStr = shift.opened_at
+    ? new Date(shift.opened_at).toLocaleTimeString('ar-EG', {
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : '—';
+  const closedDateStr = new Date().toLocaleTimeString('ar-EG', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 
   return (
     <Modal title="سند تسليم وردية كاشير للخزنة" onClose={onClose}>
       <div className="modal-body pos-receipt-wrapper">
         <div className="thermal-receipt" id="printable-pos-receipt">
+          {/* Receipt Top Brand Header */}
           <div className="receipt-header">
-            <h3>{companyName}</h3>
-            <p>فرع: {branchName}</p>
-            <div className="receipt-dash" />
-            <h4 style={{ margin: '6px 0', fontSize: '13px', fontWeight: 'bold' }}>
-              محضر تسليم وردية كاشير (تسليم خزنة)
-            </h4>
-            <div className="receipt-dash" />
-            <div className="receipt-meta-grid">
-              <div>رقم الوردية: {shift.number}</div>
-              <div>التاريخ: {new Date().toLocaleDateString('ar-EG')}</div>
-              <div>الكاشير: {cashierName}</div>
-              <div>
-                وقت الافتتاح:{' '}
-                {shift.opened_at ? new Date(shift.opened_at).toLocaleTimeString('ar-EG') : '—'}
-              </div>
-              <div>وقت التسليم: {new Date().toLocaleTimeString('ar-EG')}</div>
+            <div className="receipt-brand-badge">ORQIVA POS</div>
+            <h3 className="receipt-company-title">{companyName}</h3>
+            <p className="receipt-branch-name">فرع: {branchName}</p>
+            <div className="receipt-title-box">
+              <span>محضر تسليم وإغلاق وردية كاشير</span>
             </div>
-            <div className="receipt-dash" />
+            <div className="receipt-cut-line" />
+            <div className="receipt-meta-grid">
+              <div className="meta-item">
+                <span className="meta-label">رقم الوردية:</span>
+                <span className="meta-value bold num">#{shift.number}</span>
+              </div>
+              <div className="meta-item">
+                <span className="meta-label">تاريخ التسليم:</span>
+                <span className="meta-value">{new Date().toLocaleDateString('ar-EG')}</span>
+              </div>
+              <div className="meta-item">
+                <span className="meta-label">الكاشير المسلّم:</span>
+                <span className="meta-value bold">{cashierName}</span>
+              </div>
+              <div className="meta-item">
+                <span className="meta-label">فترة الوردية:</span>
+                <span className="meta-value num">
+                  من {openedDateStr} إلى {closedDateStr}
+                </span>
+              </div>
+            </div>
+            <div className="receipt-cut-line" />
           </div>
 
+          {/* Cash Summary Breakdown */}
           <div className="receipt-totals">
+            <div className="receipt-section-title">حركة النقدية بالدرج</div>
             <div className="receipt-row">
-              <span>الرصيد الافتتاحي:</span>
-              <span>{money(summary.opening_cash)} ج.م</span>
+              <span>الرصيد الافتتاحي (العهدة):</span>
+              <span className="num">{money(summary.opening_cash)} ج.م</span>
             </div>
             <div className="receipt-row">
               <span>المبيعات النقدية:</span>
-              <span>{money(summary.cash_sales)} ج.م</span>
+              <span className="num font-semibold">{money(summary.cash_sales)} ج.م</span>
             </div>
             <div className="receipt-row">
-              <span>توريدات نقدية (درج):</span>
-              <span>+{money(summary.cash_in)} ج.م</span>
+              <span>توريدات نقدية (إيداع درج):</span>
+              <span className="num text-green">+{money(summary.cash_in)} ج.م</span>
             </div>
             <div className="receipt-row">
-              <span>مسحوبات نقدية (درج):</span>
-              <span>-{money(summary.cash_out)} ج.م</span>
+              <span>مسحوبات ومصروفات (درج):</span>
+              <span className="num text-red">-{money(summary.cash_out)} ج.م</span>
             </div>
-            <div className="receipt-dash" />
-            <div className="receipt-row grand-total">
-              <span>النقدية المتوقعة بالنظام:</span>
-              <span>{money(summary.expected_cash)} ج.م</span>
+
+            <div className="receipt-cut-line" />
+
+            <div className="receipt-row grand-total-row">
+              <span>النقدية المتوقعة بالدرج:</span>
+              <span className="num total-amount">{money(summary.expected_cash)} ج.م</span>
             </div>
-            <div className="receipt-row grand-total" style={{ color: '#2563eb' }}>
-              <span>النقدية المسلمة من الكاشير:</span>
-              <span>{money(declaredCents)} ج.م</span>
+
+            <div className="receipt-row grand-total-row" style={{ color: '#1e40af' }}>
+              <span>النقدية الفعلية المسلّمة:</span>
+              <span className="num total-amount">{money(declaredCents)} ج.م</span>
             </div>
-            <div className="receipt-row">
-              <span>فارق التسليم:</span>
-              <span
-                style={{
-                  fontWeight: 'bold',
-                  color: diffCents < 0 ? '#dc2626' : diffCents > 0 ? '#16a34a' : 'inherit',
-                }}
-              >
-                {diffCents === 0
-                  ? 'مطابقة تامة'
-                  : diffCents < 0
-                    ? `عجز: -${money(Math.abs(diffCents))} ج.م`
-                    : `زيادة: +${money(diffCents)} ج.م`}
-              </span>
+
+            <div className="receipt-diff-box">
+              <div className="receipt-row">
+                <span>حالة المطابقة المالية:</span>
+                <span
+                  className="diff-badge"
+                  style={{
+                    color: diffCents === 0 ? '#15803d' : diffCents < 0 ? '#b91c1c' : '#1d4ed8',
+                    fontWeight: 700,
+                  }}
+                >
+                  {diffCents === 0
+                    ? 'مطابقة تامة (بدون عجز)'
+                    : diffCents < 0
+                      ? `عجز: -${money(Math.abs(diffCents))} ج.م`
+                      : `زيادة: +${money(diffCents)} ج.م`}
+                </span>
+              </div>
             </div>
+
             {shift.notes && (
-              <div style={{ marginTop: '8px', fontSize: '11px', textAlign: 'right' }}>
-                <b>ملاحظات الكاشير:</b> {shift.notes}
+              <div className="receipt-notes-box">
+                <b>ملاحظات الوردية:</b> {shift.notes}
               </div>
             )}
           </div>
 
-          <div className="receipt-dash" />
-          <div
-            style={{
-              marginTop: '16px',
-              display: 'flex',
-              justifyContent: 'space-between',
-              fontSize: '11px',
-            }}
-          >
-            <div style={{ textAlign: 'center' }}>
-              <div>توقيع الكاشير المسلّم</div>
-              <div style={{ marginTop: '24px' }}>...........................</div>
+          <div className="receipt-cut-line" />
+
+          {/* Signatures */}
+          <div className="receipt-signatures-container">
+            <div className="signature-box">
+              <span className="sign-title">توقيع الكاشير المسلّم</span>
+              <div className="sign-line" />
+              <span className="sign-sub">{cashierName}</span>
             </div>
-            <div style={{ textAlign: 'center' }}>
-              <div>توقيع مستلم الخزنة</div>
-              <div style={{ marginTop: '24px' }}>...........................</div>
+            <div className="signature-box">
+              <span className="sign-title">توقيع مستلم الخزينة</span>
+              <div className="sign-line" />
+              <span className="sign-sub">المحاسب المسؤول</span>
             </div>
           </div>
 
-          <div className="receipt-footer" style={{ marginTop: '16px' }}>
-            <div className="receipt-dash" />
-            <small>نظام أوركيفا لإدارة نقاط البيع والحسابات</small>
+          {/* Barcode of shift */}
+          <div className="receipt-barcode-wrapper">
+            <BarcodeSvg value={`SHIFT-${shift.number}`} height={30} fontSize={10} />
+          </div>
+
+          <div className="receipt-footer">
+            <div className="receipt-cut-line" />
+            <p>سند تسليم معتمد بالنظام</p>
+            <small>نظام أوركيفا السحابي لإدارة نقاط البيع والخزينة</small>
           </div>
         </div>
       </div>
 
       <div className="modal-footer">
-        <Button onClick={handlePrint}>
+        <Button onClick={triggerThermalPrint}>
           <Printer size={16} /> طباعة سند التسليم (Ctrl+P)
         </Button>
         <Button variant="secondary" onClick={onClose}>
@@ -2032,44 +2060,75 @@ function ThermalReceiptModal({
   customerName: string;
   onClose: () => void;
 }) {
-  const handlePrint = () => {
-    document.body.classList.add('printing-pos-receipt');
-    const cleanup = () => {
-      document.body.classList.remove('printing-pos-receipt');
-      window.removeEventListener('afterprint', cleanup);
-    };
-    window.addEventListener('afterprint', cleanup);
-    window.print();
-    setTimeout(() => {
-      document.body.classList.remove('printing-pos-receipt');
-    }, 1500);
-  };
+  const invoiceDateStr = result.document.date || new Date().toLocaleDateString('ar-EG');
+  const invoiceTimeStr = new Date().toLocaleTimeString('ar-EG', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  const qrData = generateInvoiceQrData({
+    sellerName: companyName,
+    taxNumber,
+    invoiceNumber: result.document.number,
+    invoiceDate: `${invoiceDateStr} ${invoiceTimeStr}`,
+    total: result.document.total,
+    tax: result.document.tax,
+  });
+
+  const paymentMethodLabel =
+    result.payment.method === 'CASH'
+      ? 'نقداً (كاش)'
+      : result.payment.method === 'CARD'
+        ? 'بطاقة دفع إلكتروني (شبكة / فيزا)'
+        : result.payment.method === 'BANK'
+          ? 'محفظة إلكترونية / تحويل'
+          : 'حساب آجل (ذمم مدينة)';
 
   return (
-    <Modal title="إيصال استلام نقطة البيع" onClose={onClose}>
+    <Modal title="إيصال استلام نقطة البيع (POS)" onClose={onClose}>
       <div className="modal-body pos-receipt-wrapper">
         <div className="thermal-receipt" id="printable-pos-receipt">
+          {/* Receipt Header */}
           <div className="receipt-header">
-            <h3>{companyName}</h3>
+            <div className="receipt-brand-badge">ORQIVA POS</div>
+            <h3 className="receipt-company-title">{companyName}</h3>
             {taxNumber && (
-              <small style={{ display: 'block', fontSize: '10.5px', marginTop: '2px' }}>
-                الرقم الضريبي: {taxNumber}
-              </small>
+              <div className="receipt-tax-badge">
+                <span>الرقم الضريبي: {taxNumber}</span>
+              </div>
             )}
-            <p>فرع: {branchName}</p>
-            <div className="receipt-dash" />
-            <div className="receipt-meta-grid">
-              <div>رقم الفاتورة: {result.document.number}</div>
-              <div>التاريخ: {result.document.date}</div>
-              <div>الكاشير: {cashierName}</div>
-              <div>العميل: {customerName}</div>
+            <p className="receipt-branch-name">فرع: {branchName}</p>
+            <div className="receipt-title-box">
+              <span>فاتورة ضريبية مبسطة</span>
+              <small>SIMPLIFIED TAX INVOICE</small>
             </div>
-            <div className="receipt-dash" />
+            <div className="receipt-cut-line" />
+            <div className="receipt-meta-grid">
+              <div className="meta-item">
+                <span className="meta-label">رقم الفاتورة:</span>
+                <span className="meta-value bold num">#{result.document.number}</span>
+              </div>
+              <div className="meta-item">
+                <span className="meta-label">التاريخ والوقت:</span>
+                <span className="meta-value num">
+                  {invoiceDateStr} - {invoiceTimeStr}
+                </span>
+              </div>
+              <div className="meta-item">
+                <span className="meta-label">الكاشير:</span>
+                <span className="meta-value">{cashierName}</span>
+              </div>
+              <div className="meta-item">
+                <span className="meta-label">العميل:</span>
+                <span className="meta-value">{customerName}</span>
+              </div>
+            </div>
+            <div className="receipt-cut-line" />
           </div>
 
           {/* Itemized Lines Table */}
           {result.lines && result.lines.length > 0 && (
-            <div style={{ marginBottom: '6px' }}>
+            <div className="receipt-items-container">
               <table className="receipt-items-table">
                 <thead>
                   <tr>
@@ -2082,82 +2141,100 @@ function ThermalReceiptModal({
                 <tbody>
                   {result.lines.map((line, idx) => (
                     <tr key={idx}>
-                      <td className="col-item">{line.name}</td>
-                      <td className="col-qty">{line.quantity}</td>
-                      <td className="col-price">{money(line.unit_price)}</td>
-                      <td className="col-total">{money(line.total)}</td>
+                      <td className="col-item">
+                        <div className="item-name">{line.name}</div>
+                        {line.sku && <small className="item-sku num">{line.sku}</small>}
+                      </td>
+                      <td className="col-qty num">{line.quantity}</td>
+                      <td className="col-price num">{money(line.unit_price)}</td>
+                      <td className="col-total num">{money(line.total)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              <div className="receipt-dash" />
+              <div className="receipt-cut-line" />
             </div>
           )}
 
+          {/* Financial Totals */}
           <div className="receipt-totals">
             <div className="receipt-row">
-              <span>المجموع الفرعي:</span>
-              <span>{money(result.document.subtotal)} ج.م</span>
+              <span>المجموع الفرعي (قبل الضريبة):</span>
+              <span className="num">{money(result.document.subtotal)} ج.م</span>
             </div>
+
             {result.document.discount > 0 && (
-              <div className="receipt-row">
-                <span>الخصم:</span>
-                <span>-{money(result.document.discount)} ج.م</span>
+              <div className="receipt-row discount-row">
+                <span>خصم الفاتورة:</span>
+                <span className="num text-red">-{money(result.document.discount)} ج.م</span>
               </div>
             )}
+
             <div className="receipt-row">
               <span>
                 ضريبة القيمة المضافة ({((result.document.tax_rate ?? 1400) / 100).toFixed(0)}%):
               </span>
-              <span>{money(result.document.tax)} ج.م</span>
+              <span className="num">{money(result.document.tax)} ج.م</span>
             </div>
-            <div className="receipt-dash" />
-            <div className="receipt-row grand-total">
-              <span>الإجمالي النهائي:</span>
-              <span>{money(result.document.total)} ج.م</span>
+
+            <div className="receipt-cut-line double-cut" />
+
+            <div className="receipt-row grand-total-highlight">
+              <span className="label">الإجمالي النهائي:</span>
+              <span className="num value">{money(result.document.total)} ج.م</span>
             </div>
-            <div className="receipt-dash" />
-            <div className="receipt-row">
+
+            <div className="receipt-cut-line double-cut" />
+
+            {/* Payment Details */}
+            <div className="receipt-row payment-method-row">
               <span>طريقة الدفع:</span>
-              <span>
-                {result.payment.method === 'CASH'
-                  ? 'نقداً'
-                  : result.payment.method === 'CARD'
-                    ? 'بطاقة بنكية'
-                    : result.payment.method === 'BANK'
-                      ? 'محفظة إلكترونية'
-                      : 'آجل'}
-              </span>
+              <span className="font-semibold">{paymentMethodLabel}</span>
             </div>
+
             {result.payment.method === 'CASH' && (
               <>
                 <div className="receipt-row">
-                  <span>المبلغ المستلم:</span>
-                  <span>{money(result.payment.amount_tendered || result.document.total)} ج.م</span>
+                  <span>المبلغ المستلم (المدفوع):</span>
+                  <span className="num">
+                    {money(result.payment.amount_tendered || result.document.total)} ج.م
+                  </span>
                 </div>
-                <div className="receipt-row change">
-                  <span>الباقي للعميل:</span>
-                  <span>{money(result.payment.change_due)} ج.م</span>
+                <div className="receipt-row change-highlight">
+                  <span>المتبقي للعميل (الباقي):</span>
+                  <span className="num change-amount">{money(result.payment.change_due)} ج.م</span>
                 </div>
               </>
             )}
           </div>
 
-          <div className="receipt-barcode-box">
-            <div className="receipt-barcode">||| | |||| | ||| |</div>
-            <div className="receipt-barcode-num">*{result.document.number}*</div>
+          {/* Electronic QR Code & Barcode */}
+          <div className="receipt-verification-section">
+            <div className="receipt-cut-line" />
+            <div className="receipt-qr-box">
+              <QrCodeSvg value={qrData} size={105} />
+              <small className="qr-hint">امسح للتحقق من الفاتورة الإلكترونية</small>
+            </div>
+            <div className="receipt-barcode-box">
+              <BarcodeSvg value={result.document.number} height={34} fontSize={10} />
+            </div>
           </div>
 
+          {/* Receipt Footer */}
           <div className="receipt-footer">
-            <div className="receipt-dash" />
-            <p>شكراً لتعاملكم معنا!</p>
-            <small>orqiva erp · نقطة البيع السريعة</small>
+            <div className="receipt-cut-line" />
+            <p className="policy-note">
+              البضاعة المباعة ترد وتستبدل خلال 14 يوماً وفقاً لقانون حماية المستهلك مع إحضار
+              الفاتورة
+            </p>
+            <p className="thanks-note">شكراً لزيارتكم! نتشرف بخدمتكم دائماً ❤️</p>
+            <small className="system-credit">أوركيفا لإدارة نقاط البيع · Orqiva Cloud POS</small>
           </div>
         </div>
       </div>
 
       <div className="modal-footer">
-        <Button onClick={handlePrint}>
+        <Button onClick={triggerThermalPrint}>
           <Printer size={16} /> طباعة الإيصال (Ctrl+P)
         </Button>
         <Button variant="secondary" onClick={onClose}>

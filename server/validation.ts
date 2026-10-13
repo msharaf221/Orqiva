@@ -374,10 +374,26 @@ export const posShiftSubmitSchema = z
 
 export const posShiftApproveSchema = z
   .object({
-    closing_cash: money.refine((n) => n >= 0, 'المبلغ المعتمد لا يمكن أن يكون سالباً'),
+    closing_cash: money.refine((n) => n >= 0, 'المبلغ المعتمد لا يمكن أن يكون سالباً').optional(),
+    verified_cash: money.refine((n) => n >= 0, 'المبلغ المعتمد لا يمكن أن يكون سالباً').optional(),
     review_notes: optionalText(500),
   })
-  .strict();
+  .strict()
+  .transform((data, ctx) => {
+    const closing_cash = data.closing_cash ?? data.verified_cash;
+    if (closing_cash === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['closing_cash'],
+        message: 'المبلغ المعتمد مطلوب',
+      });
+      return z.NEVER;
+    }
+    return {
+      closing_cash,
+      review_notes: data.review_notes,
+    };
+  });
 
 export const posShiftCloseSchema = z
   .object({

@@ -50,6 +50,14 @@ import {
 import { GROUP, useBranch, withBranch } from '../branch';
 import type { Document, DocType, Product, Party, ReturnableLine, CashAccount } from '../types';
 import { can } from '../auth';
+import {
+  BarcodeSvg,
+  QrCodeSvg,
+  StatusStamp,
+  triggerThermalPrint,
+  generateInvoiceQrData,
+  ThermalReceiptPaper,
+} from '../receipt-components';
 export function Documents({ type }: { type: DocType }) {
   const sale = type === 'SALE';
   const path = sale ? '/sales' : '/purchases';
@@ -823,7 +831,8 @@ export function DocumentDetail() {
   const { busy, act } = useAction();
   const [confirm, setConfirm] = useState<'post' | 'cancel' | null>(null),
     [payment, setPayment] = useState(false),
-    [returnModal, setReturnModal] = useState(false);
+    [returnModal, setReturnModal] = useState(false),
+    [thermalModal, setThermalModal] = useState(false);
   const doc = data.data;
 
   const isSale = doc ? doc.type === 'SALE' || doc.type === 'SALE_RETURN' : true;
@@ -840,6 +849,30 @@ export function DocumentDetail() {
 
   if (data.error) return <ErrorState message={data.error} retry={data.reload} />;
   if (!doc || data.loading) return <Loading />;
+
+  const statusKey =
+    doc.status === 'DRAFT'
+      ? 'draft'
+      : doc.status === 'CANCELLED'
+        ? 'cancelled'
+        : isReturn
+          ? 'paid'
+          : doc.paid >= doc.total
+            ? 'paid'
+            : doc.due_date < today()
+              ? 'overdue'
+              : doc.paid > 0
+                ? 'partial'
+                : 'pending';
+
+  const qrData = generateInvoiceQrData({
+    sellerName: company?.name || 'مؤسسة أوركيفا',
+    taxNumber: company?.tax_number,
+    invoiceNumber: doc.number,
+    invoiceDate: doc.date,
+    total: doc.total,
+    tax: doc.tax,
+  });
 
   const docTypeLabel =
     doc.type === 'SALE'
@@ -871,8 +904,13 @@ export function DocumentDetail() {
                 <ArrowRight size={16} /> رجوع
               </Link>
               <Button variant="secondary" onClick={() => window.print()}>
-                <Printer size={16} /> طباعة
+                <Printer size={16} /> طباعة A4
               </Button>
+              {isSale && !isReturn && (
+                <Button variant="secondary" onClick={() => setThermalModal(true)}>
+                  <ReceiptText size={16} /> إيصال حراري (POS)
+                </Button>
+              )}
               {isReturn && doc.original_document_id && (
                 <Link to={path + '/' + doc.original_document_id} className="btn btn-secondary">
                   <ArrowRight size={16} /> الفاتورة الأصلية ({doc.original_document_number})
@@ -981,18 +1019,28 @@ export function DocumentDetail() {
       <div className="document-detail-grid">
         <section className="card invoice-paper" id="invoice-print">
           <div className="invoice-header">
-            <div>
+            <div className="invoice-header-company">
               <div className="invoice-brand" dir="ltr">
                 orqiva<span>.</span>
               </div>
               <h2>{company?.name}</h2>
               <p>{company?.address}</p>
               <p dir="ltr">
-                {company?.phone} · {company?.email}
+                {company?.phone} {company?.email ? `· ${company.email}` : ''}
               </p>
-              {company?.tax_number && <p>الرقم الضريبي: {company.tax_number}</p>}
+              {company?.tax_number && (
+                <p className="tax-id-line">الرقم الضريبي: {company.tax_number}</p>
+              )}
             </div>
+
+            <div className="invoice-header-center">
+              <StatusStamp status={statusKey} isReturn={isReturn} date={formatDate(doc.date)} />
+            </div>
+
             <div className="invoice-title">
+              <div className="invoice-qr-corner">
+                <QrCodeSvg value={qrData} size={84} />
+              </div>
               <span>{docTypeLabel}</span>
               <h2 className="num">{doc.number}</h2>
               <Status doc={doc} />
@@ -1003,22 +1051,23 @@ export function DocumentDetail() {
               )}
             </div>
           </div>
+
           <div className="invoice-parties">
-            <div>
+            <div className="party-box">
               <span className="eyebrow">
                 {isSale
                   ? isReturn
                     ? 'إشعار دائن إلى'
-                    : 'فاتورة إلى'
+                    : 'فاتورة إلى (العميل)'
                   : isReturn
                     ? 'إشعار مدين إلى'
-                    : 'المورد'}
+                    : 'فاتورة من (المورد)'}
               </span>
               <h3>{doc.party_name}</h3>
-              <p>{doc.party_address}</p>
-              <p dir="ltr">{doc.party_phone}</p>
+              <p>{doc.party_address || '—'}</p>
+              <p dir="ltr">{doc.party_phone || '—'}</p>
               {doc.party_tax_number && <p>الرقم الضريبي: {doc.party_tax_number}</p>}
-              <p className="muted">الفرع: {doc.branch_name}</p>
+              <p className="branch-tag">الفرع المُصدر: {doc.branch_name}</p>
             </div>
             <div className="invoice-dates">
               <div>
@@ -1038,17 +1087,28 @@ export function DocumentDetail() {
                 </div>
               )}
               <div>
-                <span>العملة</span>
+                <span>العملة المعتمدة</span>
                 <strong>جنيه مصري (EGP)</strong>
+              </div>
+              <div>
+                <span>حالة التحصيل</span>
+                <strong className={doc.paid >= doc.total ? 'text-green' : 'text-amber'}>
+                  {doc.paid >= doc.total
+                    ? 'مدفوعة بالكامل'
+                    : doc.paid > 0
+                      ? 'مدفوعة جزئياً'
+                      : 'مستحقة السداد'}
+                </strong>
               </div>
             </div>
           </div>
+
           <div className="table-scroll">
             <table className="invoice-table">
               <thead>
                 <tr>
                   <th>#</th>
-                  <th>الوصف</th>
+                  <th>الوصف والمنتج</th>
                   <th>{isReturn ? 'الكمية المرتجعة' : 'الكمية'}</th>
                   <th>سعر الوحدة</th>
                   <th>الإجمالي</th>
@@ -1060,7 +1120,7 @@ export function DocumentDetail() {
                     <td className="num muted">{i + 1}</td>
                     <td>
                       <strong>{l.name}</strong>
-                      <small className="cell-sub num">{l.sku}</small>
+                      {l.sku && <small className="cell-sub num">{l.sku}</small>}
                     </td>
                     <td className="num">{l.quantity}</td>
                     <td className="num">{money(l.unit_price, 2)}</td>
@@ -1070,11 +1130,20 @@ export function DocumentDetail() {
               </tbody>
             </table>
           </div>
+
           <div className="invoice-bottom">
             <div className="invoice-notes">
-              <h4>ملاحظات</h4>
-              <p>{doc.notes || company?.invoice_note || 'شكراً لتعاملكم معنا.'}</p>
-              {doc.notes && <p>{company?.invoice_note}</p>}
+              <h4>الشروط والملاحظات</h4>
+              <p>
+                {doc.notes ||
+                  company?.invoice_note ||
+                  'شكراً لتعاملكم معنا. تسري على هذه الفاتورة الشروط والأحكام المعتمدة.'}
+              </p>
+              {doc.notes && company?.invoice_note && <p>{company.invoice_note}</p>}
+              <div className="invoice-guarantee-note">
+                البضاعة المباعة ترد وتستبدل خلال 14 يوماً وفقاً لقانون حماية المستهلك مع إحضار أصل
+                الفاتورة بحالتها الأصلية.
+              </div>
             </div>
             <div className="invoice-totals">
               <div>
@@ -1082,17 +1151,17 @@ export function DocumentDetail() {
                 <strong className="num">{money(doc.subtotal, 2)}</strong>
               </div>
               {doc.discount > 0 && (
-                <div>
-                  <span>الخصم</span>
-                  <span className="num">{money(doc.discount, 2)}</span>
+                <div className="invoice-discount-line">
+                  <span>الخصم الممنوح</span>
+                  <span className="num text-red">-{money(doc.discount, 2)}</span>
                 </div>
               )}
               <div>
-                <span>القيمة المضافة ({doc.tax_rate / 100}%)</span>
+                <span>ضريبة القيمة المضافة ({doc.tax_rate / 100}%)</span>
                 <span className="num">{money(doc.tax, 2)}</span>
               </div>
               <div className="grand-total">
-                <span>{isReturn ? 'إجمالي المرتجع' : 'الإجمالي'}</span>
+                <span>{isReturn ? 'إجمالي المرتجع' : 'الإجمالي النهائي'}</span>
                 <strong className="num">
                   {money(doc.total, 2)} <small>ج.م</small>
                 </strong>
@@ -1100,12 +1169,12 @@ export function DocumentDetail() {
               {!isReturn && (
                 <>
                   <div>
-                    <span>المدفوع</span>
-                    <span className="num">{money(doc.paid, 2)}</span>
+                    <span>المبلغ المدفوع</span>
+                    <span className="num font-semibold">{money(doc.paid, 2)}</span>
                   </div>
                   {doc.status === 'POSTED' && (
                     <div className="balance-row">
-                      <span>المتبقي</span>
+                      <span>المتبقي المستحق</span>
                       <strong className="num">
                         {money(doc.total - doc.paid, 2)} <small>ج.م</small>
                       </strong>
@@ -1115,9 +1184,36 @@ export function DocumentDetail() {
               )}
             </div>
           </div>
+
+          {/* Official Signatures Row */}
+          <div className="invoice-signatures-row">
+            <div className="sig-block">
+              <span>المحاسب المسئول</span>
+              <div className="sig-space" />
+              <small>التوقيع والاعتماد</small>
+            </div>
+            <div className="sig-block">
+              <span>توقيع المستلم</span>
+              <div className="sig-space" />
+              <small>الاسم والتوقيع</small>
+            </div>
+            <div className="sig-block stamp-space-block">
+              <span>ختم المنشأة الرسمي</span>
+              <div className="sig-space stamp-box" />
+            </div>
+          </div>
+
+          {/* Bottom Barcode & Signoff */}
           <div className="invoice-signoff">
-            <span>{isReturn ? 'إشعار صادر من نظام أوركيفا' : 'فاتورة صادرة من نظام أوركيفا'}</span>
-            <span>وثيقة داخلية — ليست فاتورة إلكترونية معتمدة لدى الضرائب</span>
+            <div className="invoice-barcode-wrapper">
+              <BarcodeSvg value={doc.number} height={34} fontSize={10} />
+            </div>
+            <span>
+              {isReturn
+                ? 'إشعار صادر ومعتمد من نظام أوركيفا السحابي'
+                : 'فاتورة صادرة ومعتمدة من نظام أوركيفا السحابي'}
+            </span>
+            <small>وثيقة تجارية ومحاسبية مسجلة بالنظام</small>
           </div>
         </section>
         <aside className="document-side no-print">
@@ -1273,6 +1369,54 @@ export function DocumentDetail() {
             )
           }
         />
+      )}
+      {thermalModal && (
+        <Modal title="معاينة إيصال الكاشير الحراري (POS)" onClose={() => setThermalModal(false)}>
+          <div className="modal-body pos-receipt-wrapper">
+            <ThermalReceiptPaper
+              result={{
+                document: {
+                  id: doc.id,
+                  number: doc.number,
+                  date: doc.date,
+                  total: doc.total,
+                  subtotal: doc.subtotal,
+                  discount: doc.discount,
+                  tax: doc.tax,
+                  tax_rate: doc.tax_rate,
+                  notes: doc.notes,
+                },
+                lines: doc.lines?.map((l) => ({
+                  id: l.id,
+                  name: l.name,
+                  sku: l.sku,
+                  quantity: l.quantity,
+                  unit_price: l.unit_price,
+                  total: l.total,
+                })),
+                payment: {
+                  method: doc.payments?.[0]?.method || (doc.paid > 0 ? 'CASH' : 'CREDIT'),
+                  amount_paid: doc.paid,
+                  amount_tendered: doc.paid,
+                  change_due: 0,
+                },
+              }}
+              companyName={company?.name || 'مؤسسة أوركيفا'}
+              taxNumber={company?.tax_number}
+              branchName={doc.branch_name}
+              cashierName={doc.created_by}
+              customerName={doc.party_name}
+            />
+          </div>
+          <div className="modal-footer">
+            <Button onClick={triggerThermalPrint}>
+              <Printer size={16} /> طباعة الإيصال الحراري (Ctrl+P)
+            </Button>
+            <Button variant="secondary" onClick={() => setThermalModal(false)}>
+              إغلاق
+            </Button>
+          </div>
+        </Modal>
       )}
     </>
   );
