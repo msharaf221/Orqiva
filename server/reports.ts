@@ -100,13 +100,13 @@ export function report(from: string, to: string, scope: Scope, withActivity: boo
     ...docs.params,
   );
   const collected = scalar(
-    `SELECT SUM(p.amount) value FROM payments p JOIN documents d ON d.id=p.document_id WHERE d.type='SALE' AND p.date BETWEEN ? AND ? AND ${pays.sql}`,
+    `SELECT SUM(p.amount) value FROM payments p JOIN documents d ON d.id=p.document_id WHERE d.type IN ('SALE','PURCHASE_RETURN') AND p.date BETWEEN ? AND ? AND ${pays.sql}`,
     from,
     to,
     ...pays.params,
   );
   const disbursed = scalar(
-    `SELECT SUM(p.amount) value FROM payments p JOIN documents d ON d.id=p.document_id WHERE d.type='PURCHASE' AND p.date BETWEEN ? AND ? AND ${pays.sql}`,
+    `SELECT SUM(p.amount) value FROM payments p JOIN documents d ON d.id=p.document_id WHERE d.type IN ('PURCHASE','SALE_RETURN') AND p.date BETWEEN ? AND ? AND ${pays.sql}`,
     from,
     to,
     ...pays.params,
@@ -164,11 +164,13 @@ export function report(from: string, to: string, scope: Scope, withActivity: boo
     disbursed,
     cashFlow: collected - disbursed - expenses,
     receivables: scalar(
-      `SELECT SUM(d.total-d.paid) value FROM documents d WHERE d.type='SALE' AND d.status='POSTED' AND ${docs.sql}`,
+      `SELECT SUM(CASE WHEN d.type='SALE' THEN (d.total-d.paid) ELSE -(d.total-d.paid) END) value
+       FROM documents d WHERE d.type IN ('SALE','SALE_RETURN') AND d.status='POSTED' AND ${docs.sql}`,
       ...docs.params,
     ),
     payables: scalar(
-      `SELECT SUM(d.total-d.paid) value FROM documents d WHERE d.type='PURCHASE' AND d.status='POSTED' AND ${docs.sql}`,
+      `SELECT SUM(CASE WHEN d.type='PURCHASE' THEN (d.total-d.paid) ELSE -(d.total-d.paid) END) value
+       FROM documents d WHERE d.type IN ('PURCHASE','PURCHASE_RETURN') AND d.status='POSTED' AND ${docs.sql}`,
       ...docs.params,
     ),
     stockValue,
@@ -237,7 +239,11 @@ export function groupOverview(from: string, to: string): GroupOverview {
   const branches = all<Branch>('SELECT * FROM branches ORDER BY code');
   const receivables = new Map(
     all<{ branch_id: string; value: number }>(
-      "SELECT branch_id,SUM(total-paid) value FROM documents WHERE type='SALE' AND status='POSTED' GROUP BY branch_id",
+      `SELECT branch_id,
+        SUM(CASE WHEN type='SALE' THEN (total-paid) ELSE -(total-paid) END) value
+       FROM documents
+       WHERE type IN ('SALE','SALE_RETURN') AND status='POSTED'
+       GROUP BY branch_id`,
     ).map((r) => [r.branch_id, r.value]),
   );
   const stock = new Map(
