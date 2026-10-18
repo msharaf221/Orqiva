@@ -244,6 +244,8 @@ export interface ReceiptData {
     amount_paid?: number;
     amount_tendered?: number;
     change_due?: number;
+    reference?: string;
+    splits?: Array<{ method: string; amount: number; reference?: string }>;
   };
 }
 
@@ -282,13 +284,15 @@ export function ThermalReceiptPaper({
 
   const method = result.payment?.method || 'CASH';
   const paymentMethodLabel =
-    method === 'CASH'
-      ? 'نقداً (كاش)'
-      : method === 'CARD'
-        ? 'بطاقة دفع إلكتروني (شبكة / فيزا)'
-        : method === 'BANK'
-          ? 'محفظة إلكترونية / تحويل'
-          : 'حساب آجل (ذمم مدينة)';
+    method === 'SPLIT'
+      ? 'دفع مجزأ (متعدد الوسائل)'
+      : method === 'CASH'
+        ? 'نقداً (كاش)'
+        : method === 'CARD'
+          ? 'بطاقة دفع إلكتروني (فيزا / ماستر)'
+          : method === 'BANK'
+            ? 'محفظة إلكترونية / إنستاباي'
+            : 'حساب آجل (ذمم مدينة)';
 
   const formatMoney = (cents: number) =>
     (cents / 100).toLocaleString('en-US', {
@@ -405,6 +409,31 @@ export function ThermalReceiptPaper({
           <span>طريقة الدفع:</span>
           <span className="font-semibold">{paymentMethodLabel}</span>
         </div>
+
+        {result.payment?.reference && (
+          <div className="receipt-row" style={{ fontSize: '11px', color: '#334155' }}>
+            <span>مرجع / إيصال الدفع:</span>
+            <span className="font-semibold num">{result.payment.reference}</span>
+          </div>
+        )}
+
+        {result.payment?.splits && result.payment.splits.length > 0 && (
+          <div style={{ margin: '4px 0 6px', padding: '4px 0', borderTop: '1px dashed #cbd5e1' }}>
+            {result.payment.splits.map((s, idx) => (
+              <div key={idx} className="receipt-row" style={{ fontSize: '11px', color: '#475569' }}>
+                <span>
+                  {s.method === 'CASH'
+                    ? 'كاش'
+                    : s.method === 'CARD'
+                      ? 'فيزا / بطاقة'
+                      : 'إنستاباي / محفظة'}
+                  {s.reference ? ` (${s.reference})` : ''}:
+                </span>
+                <span className="num font-semibold">{formatMoney(s.amount)} ج.م</span>
+              </div>
+            ))}
+          </div>
+        )}
 
         {method === 'CASH' && (
           <>

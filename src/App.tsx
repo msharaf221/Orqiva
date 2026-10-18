@@ -29,6 +29,9 @@ import {
   Sparkles,
   CircleHelp,
   ArrowUpRight,
+  CheckCircle2,
+  TrendingUp,
+  Activity,
   Building2,
 } from 'lucide-react';
 import { BranchProvider, BranchSwitcher, useBranch, withBranch } from './branch';
@@ -143,21 +146,77 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
             <br />
             مع أوركيفا، ركّز على الخطوة القادمة لأعمالك.
           </p>
-          <div className="login-visual">
-            <div className="orbit orbit-one" />
-            <div className="orbit orbit-two" />
-            <div className="orbit orbit-three" />
-            <div className="visual-core">
-              <Brand light />
+          <div className="login-preview-card">
+            <div className="login-preview-header">
+              <div className="preview-branch-status">
+                <span className="live-beacon" />
+                <span>الفرع الرئيسي • الرياض</span>
+              </div>
+              <span className="preview-time-tag">مباشر الآن</span>
             </div>
-            <div className="floating-pill pill-one">
-              <Package size={19} /> مخزون تحت السيطرة <span className="pill-dot" />
+
+            <div className="login-preview-metrics">
+              <div className="preview-metric-box">
+                <span className="preview-metric-label">مبيعات اليوم المحققة</span>
+                <div className="preview-metric-val">
+                  <span className="num">٢٨,٤٥٠.٠٠</span>
+                  <span className="currency">ر.س</span>
+                  <span className="preview-badge positive">
+                    <TrendingUp size={12} /> +١٨.٤٪
+                  </span>
+                </div>
+              </div>
+              <div className="preview-metric-box">
+                <span className="preview-metric-label">تسوية الصندوق اليومية</span>
+                <div className="preview-metric-val">
+                  <span className="preview-status-pill success">
+                    <CheckCircle2 size={13} /> متطابق ومغلق
+                  </span>
+                </div>
+              </div>
             </div>
-            <div className="floating-pill pill-two">
-              <ChartNoAxesCombined size={19} /> قرارات مبنية على الأرقام <ArrowUpRight size={18} />
+
+            <div className="login-preview-ledger">
+              <div className="preview-ledger-title">
+                <span>أحدث العمليات المقيدة</span>
+                <span className="preview-ledger-count">٢٤ حركة مسجلة</span>
+              </div>
+              <div className="preview-ledger-item">
+                <div className="ledger-item-icon sale">
+                  <ReceiptText size={15} />
+                </div>
+                <div className="ledger-item-info">
+                  <strong>فاتورة مبيعات #INV-2026-118</strong>
+                  <small>مؤسسة الأفق التقني • قبل دقيقتين</small>
+                </div>
+                <div className="ledger-item-amount positive">
+                  <span className="num">+٤,٢٥٠.٠٠</span>
+                  <small>ر.س</small>
+                </div>
+              </div>
+              <div className="preview-ledger-item">
+                <div className="ledger-item-icon stock">
+                  <Package size={15} />
+                </div>
+                <div className="ledger-item-info">
+                  <strong>إذن توريد مخزني #REC-094</strong>
+                  <small>مستودع السلي المركزي • مكتمل</small>
+                </div>
+                <div className="ledger-item-amount neutral">
+                  <span>تم الجرد</span>
+                </div>
+              </div>
             </div>
-            <div className="floating-pill pill-three">
-              <ReceiptText size={19} /> من أول فاتورة، للنمو
+
+            <div className="login-preview-trust">
+              <div className="trust-item">
+                <ShieldCheck size={14} />
+                <span>متوافق مع المرحلة الثانية لـ ZATCA</span>
+              </div>
+              <div className="trust-item">
+                <Activity size={14} />
+                <span>تشفير مالي آمن ٢٥٦ بت</span>
+              </div>
             </div>
           </div>
         </div>

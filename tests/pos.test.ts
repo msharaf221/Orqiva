@@ -356,4 +356,138 @@ describe('Odoo-like Fast POS Interface & Shifts', () => {
     expect(approveRes.body.closing_cash).toBe(5000);
     expect(approveRes.body.difference).toBe(0);
   });
+
+  it('handles multi-tender reconciliation (Cash, Visa, InstaPay) with paper proofs and terminal settlement', async () => {
+    // 1. Cashier opens shift with 50.00 EGP cash
+    const openRes = await cashier
+      .post('/api/pos/shifts/open')
+      .set(header)
+      .send({ branch_id: 'main', opening_cash: 5000 })
+      .expect(201);
+    const shiftId = openRes.body.id;
+
+    // 2. Sale 1: Paid via VISA / CARD with POS Terminal Slip #
+    // 1 item @ 2500 + 14% tax = 2850 piasters (28.50 EGP)
+    await cashier
+      .post('/api/pos/checkout')
+      .set(header)
+      .send({
+        branch_id: 'main',
+        shift_id: shiftId,
+        date: '2026-03-01',
+        lines: [{ product_id: 'pos-p1', quantity: 1, unit_price: 2500 }],
+        payment: {
+          method: 'CARD',
+          amount_tendered: 2850,
+          amount_paid: 2850,
+          reference: 'إيصال ماكينة بنك مصر #84920',
+        },
+      })
+      .expect(201);
+
+    // 3. Sale 2: Paid via INSTAPAY / BANK with reference
+    // 1 item @ 2500 + 14% tax = 2850 piasters (28.50 EGP)
+    await cashier
+      .post('/api/pos/checkout')
+      .set(header)
+      .send({
+        branch_id: 'main',
+        shift_id: shiftId,
+        date: '2026-03-01',
+        lines: [{ product_id: 'pos-p1', quantity: 1, unit_price: 2500 }],
+        payment: {
+          method: 'BANK',
+          amount_tendered: 2850,
+          amount_paid: 2850,
+          reference: 'تحويل إنستاباي مرجع #IP-99281',
+        },
+      })
+      .expect(201);
+
+    // 4. Sale 3: Split payment (1000 Cash + 1850 Card)
+    await cashier
+      .post('/api/pos/checkout')
+      .set(header)
+      .send({
+        branch_id: 'main',
+        shift_id: shiftId,
+        date: '2026-03-01',
+        lines: [{ product_id: 'pos-p1', quantity: 1, unit_price: 2500 }],
+        split_payments: [
+          { method: 'CASH', amount: 1000, reference: 'نقداً مجزأ' },
+          { method: 'CARD', amount: 1850, reference: 'فيزا مجزأ إيصال #84921' },
+        ],
+      })
+      .expect(201);
+
+    // 5. Verify shift summary aggregates all tenders accurately
+    const summaryRes = await cashier
+      .get(`/api/pos/shifts/${shiftId}/summary`)
+      .set(header)
+      .expect(200);
+
+    const s = summaryRes.body;
+    expect(s.opening_cash).toBe(5000);
+    expect(s.cash_sales).toBe(1000); // 10.00 EGP
+    expect(s.expected_cash).toBe(6000); // 5000 + 1000 = 6000
+    expect(s.card_sales).toBe(2850 + 1850); // 4700 piasters (47.00 EGP)
+    expect(s.expected_card).toBe(4700);
+    expect(s.bank_sales).toBe(2850); // 28.50 EGP (InstaPay)
+    expect(s.expected_bank).toBe(2850);
+    expect(s.sales_count).toBe(3);
+    expect(s.payments.length).toBe(4); // 1 card + 1 bank + 1 cash split + 1 card split
+
+    // 6. Cashier submits shift handover declaring counted cash, terminal settlement, and InstaPay proof
+    const submitRes = await cashier
+      .post(`/api/pos/shifts/${shiftId}/submit`)
+      .set(header)
+      .send({
+        declared_cash: 6000,
+        declared_card: 4700,
+        declared_bank: 2850,
+        terminal_batch_number: 'BATCH-0042',
+        card_slips_count: 2,
+        bank_transfers_count: 1,
+        safe_envelope_number: 'ENV-2026-88',
+        proof_documents: 'إيصال تسوية ماكينة فيزا BATCH-0042 + إشعار تحويل إنستاباي 99281',
+        notes: 'تسليم الوردية بكافة الإثباتات والورقيات',
+      })
+      .expect(200);
+
+    expect(submitRes.body.status).toBe('PENDING_REVIEW');
+    expect(submitRes.body.cashier_declared_cash).toBe(6000);
+    expect(submitRes.body.cashier_declared_card).toBe(4700);
+    expect(submitRes.body.cashier_declared_bank).toBe(2850);
+    expect(submitRes.body.terminal_batch_number).toBe('BATCH-0042');
+    expect(submitRes.body.card_slips_count).toBe(2);
+    expect(submitRes.body.bank_transfers_count).toBe(1);
+    expect(submitRes.body.safe_envelope_number).toBe('ENV-2026-88');
+
+    // 7. Treasury Accountant reviews, verifies all proofs, and approves shift
+    const admin = await signIn('admin@test.local');
+    const approveRes = await admin
+      .post(`/api/pos/shifts/${shiftId}/approve`)
+      .set(header)
+      .send({
+        closing_cash: 6000,
+        closing_card: 4700,
+        closing_bank: 2850,
+        review_notes: 'تم فحص إيصال تسوية الماكينة وإشعارات إنستاباي ومطابقة النقدية بالمظروف',
+        verification_checklist: JSON.stringify({
+          terminal_batch_verified: true,
+          card_slips_counted: true,
+          instapay_statement_verified: true,
+          safe_envelope_received: true,
+        }),
+      })
+      .expect(200);
+
+    expect(approveRes.body.status).toBe('CLOSED');
+    expect(approveRes.body.closing_cash).toBe(6000);
+    expect(approveRes.body.closing_card).toBe(4700);
+    expect(approveRes.body.closing_bank).toBe(2850);
+    expect(approveRes.body.difference).toBe(0);
+    expect(approveRes.body.card_difference).toBe(0);
+    expect(approveRes.body.bank_difference).toBe(0);
+  });
 });

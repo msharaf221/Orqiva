@@ -21,6 +21,9 @@ import {
   Coins,
   Store,
   RefreshCw,
+  ShieldCheck,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { api, Button, Field, Loading, Modal, money, useAction, useSession, useToast } from '../lib';
 import { useBranch } from '../branch';
@@ -67,6 +70,8 @@ interface CheckoutResult {
     amount_paid: number;
     amount_tendered?: number;
     change_due: number;
+    reference?: string;
+    splits?: Array<{ method: string; amount: number; reference?: string }>;
   };
 }
 
@@ -1065,39 +1070,74 @@ function CloseShiftModal({
   const { busy, act } = useAction();
   const [summary, setSummary] = useState<PosShiftSummary | null>(null);
   const [loading, setLoading] = useState(true);
-  const [closingCash, setClosingCash] = useState('');
-  const [notes, setNotes] = useState('');
   const [directClose, setDirectClose] = useState(false);
+
+  // Cashier counts and declarations
+  const [closingCash, setClosingCash] = useState('');
+  const [closingCard, setClosingCard] = useState('');
+  const [terminalBatchNumber, setTerminalBatchNumber] = useState('');
+  const [cardSlipsCount, setCardSlipsCount] = useState('');
+  const [closingBank, setClosingBank] = useState('');
+  const [bankTransfersCount, setBankTransfersCount] = useState('');
+  const [safeEnvelopeNumber, setSafeEnvelopeNumber] = useState('');
+  const [proofDocuments, setProofDocuments] = useState('');
+  const [notes, setNotes] = useState('');
 
   useEffect(() => {
     api<PosShiftSummary>(`/pos/shifts/${shiftId}/summary`)
       .then((data) => {
         setSummary(data);
         setClosingCash((data.expected_cash / 100).toFixed(2));
+        setClosingCard((data.expected_card / 100).toFixed(2));
+        setClosingBank((data.expected_bank / 100).toFixed(2));
       })
       .finally(() => setLoading(false));
   }, [shiftId]);
 
-  const countedCents = Math.round(parseFloat(closingCash || '0') * 100);
-  const expectedCents = summary?.expected_cash ?? 0;
-  const differenceCents = countedCents - expectedCents;
+  const cashCountedCents = Math.round(parseFloat(closingCash || '0') * 100);
+  const cashExpectedCents = summary?.expected_cash ?? 0;
+  const cashDiffCents = cashCountedCents - cashExpectedCents;
+
+  const cardCountedCents = Math.round(parseFloat(closingCard || '0') * 100);
+  const cardExpectedCents = summary?.expected_card ?? 0;
+  const cardDiffCents = cardCountedCents - cardExpectedCents;
+
+  const bankCountedCents = Math.round(parseFloat(closingBank || '0') * 100);
+  const bankExpectedCents = summary?.expected_bank ?? 0;
+  const bankDiffCents = bankCountedCents - bankExpectedCents;
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     void act(async () => {
       if (directClose && isAccountantOrAdmin) {
         await api(`/pos/shifts/${shiftId}/close`, 'POST', {
-          closing_cash: countedCents,
+          closing_cash: cashCountedCents,
+          closing_card: cardCountedCents,
+          closing_bank: bankCountedCents,
           notes: notes.trim() || undefined,
         });
         onDirectCloseSuccess();
       } else {
         const submitted = await api<PosShift>(`/pos/shifts/${shiftId}/submit`, 'POST', {
-          declared_cash: countedCents,
+          declared_cash: cashCountedCents,
+          declared_card: cardCountedCents,
+          declared_bank: bankCountedCents,
+          terminal_batch_number: terminalBatchNumber.trim() || undefined,
+          card_slips_count: cardSlipsCount ? parseInt(cardSlipsCount, 10) : undefined,
+          bank_transfers_count: bankTransfersCount ? parseInt(bankTransfersCount, 10) : undefined,
+          safe_envelope_number: safeEnvelopeNumber.trim() || undefined,
+          proof_documents: proofDocuments.trim() || undefined,
           notes: notes.trim() || undefined,
         });
         if (summary) {
-          onSubmitSuccess(submitted, { ...summary, cashier_declared_cash: countedCents });
+          onSubmitSuccess(submitted, {
+            ...summary,
+            cashier_declared_cash: cashCountedCents,
+            cashier_declared_card: cardCountedCents,
+            cashier_declared_bank: bankCountedCents,
+            card_difference: cardDiffCents,
+            bank_difference: bankDiffCents,
+          });
         }
       }
     });
@@ -1106,17 +1146,19 @@ function CloseShiftModal({
   return (
     <Modal
       title={
-        directClose ? 'إغلاق الوردية والاعتماد المباشر' : 'تسليم الوردية للخزنة (تسليم الكاشير)'
+        directClose
+          ? 'إغلاق الوردية والاعتماد المباشر (مدير/محاسب)'
+          : 'تسليم وتقفيل الوردية للخزنة (تسليم الكاشير)'
       }
       description={
         directClose
-          ? 'إغلاق الوردية واعتماد تقرير مطابقة النقدية فوراً وترحيل القيود.'
-          : 'جرد النقدية بالدرج وتسليم الوردية لمسؤول الخزنة للمراجعة والاعتماد (نظام Odoo).'
+          ? 'إغلاق الوردية واعتماد مطابقة جميع وسائل الدفع وترحيل القيود فوراً.'
+          : 'جرد نقدية الدرج ومطابقة إيصالات الفيزا وشريط التسوية وتسليم الوردية لمسؤول الخزنة للمراجعة والاعتماد.'
       }
       onClose={onClose}
     >
       <form onSubmit={handleSubmit}>
-        <div className="modal-body form-grid">
+        <div className="modal-body form-grid" style={{ maxHeight: '74vh', overflowY: 'auto' }}>
           {loading ? (
             <Loading />
           ) : summary ? (
@@ -1143,90 +1185,318 @@ function CloseShiftModal({
                     htmlFor="directCloseToggle"
                     style={{ fontSize: '13px', cursor: 'pointer', fontWeight: 600 }}
                   >
-                    إغلاق واعتماد مباشر فوري (صلاحية مدير / محاسب خزنة)
+                    إغلاق واعتماد مالي مباشر فوري (صلاحية مدير / محاسب خزنة)
                   </label>
                 </div>
               )}
 
-              <div className="pos-reconciliation-card">
-                <div className="pos-recon-row">
-                  <span>الرصيد الافتتاحي:</span>
-                  <b>{money(summary.opening_cash)} ج.م</b>
+              {/* Multi-Tender Overview Grid */}
+              <div className="pos-tender-summary-grid">
+                <div className="pos-tender-summary-card">
+                  <div className="pos-tender-card-header">
+                    <span>نقدية الدرج (كاش)</span>
+                    <Coins size={16} style={{ color: '#d97706' }} />
+                  </div>
+                  <div className="pos-tender-card-expected">{money(summary.expected_cash)} ج.م</div>
+                  <span className="pos-tender-card-meta">
+                    مبيعات: {money(summary.cash_sales)} + العهدة
+                  </span>
                 </div>
-                <div className="pos-recon-row">
-                  <span>مبيعات نقدية (كاش):</span>
-                  <b>+{money(summary.cash_sales)} ج.م</b>
+
+                <div className="pos-tender-summary-card">
+                  <div className="pos-tender-card-header">
+                    <span>بطاقات بنكية / فيزا</span>
+                    <CreditCard size={16} style={{ color: '#2563eb' }} />
+                  </div>
+                  <div className="pos-tender-card-expected">{money(summary.expected_card)} ج.م</div>
+                  <span className="pos-tender-card-meta">مسجل بالنظام من المبيعات</span>
                 </div>
-                <div className="pos-recon-row">
-                  <span>توريدات نقدية إضافية:</span>
-                  <b>+{money(summary.cash_in)} ج.م</b>
+
+                <div className="pos-tender-summary-card">
+                  <div className="pos-tender-card-header">
+                    <span>إنستاباي / محفظة</span>
+                    <Building size={16} style={{ color: '#059669' }} />
+                  </div>
+                  <div className="pos-tender-card-expected">{money(summary.expected_bank)} ج.م</div>
+                  <span className="pos-tender-card-meta">تحويلات بنكية ومحافظ</span>
                 </div>
-                <div className="pos-recon-row">
-                  <span>مسحوبات نقدية من الدرج:</span>
-                  <b>-{money(summary.cash_out)} ج.م</b>
-                </div>
-                <div className="pos-recon-divider" />
-                <div className="pos-recon-row total">
-                  <span>النقدية المتوقعة في الدرج:</span>
-                  <strong>{money(summary.expected_cash)} ج.م</strong>
+
+                <div className="pos-tender-summary-card">
+                  <div className="pos-tender-card-header">
+                    <span>مبيعات آجلة (ذمم)</span>
+                    <Clock size={16} style={{ color: '#7c3aed' }} />
+                  </div>
+                  <div className="pos-tender-card-expected">{money(summary.credit_sales)} ج.م</div>
+                  <span className="pos-tender-card-meta">على حسابات العملاء</span>
                 </div>
               </div>
 
-              <Field
-                label={
-                  directClose
-                    ? 'النقدية الفعلية المعتمدة (ج.م) *'
-                    : 'النقدية المحصاة في الدرج المسلّمة للخزنة (ج.م) *'
-                }
-              >
-                <input
-                  type="number"
-                  step="any"
-                  min="0"
-                  required
-                  autoFocus
-                  value={closingCash}
-                  onChange={(e) => setClosingCash(e.target.value)}
-                />
-              </Field>
+              {/* SECTION 1: Cash Drawer Count */}
+              <div className="pos-tender-section-box">
+                <div className="pos-tender-section-title">
+                  <Coins size={18} style={{ color: '#d97706' }} />
+                  <span>1. جرد نقدية الدرج الفعلي (Cash Drawer Count)</span>
+                </div>
 
-              {/* Live Difference Badge */}
-              <div
-                className={
-                  'pos-diff-banner ' +
-                  (differenceCents === 0 ? 'match' : differenceCents < 0 ? 'deficit' : 'surplus')
-                }
-              >
-                {differenceCents === 0 ? (
-                  <>
-                    <CheckCircle2 size={18} />
-                    <span>النقدية مطابقة تماماً (الفارق: 0.00 ج.م)</span>
-                  </>
-                ) : differenceCents < 0 ? (
-                  <>
-                    <AlertCircle size={18} />
-                    <span>
-                      يوجد عجز في الدرج بمقدار: <b>{money(Math.abs(differenceCents))} ج.م</b>
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles size={18} />
-                    <span>
-                      توجد زيادة في الدرج بمقدار: <b>+{money(differenceCents)} ج.م</b>
-                    </span>
-                  </>
-                )}
+                <div className="pos-reconciliation-card">
+                  <div className="pos-recon-row">
+                    <span>الرصيد الافتتاحي (عهدة البداية):</span>
+                    <b>{money(summary.opening_cash)} ج.م</b>
+                  </div>
+                  <div className="pos-recon-row">
+                    <span>مبيعات نقدية (كاش):</span>
+                    <b>+{money(summary.cash_sales)} ج.م</b>
+                  </div>
+                  <div className="pos-recon-row">
+                    <span>توريدات نقدية إضافية (إيداع درج):</span>
+                    <b>+{money(summary.cash_in)} ج.م</b>
+                  </div>
+                  <div className="pos-recon-row">
+                    <span>مسحوبات نقدية (مصروفات درج):</span>
+                    <b>-{money(summary.cash_out)} ج.م</b>
+                  </div>
+                  <div className="pos-recon-divider" />
+                  <div className="pos-recon-row total">
+                    <span>النقدية المتوقعة بالدرج:</span>
+                    <strong>{money(summary.expected_cash)} ج.م</strong>
+                  </div>
+                </div>
+
+                <Field
+                  label={
+                    directClose
+                      ? 'النقدية الفعلية المعتمدة (ج.م) *'
+                      : 'النقدية المحصاة في الدرج المسلّمة للخزنة (ج.م) *'
+                  }
+                >
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    required
+                    autoFocus
+                    value={closingCash}
+                    onChange={(e) => setClosingCash(e.target.value)}
+                  />
+                </Field>
+
+                {/* Cash Live Difference Badge */}
+                <div
+                  className={
+                    'pos-diff-banner ' +
+                    (cashDiffCents === 0 ? 'match' : cashDiffCents < 0 ? 'deficit' : 'surplus')
+                  }
+                >
+                  {cashDiffCents === 0 ? (
+                    <>
+                      <CheckCircle2 size={18} />
+                      <span>النقدية مطابقة تماماً مع المسجل بالنظام (الفارق: 0.00 ج.م)</span>
+                    </>
+                  ) : cashDiffCents < 0 ? (
+                    <>
+                      <AlertCircle size={18} />
+                      <span>
+                        عجز نقدي في الدرج بمقدار: <b>{money(Math.abs(cashDiffCents))} ج.م</b>
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={18} />
+                      <span>
+                        توجد زيادة نقدية في الدرج بمقدار: <b>+{money(cashDiffCents)} ج.م</b>
+                      </span>
+                    </>
+                  )}
+                </div>
               </div>
 
-              <Field label="ملاحظات التسليم">
-                <input
-                  type="text"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="سبب أي فارق نقدي أو ملاحظات للتسليم..."
-                />
-              </Field>
+              {/* SECTION 2: Card & POS Terminal Settlement */}
+              <div className="pos-tender-section-box">
+                <div className="pos-tender-section-title">
+                  <CreditCard size={18} style={{ color: '#2563eb' }} />
+                  <span>2. تسوية ماكينة البطاقات والفيزا (POS Terminal & Slips)</span>
+                </div>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                    gap: '12px',
+                  }}
+                >
+                  <Field label="إجمالي شريط تسوية الماكينة (Batch Total) ج.م *">
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      required
+                      value={closingCard}
+                      onChange={(e) => setClosingCard(e.target.value)}
+                    />
+                  </Field>
+
+                  <Field label="رقم تسوية الماكينة (Terminal Batch #)">
+                    <input
+                      type="text"
+                      placeholder="مثال: BATCH-0042 / 9821"
+                      value={terminalBatchNumber}
+                      onChange={(e) => setTerminalBatchNumber(e.target.value)}
+                    />
+                  </Field>
+
+                  <Field label="عدد إيصالات البطاقات الورقية المرفقة">
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      placeholder="عدد الفواتير الورقية الموقعة"
+                      value={cardSlipsCount}
+                      onChange={(e) => setCardSlipsCount(e.target.value)}
+                    />
+                  </Field>
+                </div>
+
+                <div
+                  className={
+                    'pos-diff-banner ' +
+                    (cardDiffCents === 0 ? 'match' : cardDiffCents < 0 ? 'deficit' : 'surplus')
+                  }
+                >
+                  {cardDiffCents === 0 ? (
+                    <>
+                      <CheckCircle2 size={18} />
+                      <span>
+                        مبيعات البطاقات مطابقة تماماً لشريط تسوية الماكينة (الفارق: 0.00 ج.م)
+                      </span>
+                    </>
+                  ) : cardDiffCents < 0 ? (
+                    <>
+                      <AlertCircle size={18} />
+                      <span>
+                        فارق نقص في شريط البطاقات بمقدار:{' '}
+                        <b>{money(Math.abs(cardDiffCents))} ج.م</b>
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={18} />
+                      <span>
+                        زيادة في شريط البطاقات بمقدار: <b>+{money(cardDiffCents)} ج.م</b>
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* SECTION 3: InstaPay & Bank Transfers */}
+              <div className="pos-tender-section-box">
+                <div className="pos-tender-section-title">
+                  <Building size={18} style={{ color: '#059669' }} />
+                  <span>3. إثباتات إنستاباي والمحافظ الإلكترونية (InstaPay & Wallets)</span>
+                </div>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                    gap: '12px',
+                  }}
+                >
+                  <Field label="إجمالي المحصل عبر إنستاباي / البنك (ج.م) *">
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      required
+                      value={closingBank}
+                      onChange={(e) => setClosingBank(e.target.value)}
+                    />
+                  </Field>
+
+                  <Field label="عدد عمليات التحويل / الإشعارات المرفقة">
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      placeholder="عدد إشعارات التحويل"
+                      value={bankTransfersCount}
+                      onChange={(e) => setBankTransfersCount(e.target.value)}
+                    />
+                  </Field>
+                </div>
+
+                <div
+                  className={
+                    'pos-diff-banner ' +
+                    (bankDiffCents === 0 ? 'match' : bankDiffCents < 0 ? 'deficit' : 'surplus')
+                  }
+                >
+                  {bankDiffCents === 0 ? (
+                    <>
+                      <CheckCircle2 size={18} />
+                      <span>إجمالي إنستاباي مطابق مع المسجل بالنظام (الفارق: 0.00 ج.م)</span>
+                    </>
+                  ) : bankDiffCents < 0 ? (
+                    <>
+                      <AlertCircle size={18} />
+                      <span>
+                        فارق نقص في تحويلات إنستاباي بمقدار:{' '}
+                        <b>{money(Math.abs(bankDiffCents))} ج.م</b>
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={18} />
+                      <span>
+                        زيادة في تحويلات إنستاباي بمقدار: <b>+{money(bankDiffCents)} ج.م</b>
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* SECTION 4: Safe Drop Envelope & Proof Documents */}
+              <div className="pos-proof-box">
+                <div className="pos-tender-section-title">
+                  <ShieldCheck size={18} style={{ color: '#4f46e5' }} />
+                  <span>4. ظرف إيداع الخزنة والمستندات الثبوتية (Safe Drop & Proofs)</span>
+                </div>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                    gap: '12px',
+                  }}
+                >
+                  <Field label="رقم ظرف إيداع الخزنة المحكم (Safe Drop Envelope #)">
+                    <input
+                      type="text"
+                      placeholder="مثال: ENV-2026-0482 أو رقم الكيس الأمني"
+                      value={safeEnvelopeNumber}
+                      onChange={(e) => setSafeEnvelopeNumber(e.target.value)}
+                    />
+                  </Field>
+
+                  <Field label="بيان المرفقات والإثباتات الورقية">
+                    <input
+                      type="text"
+                      placeholder="شريط تسوية ماكينة + إيصالات فيزا + أذونات صرف..."
+                      value={proofDocuments}
+                      onChange={(e) => setProofDocuments(e.target.value)}
+                    />
+                  </Field>
+                </div>
+
+                <Field label="ملاحظات التسليم وأسباب الفروقات إن وجدت">
+                  <input
+                    type="text"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="أي ملاحظات حول التقفيلة أو سبب أي فارق مالي..."
+                  />
+                </Field>
+              </div>
             </>
           ) : null}
         </div>
@@ -1259,8 +1529,22 @@ function TreasuryReviewModal({
   const [selectedShiftId, setSelectedShiftId] = useState<string | null>(null);
   const [summary, setSummary] = useState<PosShiftSummary | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
+
+  // Treasury Verified Amounts
   const [verifiedCash, setVerifiedCash] = useState('');
+  const [verifiedCard, setVerifiedCard] = useState('');
+  const [verifiedBank, setVerifiedBank] = useState('');
   const [reviewNotes, setReviewNotes] = useState('');
+  const [showPaymentsTable, setShowPaymentsTable] = useState(false);
+
+  // Physical Proof Documents Checklist
+  const [checklist, setChecklist] = useState({
+    terminal_batch_verified: false,
+    card_slips_counted: false,
+    instapay_verified: false,
+    drawer_vouchers_signed: false,
+    safe_envelope_received: false,
+  });
 
   const loadPending = async () => {
     setLoading(true);
@@ -1290,12 +1574,33 @@ function TreasuryReviewModal({
     try {
       const sum = await api<PosShiftSummary>(`/pos/shifts/${id}/summary`);
       setSummary(sum);
+
       const initialCash =
         sum.cashier_declared_cash !== null && sum.cashier_declared_cash !== undefined
           ? sum.cashier_declared_cash
           : sum.expected_cash;
       setVerifiedCash((initialCash / 100).toFixed(2));
+
+      const initialCard =
+        sum.cashier_declared_card !== null && sum.cashier_declared_card !== undefined
+          ? sum.cashier_declared_card
+          : sum.expected_card;
+      setVerifiedCard((initialCard / 100).toFixed(2));
+
+      const initialBank =
+        sum.cashier_declared_bank !== null && sum.cashier_declared_bank !== undefined
+          ? sum.cashier_declared_bank
+          : sum.expected_bank;
+      setVerifiedBank((initialBank / 100).toFixed(2));
+
       setReviewNotes('');
+      setChecklist({
+        terminal_batch_verified: Boolean(sum.shift.terminal_batch_number),
+        card_slips_counted: Boolean(sum.shift.card_slips_count),
+        instapay_verified: Boolean(sum.shift.bank_transfers_count),
+        drawer_vouchers_signed: true,
+        safe_envelope_received: Boolean(sum.shift.safe_envelope_number),
+      });
     } catch (err: any) {
       toast(err.message || 'تعذر تحميل ملخص الوردية');
     } finally {
@@ -1303,9 +1608,17 @@ function TreasuryReviewModal({
     }
   };
 
-  const verifiedCents = Math.round(parseFloat(verifiedCash || '0') * 100);
-  const expectedCents = summary?.expected_cash ?? 0;
-  const differenceCents = verifiedCents - expectedCents;
+  const verifiedCashCents = Math.round(parseFloat(verifiedCash || '0') * 100);
+  const expectedCashCents = summary?.expected_cash ?? 0;
+  const cashDiffCents = verifiedCashCents - expectedCashCents;
+
+  const verifiedCardCents = Math.round(parseFloat(verifiedCard || '0') * 100);
+  const expectedCardCents = summary?.expected_card ?? 0;
+  const cardDiffCents = verifiedCardCents - expectedCardCents;
+
+  const verifiedBankCents = Math.round(parseFloat(verifiedBank || '0') * 100);
+  const expectedBankCents = summary?.expected_bank ?? 0;
+  const bankDiffCents = verifiedBankCents - expectedBankCents;
 
   const handleApprove = (e: FormEvent) => {
     e.preventDefault();
@@ -1313,10 +1626,13 @@ function TreasuryReviewModal({
 
     void act(async () => {
       await api(`/pos/shifts/${selectedShiftId}/approve`, 'POST', {
-        verified_cash: verifiedCents,
+        verified_cash: verifiedCashCents,
+        closing_card: verifiedCardCents,
+        closing_bank: verifiedBankCents,
         review_notes: reviewNotes.trim() || undefined,
+        verification_checklist: checklist,
       });
-      toast('تم اعتماد إغلاق الوردية وترحيل القيود المحاسبية بنجاح');
+      toast('تم اعتماد إغلاق الوردية والمطابقة متعددة القنوات وترحيل القيود بنجاح');
       onApproved();
       await loadPending();
     });
@@ -1324,21 +1640,21 @@ function TreasuryReviewModal({
 
   return (
     <Modal
-      title="اعتماد ورديات الخزنة والمطابقة المالية"
-      description="مراجعة الورديات المسلمة من الكاشير ومطابقة النقدية الفعلية وترحيل قيود العجز/الزيادة إلى حسابات المؤسسة."
+      title="اعتماد ورديات الخزنة والمطابقة المالية الشاملة"
+      description="مراجعة ورديات الكاشير، فحص أشرطة تسوية الماكينات وإيصالات الفيزا وإنستاباي، والتحقق من المستندات الثبوتية وترحيل قيود الفروقات."
       onClose={onClose}
     >
-      <div className="modal-body form-grid">
+      <div className="modal-body form-grid" style={{ maxHeight: '78vh', overflowY: 'auto' }}>
         {loading ? (
           <Loading />
         ) : pendingList.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '30px 10px', color: 'var(--muted)' }}>
-            <CheckCircle2 size={40} style={{ color: 'var(--green)', marginBottom: '8px' }} />
+          <div style={{ textAlign: 'center', padding: '36px 12px', color: 'var(--muted)' }}>
+            <CheckCircle2 size={46} style={{ color: 'var(--green)', marginBottom: '10px' }} />
             <h4>لا توجد ورديات معلقة بانتظار الاعتماد</h4>
-            <p>جميع ورديات الكاشير في هذا الفرع معتمدة ومقفلة بالكامل.</p>
+            <p>جميع ورديات الكاشير في هذا الفرع معتمدة ومطابقة بالكامل.</p>
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr', gap: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: '16px' }}>
             {/* Shifts Sidebar */}
             <div
               style={{
@@ -1350,7 +1666,7 @@ function TreasuryReviewModal({
               }}
             >
               <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--muted)' }}>
-                الورديات المعلقة ({pendingList.length})
+                الورديات المعلقة للاعتماد ({pendingList.length})
               </span>
               {pendingList.map((s) => (
                 <button
@@ -1368,15 +1684,58 @@ function TreasuryReviewModal({
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '4px',
+                    boxShadow: 'var(--shadow-xs)',
                   }}
                 >
-                  <strong style={{ fontSize: '13px' }}>{s.number}</strong>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <strong style={{ fontSize: '13px' }}>{s.number}</strong>
+                    {s.safe_envelope_number && (
+                      <span
+                        style={{
+                          fontSize: '10.5px',
+                          background: '#ede9fe',
+                          color: '#5b21b6',
+                          padding: '1px 6px',
+                          borderRadius: '4px',
+                          fontWeight: 700,
+                        }}
+                      >
+                        ظرف #{s.safe_envelope_number}
+                      </span>
+                    )}
+                  </div>
                   <span style={{ fontSize: '11px', color: 'var(--muted)' }}>
                     الكاشير: <b>{s.user_name || '—'}</b>
                   </span>
-                  <span style={{ fontSize: '11px', color: '#b45309', fontWeight: 600 }}>
-                    مسلّم: {money(s.cashier_declared_cash || 0)} ج.م
-                  </span>
+                  <div
+                    style={{
+                      fontSize: '11px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '2px',
+                      marginTop: '2px',
+                    }}
+                  >
+                    <span style={{ color: '#b45309', fontWeight: 600 }}>
+                      كاش مسلّم: {money(s.cashier_declared_cash || 0)} ج.م
+                    </span>
+                    {(s.cashier_declared_card || 0) > 0 && (
+                      <span style={{ color: '#2563eb' }}>
+                        فيزا: {money(s.cashier_declared_card || 0)} ج.م
+                      </span>
+                    )}
+                    {(s.cashier_declared_bank || 0) > 0 && (
+                      <span style={{ color: '#059669' }}>
+                        إنستاباي: {money(s.cashier_declared_bank || 0)} ج.م
+                      </span>
+                    )}
+                  </div>
                 </button>
               ))}
             </div>
@@ -1387,116 +1746,527 @@ function TreasuryReviewModal({
                 <Loading />
               ) : summary ? (
                 <form onSubmit={handleApprove}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <div className="pos-reconciliation-card">
-                      <div className="pos-recon-row">
-                        <span>رقم الوردية / الكاشير:</span>
-                        <b>
-                          {summary.shift.number} ({summary.shift.user_name})
-                        </b>
-                      </div>
-                      <div className="pos-recon-row">
-                        <span>الرصيد الافتتاحي:</span>
-                        <b>{money(summary.opening_cash)} ج.م</b>
-                      </div>
-                      <div className="pos-recon-row">
-                        <span>إجمالي المبيعات ({summary.sales_count} عملية):</span>
-                        <b>{money(summary.total_sales)} ج.م</b>
-                      </div>
-                      <div className="pos-recon-row">
-                        <span>المبيعات النقدية (كاش):</span>
-                        <b>+{money(summary.cash_sales)} ج.م</b>
-                      </div>
-                      <div className="pos-recon-row">
-                        <span>حركات النقدية (فكة / مصاريف):</span>
-                        <b>{money(summary.cash_in - summary.cash_out)} ج.م</b>
-                      </div>
-                      <div className="pos-recon-divider" />
-                      <div className="pos-recon-row total">
-                        <span>النقدية المتوقعة بالنظام:</span>
-                        <strong>{money(summary.expected_cash)} ج.م</strong>
-                      </div>
-                      <div className="pos-recon-row total" style={{ color: '#2563eb' }}>
-                        <span>النقدية المصرح بها من الكاشير:</span>
-                        <strong style={{ color: '#2563eb' }}>
-                          {money(summary.cashier_declared_cash ?? summary.expected_cash)} ج.م
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    {/* Shift Metadata Bar */}
+                    <div
+                      style={{
+                        padding: '12px 14px',
+                        background: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '8px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: '8px',
+                      }}
+                    >
+                      <div>
+                        <strong style={{ fontSize: '14px', color: 'var(--slate-900)' }}>
+                          وردية #{summary.shift.number}
                         </strong>
+                        <div style={{ fontSize: '12px', color: 'var(--slate-500)' }}>
+                          الكاشير: <b>{summary.shift.user_name}</b> | الفرع:{' '}
+                          {summary.shift.branch_id}
+                        </div>
                       </div>
-                      {summary.shift.notes && (
-                        <div style={{ fontSize: '11.5px', color: '#555', marginTop: '4px' }}>
-                          <b>ملاحظات الكاشير:</b> {summary.shift.notes}
+                      <div style={{ textAlign: 'left', fontSize: '12px' }}>
+                        <div>
+                          إجمالي المبيعات:{' '}
+                          <b style={{ color: 'var(--indigo-600)' }}>
+                            {money(summary.total_sales)} ج.م
+                          </b>{' '}
+                          ({summary.sales_count} عملية)
+                        </div>
+                        {summary.shift.safe_envelope_number && (
+                          <div style={{ color: '#5b21b6', fontWeight: 700 }}>
+                            مظروف الإيداع: #{summary.shift.safe_envelope_number}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Multi-Tender Reconciliation Table */}
+                    <div style={{ overflowX: 'auto' }}>
+                      <table className="pos-reconciliation-table">
+                        <thead>
+                          <tr>
+                            <th>وسيلة الدفع</th>
+                            <th>المسجل بالنظام</th>
+                            <th>المصرح به من الكاشير</th>
+                            <th>المعتمد بالخزينة (ج.م)</th>
+                            <th>الفارق المالي</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {/* Cash Row */}
+                          <tr>
+                            <td>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <Coins size={15} style={{ color: '#d97706' }} />
+                                <strong>النقدية بالدرج</strong>
+                              </div>
+                              <small style={{ color: 'var(--muted)', fontSize: '11px' }}>
+                                رصيد البداية {money(summary.opening_cash)} + مبيعات{' '}
+                                {money(summary.cash_sales)}
+                              </small>
+                            </td>
+                            <td>
+                              <b>{money(summary.expected_cash)} ج.م</b>
+                            </td>
+                            <td>
+                              <span style={{ color: '#b45309', fontWeight: 600 }}>
+                                {money(summary.cashier_declared_cash ?? summary.expected_cash)} ج.م
+                              </span>
+                            </td>
+                            <td style={{ width: '140px' }}>
+                              <input
+                                type="number"
+                                step="any"
+                                min="0"
+                                required
+                                value={verifiedCash}
+                                onChange={(e) => setVerifiedCash(e.target.value)}
+                                style={{
+                                  width: '100%',
+                                  padding: '5px 8px',
+                                  fontSize: '13px',
+                                  borderRadius: '6px',
+                                  border: '1px solid #cbd5e1',
+                                }}
+                              />
+                            </td>
+                            <td>
+                              <span
+                                style={{
+                                  fontWeight: 700,
+                                  color:
+                                    cashDiffCents === 0
+                                      ? '#16a34a'
+                                      : cashDiffCents < 0
+                                        ? '#dc2626'
+                                        : '#2563eb',
+                                }}
+                              >
+                                {cashDiffCents === 0
+                                  ? 'مطابق'
+                                  : cashDiffCents < 0
+                                    ? `عجز: -${money(Math.abs(cashDiffCents))} ج.م`
+                                    : `زيادة: +${money(cashDiffCents)} ج.م`}
+                              </span>
+                            </td>
+                          </tr>
+
+                          {/* Card Row */}
+                          <tr>
+                            <td>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <CreditCard size={15} style={{ color: '#2563eb' }} />
+                                <strong>بطاقات / فيزا</strong>
+                              </div>
+                              <small style={{ color: 'var(--muted)', fontSize: '11px' }}>
+                                باتش: {summary.shift.terminal_batch_number || 'غير مسجل'} |{' '}
+                                {summary.shift.card_slips_count || 0} إيصال
+                              </small>
+                            </td>
+                            <td>
+                              <b>{money(summary.expected_card)} ج.م</b>
+                            </td>
+                            <td>
+                              <span style={{ color: '#2563eb', fontWeight: 600 }}>
+                                {money(summary.cashier_declared_card ?? summary.expected_card)} ج.م
+                              </span>
+                            </td>
+                            <td style={{ width: '140px' }}>
+                              <input
+                                type="number"
+                                step="any"
+                                min="0"
+                                required
+                                value={verifiedCard}
+                                onChange={(e) => setVerifiedCard(e.target.value)}
+                                style={{
+                                  width: '100%',
+                                  padding: '5px 8px',
+                                  fontSize: '13px',
+                                  borderRadius: '6px',
+                                  border: '1px solid #cbd5e1',
+                                }}
+                              />
+                            </td>
+                            <td>
+                              <span
+                                style={{
+                                  fontWeight: 700,
+                                  color:
+                                    cardDiffCents === 0
+                                      ? '#16a34a'
+                                      : cardDiffCents < 0
+                                        ? '#dc2626'
+                                        : '#2563eb',
+                                }}
+                              >
+                                {cardDiffCents === 0
+                                  ? 'مطابق'
+                                  : cardDiffCents < 0
+                                    ? `عجز: -${money(Math.abs(cardDiffCents))} ج.م`
+                                    : `زيادة: +${money(cardDiffCents)} ج.م`}
+                              </span>
+                            </td>
+                          </tr>
+
+                          {/* Bank / InstaPay Row */}
+                          <tr>
+                            <td>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <Building size={15} style={{ color: '#059669' }} />
+                                <strong>إنستاباي / محفظة</strong>
+                              </div>
+                              <small style={{ color: 'var(--muted)', fontSize: '11px' }}>
+                                {summary.shift.bank_transfers_count || 0} عملية تحويل
+                              </small>
+                            </td>
+                            <td>
+                              <b>{money(summary.expected_bank)} ج.م</b>
+                            </td>
+                            <td>
+                              <span style={{ color: '#059669', fontWeight: 600 }}>
+                                {money(summary.cashier_declared_bank ?? summary.expected_bank)} ج.م
+                              </span>
+                            </td>
+                            <td style={{ width: '140px' }}>
+                              <input
+                                type="number"
+                                step="any"
+                                min="0"
+                                required
+                                value={verifiedBank}
+                                onChange={(e) => setVerifiedBank(e.target.value)}
+                                style={{
+                                  width: '100%',
+                                  padding: '5px 8px',
+                                  fontSize: '13px',
+                                  borderRadius: '6px',
+                                  border: '1px solid #cbd5e1',
+                                }}
+                              />
+                            </td>
+                            <td>
+                              <span
+                                style={{
+                                  fontWeight: 700,
+                                  color:
+                                    bankDiffCents === 0
+                                      ? '#16a34a'
+                                      : bankDiffCents < 0
+                                        ? '#dc2626'
+                                        : '#2563eb',
+                                }}
+                              >
+                                {bankDiffCents === 0
+                                  ? 'مطابق'
+                                  : bankDiffCents < 0
+                                    ? `عجز: -${money(Math.abs(bankDiffCents))} ج.م`
+                                    : `زيادة: +${money(bankDiffCents)} ج.م`}
+                              </span>
+                            </td>
+                          </tr>
+
+                          {/* Credit Sales Row */}
+                          <tr>
+                            <td>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <Clock size={15} style={{ color: '#7c3aed' }} />
+                                <strong>مبيعات آجلة</strong>
+                              </div>
+                              <small style={{ color: 'var(--muted)', fontSize: '11px' }}>
+                                ترحل تلقائياً لذمم العملاء
+                              </small>
+                            </td>
+                            <td>
+                              <b>{money(summary.credit_sales)} ج.م</b>
+                            </td>
+                            <td>
+                              <span style={{ color: 'var(--muted)' }}>—</span>
+                            </td>
+                            <td>
+                              <span style={{ color: 'var(--muted)', fontSize: '12px' }}>
+                                {money(summary.credit_sales)} ج.م
+                              </span>
+                            </td>
+                            <td>
+                              <span style={{ color: '#16a34a', fontWeight: 700 }}>مطابق</span>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* PHYSICAL PROOFS VERIFICATION CHECKLIST */}
+                    <div className="pos-tender-section-box">
+                      <div className="pos-tender-section-title">
+                        <ShieldCheck size={18} style={{ color: '#15803d' }} />
+                        <span>قائمة التحقق من المستندات والإثباتات الورقية (Audit Checklist)</span>
+                      </div>
+
+                      <div className="pos-audit-checklist">
+                        <label
+                          className={
+                            'pos-checklist-row ' +
+                            (checklist.terminal_batch_verified ? 'checked' : '')
+                          }
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checklist.terminal_batch_verified}
+                            onChange={(e) =>
+                              setChecklist((c) => ({
+                                ...c,
+                                terminal_batch_verified: e.target.checked,
+                              }))
+                            }
+                          />
+                          <span>
+                            تم استلام ومطابقة شريط تسوية ماكينة الدفع (Batch Settlement Slip)
+                          </span>
+                          <span className="pos-checklist-badge">
+                            باتش: #{summary.shift.terminal_batch_number || 'غير مسجل'}
+                          </span>
+                        </label>
+
+                        <label
+                          className={
+                            'pos-checklist-row ' + (checklist.card_slips_counted ? 'checked' : '')
+                          }
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checklist.card_slips_counted}
+                            onChange={(e) =>
+                              setChecklist((c) => ({
+                                ...c,
+                                card_slips_counted: e.target.checked,
+                              }))
+                            }
+                          />
+                          <span>
+                            تم عد ومطابقة إيصالات الدفع الورقية للبطاقات الموقعة من العملاء
+                          </span>
+                          <span className="pos-checklist-badge">
+                            العدد: {summary.shift.card_slips_count || 0} إيصال
+                          </span>
+                        </label>
+
+                        <label
+                          className={
+                            'pos-checklist-row ' + (checklist.instapay_verified ? 'checked' : '')
+                          }
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checklist.instapay_verified}
+                            onChange={(e) =>
+                              setChecklist((c) => ({
+                                ...c,
+                                instapay_verified: e.target.checked,
+                              }))
+                            }
+                          />
+                          <span>
+                            تم التحقق من إشعارات تطبيق إنستاباي / كشف حساب المحافظ الإلكترونية
+                          </span>
+                          <span className="pos-checklist-badge">
+                            العمليات: {summary.shift.bank_transfers_count || 0} عملية
+                          </span>
+                        </label>
+
+                        <label
+                          className={
+                            'pos-checklist-row ' +
+                            (checklist.drawer_vouchers_signed ? 'checked' : '')
+                          }
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checklist.drawer_vouchers_signed}
+                            onChange={(e) =>
+                              setChecklist((c) => ({
+                                ...c,
+                                drawer_vouchers_signed: e.target.checked,
+                              }))
+                            }
+                          />
+                          <span>
+                            مراجعة وتوقيع أذونات التوريد والصرف اليدوية للدرج (Cash In/Out)
+                          </span>
+                          <span className="pos-checklist-badge">
+                            صافي الحركات: {money(summary.cash_in - summary.cash_out)} ج.م
+                          </span>
+                        </label>
+
+                        <label
+                          className={
+                            'pos-checklist-row ' +
+                            (checklist.safe_envelope_received ? 'checked' : '')
+                          }
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checklist.safe_envelope_received}
+                            onChange={(e) =>
+                              setChecklist((c) => ({
+                                ...c,
+                                safe_envelope_received: e.target.checked,
+                              }))
+                            }
+                          />
+                          <span>
+                            تم استلام ظرف إيداع النقدية والمستندات المحكم بالخزينة الرئيسية
+                          </span>
+                          <span className="pos-checklist-badge">
+                            ظرف #{summary.shift.safe_envelope_number || 'غير مسجل'}
+                          </span>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* EXPANDABLE ITEMIZED TRANSACTIONS AUDIT */}
+                    <div style={{ marginTop: '2px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setShowPaymentsTable(!showPaymentsTable)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--indigo-600)',
+                          fontSize: '13px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          padding: '4px 0',
+                        }}
+                      >
+                        {showPaymentsTable ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                        <span>
+                          {showPaymentsTable ? 'إخفاء' : 'عرض'} كشف تفصيلي بعمليات الوردية (
+                          {summary.payments?.length || 0} عملية)
+                        </span>
+                      </button>
+
+                      {showPaymentsTable && (
+                        <div className="pos-payments-audit-wrapper">
+                          <table className="pos-reconciliation-table">
+                            <thead>
+                              <tr>
+                                <th>الوقت</th>
+                                <th>رقم الفاتورة</th>
+                                <th>العميل</th>
+                                <th>وسيلة الدفع</th>
+                                <th>المبلغ</th>
+                                <th>المرجع / إيصال الفيزا</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {!summary.payments || summary.payments.length === 0 ? (
+                                <tr>
+                                  <td
+                                    colSpan={6}
+                                    style={{ textAlign: 'center', color: 'var(--muted)' }}
+                                  >
+                                    لا توجد مدفوعات مسجلة في هذه الوردية
+                                  </td>
+                                </tr>
+                              ) : (
+                                summary.payments.map((p, idx) => (
+                                  <tr key={idx}>
+                                    <td style={{ fontSize: '11.5px', color: 'var(--muted)' }}>
+                                      {p.created_at
+                                        ? new Date(p.created_at).toLocaleTimeString('ar-EG', {
+                                            hour: '2-digit',
+                                            minute: '2-digit',
+                                          })
+                                        : '—'}
+                                    </td>
+                                    <td>
+                                      <strong>#{p.document_number}</strong>
+                                    </td>
+                                    <td>{p.party_name || 'عميل نقدي'}</td>
+                                    <td>
+                                      <span
+                                        style={{
+                                          padding: '2px 6px',
+                                          borderRadius: '4px',
+                                          fontSize: '11px',
+                                          fontWeight: 700,
+                                          background:
+                                            p.method === 'CASH'
+                                              ? '#fef3c7'
+                                              : p.method === 'CARD'
+                                                ? '#dbeafe'
+                                                : p.method === 'BANK'
+                                                  ? '#dcfce7'
+                                                  : '#ede9fe',
+                                          color:
+                                            p.method === 'CASH'
+                                              ? '#92400e'
+                                              : p.method === 'CARD'
+                                                ? '#1e40af'
+                                                : p.method === 'BANK'
+                                                  ? '#15803d'
+                                                  : '#6b21a8',
+                                        }}
+                                      >
+                                        {p.method === 'CASH'
+                                          ? 'كاش'
+                                          : p.method === 'CARD'
+                                            ? 'فيزا'
+                                            : p.method === 'BANK'
+                                              ? 'إنستاباي'
+                                              : 'آجل'}
+                                      </span>
+                                    </td>
+                                    <td>
+                                      <b>{money(p.amount)} ج.م</b>
+                                    </td>
+                                    <td style={{ fontSize: '11.5px', color: 'var(--slate-600)' }}>
+                                      {p.reference || '—'}
+                                    </td>
+                                  </tr>
+                                ))
+                              )}
+                            </tbody>
+                          </table>
                         </div>
                       )}
                     </div>
 
-                    <Field label="النقدية المستلمة فعلياً بالخزنة (ج.م) *">
-                      <input
-                        type="number"
-                        step="any"
-                        min="0"
-                        required
-                        value={verifiedCash}
-                        onChange={(e) => setVerifiedCash(e.target.value)}
-                      />
-                    </Field>
-
-                    {/* Live Difference Badge */}
-                    <div
-                      className={
-                        'pos-diff-banner ' +
-                        (differenceCents === 0
-                          ? 'match'
-                          : differenceCents < 0
-                            ? 'deficit'
-                            : 'surplus')
-                      }
-                    >
-                      {differenceCents === 0 ? (
-                        <>
-                          <CheckCircle2 size={18} />
-                          <span>النقدية مطابقة تماماً (الفارق: 0.00 ج.م)</span>
-                        </>
-                      ) : differenceCents < 0 ? (
-                        <>
-                          <AlertCircle size={18} />
-                          <span>
-                            عجز نقدي في الدرج: <b>{money(Math.abs(differenceCents))} ج.م</b>
-                          </span>
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles size={18} />
-                          <span>
-                            توجد زيادة في الدرج: <b>+{money(differenceCents)} ج.م</b>
-                          </span>
-                        </>
-                      )}
-                    </div>
-
-                    {differenceCents < 0 && (
+                    {/* Automatic Shortage Alert */}
+                    {cashDiffCents < 0 && (
                       <div className="pos-shortage-alert">
                         <AlertCircle size={18} />
                         <div>
                           <strong>تسجيل قيد عجز تلقائي:</strong>
                           <p style={{ margin: '2px 0 0', fontSize: '12px' }}>
                             سيتم تلقائياً إنشاء قيد مصروف تشغيلي بقيمة (
-                            {money(Math.abs(differenceCents))} ج.م) في تصنيف «عجز نقدية نقطة بيع»
-                            لضبط الخزنة وحساب الأرباح والخسائر.
+                            {money(Math.abs(cashDiffCents))} ج.م) في تصنيف «عجز نقدية نقطة بيع» لضبط
+                            الخزنة وحساب الأرباح والخسائر.
                           </p>
                         </div>
                       </div>
                     )}
 
-                    <Field label="ملاحظات مراجعة الخزنة">
+                    <Field label="ملاحظات مراجعة واعتماد الخزنة">
                       <input
                         type="text"
                         value={reviewNotes}
                         onChange={(e) => setReviewNotes(e.target.value)}
-                        placeholder="ملاحظات مسؤول الخزنة بشأن المطابقة..."
+                        placeholder="ملاحظات المحاسب المسؤول بشأن مطابقة الوردية والمستندات..."
                       />
                     </Field>
 
-                    <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
                       <Button type="submit" busy={busy}>
                         <CheckCircle2 size={16} /> اعتماد إغلاق الوردية وترحيل القيود
                       </Button>
@@ -1532,9 +2302,17 @@ function ShiftHandoverSlipModal({
   cashierName: string;
   onClose: () => void;
 }) {
-  const declaredCents =
+  const declaredCash =
     shift.cashier_declared_cash ?? summary.cashier_declared_cash ?? summary.expected_cash;
-  const diffCents = declaredCents - summary.expected_cash;
+  const cashDiff = declaredCash - summary.expected_cash;
+
+  const declaredCard =
+    shift.cashier_declared_card ?? summary.cashier_declared_card ?? summary.expected_card;
+  const cardDiff = declaredCard - summary.expected_card;
+
+  const declaredBank =
+    shift.cashier_declared_bank ?? summary.cashier_declared_bank ?? summary.expected_bank;
+  const bankDiff = declaredBank - summary.expected_bank;
 
   const openedDateStr = shift.opened_at
     ? new Date(shift.opened_at).toLocaleTimeString('ar-EG', {
@@ -1548,7 +2326,7 @@ function ShiftHandoverSlipModal({
   });
 
   return (
-    <Modal title="سند تسليم وردية كاشير للخزنة" onClose={onClose}>
+    <Modal title="سند تسليم وردية كاشير للخزنة (Z-Report)" onClose={onClose}>
       <div className="modal-body pos-receipt-wrapper">
         <div className="thermal-receipt" id="printable-pos-receipt">
           {/* Receipt Top Brand Header */}
@@ -1557,7 +2335,7 @@ function ShiftHandoverSlipModal({
             <h3 className="receipt-company-title">{companyName}</h3>
             <p className="receipt-branch-name">فرع: {branchName}</p>
             <div className="receipt-title-box">
-              <span>محضر تسليم وإغلاق وردية كاشير</span>
+              <span>محضر تسليم وتقفيل وردية كاشير (Z-Report)</span>
             </div>
             <div className="receipt-cut-line" />
             <div className="receipt-meta-grid">
@@ -1583,9 +2361,9 @@ function ShiftHandoverSlipModal({
             <div className="receipt-cut-line" />
           </div>
 
-          {/* Cash Summary Breakdown */}
+          {/* Multi-Tender Breakdown */}
           <div className="receipt-totals">
-            <div className="receipt-section-title">حركة النقدية بالدرج</div>
+            <div className="receipt-section-title">1. مطابقة نقدية الدرج (كاش)</div>
             <div className="receipt-row">
               <span>الرصيد الافتتاحي (العهدة):</span>
               <span className="num">{money(summary.opening_cash)} ج.م</span>
@@ -1602,48 +2380,141 @@ function ShiftHandoverSlipModal({
               <span>مسحوبات ومصروفات (درج):</span>
               <span className="num text-red">-{money(summary.cash_out)} ج.م</span>
             </div>
-
-            <div className="receipt-cut-line" />
-
             <div className="receipt-row grand-total-row">
               <span>النقدية المتوقعة بالدرج:</span>
               <span className="num total-amount">{money(summary.expected_cash)} ج.م</span>
             </div>
-
             <div className="receipt-row grand-total-row" style={{ color: '#1e40af' }}>
-              <span>النقدية الفعلية المسلّمة:</span>
-              <span className="num total-amount">{money(declaredCents)} ج.م</span>
+              <span>النقدية المسلّمة فعلياً:</span>
+              <span className="num total-amount">{money(declaredCash)} ج.م</span>
+            </div>
+            <div className="receipt-row">
+              <span>فارق النقدية:</span>
+              <span
+                className="num font-semibold"
+                style={{
+                  color: cashDiff === 0 ? '#15803d' : cashDiff < 0 ? '#b91c1c' : '#1d4ed8',
+                }}
+              >
+                {cashDiff === 0
+                  ? 'مطابق (0.00)'
+                  : cashDiff < 0
+                    ? `عجز: -${money(Math.abs(cashDiff))} ج.م`
+                    : `زيادة: +${money(cashDiff)} ج.م`}
+              </span>
             </div>
 
-            <div className="receipt-diff-box">
+            <div className="receipt-cut-line" />
+
+            <div className="receipt-section-title">2. مبيعات البطاقات وماكينة الفيزا</div>
+            <div className="receipt-row">
+              <span>المبيعات المسجلة بالنظام:</span>
+              <span className="num">{money(summary.expected_card)} ج.م</span>
+            </div>
+            <div className="receipt-row">
+              <span>إجمالي شريط التسوية (Batch):</span>
+              <span className="num font-semibold">{money(declaredCard)} ج.م</span>
+            </div>
+            {shift.terminal_batch_number && (
               <div className="receipt-row">
-                <span>حالة المطابقة المالية:</span>
+                <span>رقم تسوية الماكينة:</span>
+                <span className="num bold">{shift.terminal_batch_number}</span>
+              </div>
+            )}
+            <div className="receipt-row">
+              <span>عدد إيصالات البطاقات المرفقة:</span>
+              <span className="num">{shift.card_slips_count || 0} إيصال</span>
+            </div>
+            <div className="receipt-row">
+              <span>فارق تسوية البطاقات:</span>
+              <span
+                className="num font-semibold"
+                style={{
+                  color: cardDiff === 0 ? '#15803d' : cardDiff < 0 ? '#b91c1c' : '#1d4ed8',
+                }}
+              >
+                {cardDiff === 0
+                  ? 'مطابق'
+                  : cardDiff < 0
+                    ? `عجز: -${money(Math.abs(cardDiff))} ج.م`
+                    : `زيادة: +${money(cardDiff)} ج.م`}
+              </span>
+            </div>
+
+            <div className="receipt-cut-line" />
+
+            <div className="receipt-section-title">3. إنستاباي والتحويلات البنكية</div>
+            <div className="receipt-row">
+              <span>المسجل بالنظام:</span>
+              <span className="num">{money(summary.expected_bank)} ج.م</span>
+            </div>
+            <div className="receipt-row">
+              <span>المحصل الفعلي المسلّم:</span>
+              <span className="num font-semibold">{money(declaredBank)} ج.م</span>
+            </div>
+            <div className="receipt-row">
+              <span>عدد عمليات التحويل:</span>
+              <span className="num">{shift.bank_transfers_count || 0} عملية</span>
+            </div>
+            <div className="receipt-row">
+              <span>فارق إنستاباي:</span>
+              <span
+                className="num font-semibold"
+                style={{
+                  color: bankDiff === 0 ? '#15803d' : bankDiff < 0 ? '#b91c1c' : '#1d4ed8',
+                }}
+              >
+                {bankDiff === 0
+                  ? 'مطابق'
+                  : bankDiff < 0
+                    ? `عجز: -${money(Math.abs(bankDiff))} ج.م`
+                    : `زيادة: +${money(bankDiff)} ج.م`}
+              </span>
+            </div>
+
+            <div className="receipt-cut-line" />
+
+            <div className="receipt-row grand-total-highlight">
+              <span className="label">إجمالي إيراد مبيعات الوردية:</span>
+              <span className="num value">{money(summary.total_sales)} ج.م</span>
+            </div>
+
+            {/* Proof Documents & Envelope */}
+            <div className="receipt-diff-box" style={{ marginTop: '10px' }}>
+              <div className="receipt-row">
+                <span>رقم مظروف الخزنة الأمني:</span>
+                <span className="font-semibold num">
+                  {shift.safe_envelope_number || 'غير مسجل'}
+                </span>
+              </div>
+              <div className="receipt-row">
+                <span>حالة الاعتماد بالخزينة:</span>
                 <span
-                  className="diff-badge"
                   style={{
-                    color: diffCents === 0 ? '#15803d' : diffCents < 0 ? '#b91c1c' : '#1d4ed8',
+                    color: shift.status === 'CLOSED' ? '#15803d' : '#b45309',
                     fontWeight: 700,
                   }}
                 >
-                  {diffCents === 0
-                    ? 'مطابقة تامة (بدون عجز)'
-                    : diffCents < 0
-                      ? `عجز: -${money(Math.abs(diffCents))} ج.م`
-                      : `زيادة: +${money(diffCents)} ج.م`}
+                  {shift.status === 'CLOSED' ? 'معتمد ومقفل بالخزنة' : 'مسلّم - بانتظار الاعتماد'}
                 </span>
               </div>
             </div>
 
             {shift.notes && (
               <div className="receipt-notes-box">
-                <b>ملاحظات الوردية:</b> {shift.notes}
+                <b>ملاحظات الكاشير:</b> {shift.notes}
+              </div>
+            )}
+            {shift.review_notes && (
+              <div className="receipt-notes-box" style={{ background: '#f0fdf4' }}>
+                <b>ملاحظات اعتماد الخزنة:</b> {shift.review_notes}
               </div>
             )}
           </div>
 
           <div className="receipt-cut-line" />
 
-          {/* Signatures */}
+          {/* Dual Signatures */}
           <div className="receipt-signatures-container">
             <div className="signature-box">
               <span className="sign-title">توقيع الكاشير المسلّم</span>
@@ -1664,15 +2535,15 @@ function ShiftHandoverSlipModal({
 
           <div className="receipt-footer">
             <div className="receipt-cut-line" />
-            <p>سند تسليم معتمد بالنظام</p>
-            <small>نظام أوركيفا السحابي لإدارة نقاط البيع والخزينة</small>
+            <p>سند تقفيل وردية Z-Report معتمد بالنظام</p>
+            <small>نظام أوركيفا السحابي لإدارة نقاط البيع والمطابقة المالية</small>
           </div>
         </div>
       </div>
 
       <div className="modal-footer">
         <Button onClick={triggerThermalPrint}>
-          <Printer size={16} /> طباعة سند التسليم (Ctrl+P)
+          <Printer size={16} /> طباعة سند التسليم والـ Z-Report (Ctrl+P)
         </Button>
         <Button variant="secondary" onClick={onClose}>
           إغلاق
@@ -1856,9 +2727,28 @@ function CheckoutModal({
   const toast = useToast();
   const [method, setMethod] = useState<'CASH' | 'CARD' | 'BANK' | 'CREDIT'>('CASH');
   const [amountTendered, setAmountTendered] = useState((totalCents / 100).toFixed(2));
+  const [cardRef, setCardRef] = useState('');
+  const [bankRef, setBankRef] = useState('');
+
+  // Split Payment Mode
+  const [splitMode, setSplitMode] = useState(false);
+  const [splitCash, setSplitCash] = useState((totalCents / 100).toFixed(2));
+  const [splitCard, setSplitCard] = useState('0');
+  const [splitCardRef, setSplitCardRef] = useState('');
+  const [splitBank, setSplitBank] = useState('0');
+  const [splitBankRef, setSplitBankRef] = useState('');
+  const [splitCredit, setSplitCredit] = useState('0');
 
   const tenderedCents = Math.round(parseFloat(amountTendered || '0') * 100);
   const changeDueCents = Math.max(0, tenderedCents - totalCents);
+
+  // Split cents
+  const splitCashCents = Math.round(parseFloat(splitCash || '0') * 100);
+  const splitCardCents = Math.round(parseFloat(splitCard || '0') * 100);
+  const splitBankCents = Math.round(parseFloat(splitBank || '0') * 100);
+  const splitCreditCents = Math.round(parseFloat(splitCredit || '0') * 100);
+  const splitAllocatedCents = splitCashCents + splitCardCents + splitBankCents + splitCreditCents;
+  const splitRemainingCents = totalCents - splitAllocatedCents;
 
   const quickCashOptions = [
     { label: 'المبلغ بالضبط', val: totalCents },
@@ -1871,6 +2761,73 @@ function CheckoutModal({
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
+
+    if (splitMode) {
+      if (splitAllocatedCents !== totalCents) {
+        toast(`يجب توزيع كامل مبلغ الفاتورة. المتبقي للتوزيع: ${money(splitRemainingCents)} ج.م`);
+        return;
+      }
+      if (splitCreditCents > 0 && customer.id === 'walk-in-customer') {
+        toast('لا يمكن تسجيل جزء آجل لـ «عميل نقدي طائر». يرجى اختيار عميل مسجل.');
+        return;
+      }
+
+      const activeSplits = [
+        { method: 'CASH' as const, amount: splitCashCents },
+        {
+          method: 'CARD' as const,
+          amount: splitCardCents,
+          reference: splitCardRef.trim() || undefined,
+        },
+        {
+          method: 'BANK' as const,
+          amount: splitBankCents,
+          reference: splitBankRef.trim() || undefined,
+        },
+        { method: 'CREDIT' as const, amount: splitCreditCents },
+      ].filter((s) => s.amount > 0);
+
+      const nonCreditSum = splitCashCents + splitCardCents + splitBankCents;
+
+      void act(async () => {
+        const res = await api<CheckoutResult>('/pos/checkout', 'POST', {
+          branch_id: branchId,
+          shift_id: shiftId,
+          party_id: customer.id,
+          date: new Date().toISOString().slice(0, 10),
+          discount: discountCents,
+          lines: cart.map((c) => ({
+            product_id: c.product.id,
+            quantity: c.quantity,
+            unit_price: c.unit_price,
+          })),
+          payment: {
+            method: 'SPLIT',
+            amount_paid: nonCreditSum,
+            amount_tendered: nonCreditSum,
+          },
+          split_payments: activeSplits,
+        });
+
+        const finalRes: CheckoutResult = {
+          ...res,
+          lines:
+            res.lines && res.lines.length > 0
+              ? res.lines
+              : cart.map((c) => ({
+                  name: c.product.name,
+                  sku: c.product.sku,
+                  quantity: c.quantity,
+                  unit_price: c.unit_price,
+                  total: c.quantity * c.unit_price,
+                })),
+        };
+        playSound(true);
+        onSuccess(finalRes);
+      });
+      return;
+    }
+
     if (method === 'CASH' && tenderedCents < totalCents) {
       toast('المبلغ المستلم من العميل أقل من إجمالي الفاتورة');
       return;
@@ -1896,6 +2853,12 @@ function CheckoutModal({
           method,
           amount_paid: method === 'CREDIT' ? 0 : totalCents,
           amount_tendered: method === 'CASH' ? tenderedCents : totalCents,
+          reference:
+            method === 'CARD'
+              ? cardRef.trim() || undefined
+              : method === 'BANK'
+                ? bankRef.trim() || undefined
+                : undefined,
         },
       });
       const finalRes: CheckoutResult = {
@@ -1923,106 +2886,280 @@ function CheckoutModal({
       onClose={onClose}
     >
       <form onSubmit={handleSubmit}>
-        <div className="modal-body form-grid">
+        <div className="modal-body form-grid" style={{ maxHeight: '74vh', overflowY: 'auto' }}>
           {/* Total Display Banner */}
           <div className="pos-checkout-amount-banner">
-            <span>المبلغ المستحق:</span>
-            <strong>{money(totalCents)} ج.م</strong>
-          </div>
-
-          {/* Payment Method Selector */}
-          <div className="pos-payment-methods">
-            <button
-              type="button"
-              className={'pos-pay-method-btn ' + (method === 'CASH' ? 'active' : '')}
-              onClick={() => {
-                setMethod('CASH');
-                setAmountTendered((totalCents / 100).toFixed(2));
-              }}
-            >
-              <Coins size={20} />
-              <span>نقداً (كاش)</span>
-            </button>
+            <div>
+              <span>المبلغ المستحق:</span>
+              <strong style={{ display: 'block' }}>{money(totalCents)} ج.م</strong>
+            </div>
 
             <button
               type="button"
-              className={'pos-pay-method-btn ' + (method === 'CARD' ? 'active' : '')}
-              onClick={() => {
-                setMethod('CARD');
-                setAmountTendered((totalCents / 100).toFixed(2));
+              onClick={() => setSplitMode(!splitMode)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 14px',
+                background: splitMode ? '#4f46e5' : '#ffffff',
+                color: splitMode ? '#ffffff' : '#4f46e5',
+                border: '1px solid #4f46e5',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontWeight: 700,
+                fontSize: '13px',
               }}
             >
-              <CreditCard size={20} />
-              <span>بطاقة بنكية / فيزا</span>
-            </button>
-
-            <button
-              type="button"
-              className={'pos-pay-method-btn ' + (method === 'BANK' ? 'active' : '')}
-              onClick={() => {
-                setMethod('BANK');
-                setAmountTendered((totalCents / 100).toFixed(2));
-              }}
-            >
-              <Building size={20} />
-              <span>محفظة / إنستاباي</span>
-            </button>
-
-            <button
-              type="button"
-              className={'pos-pay-method-btn ' + (method === 'CREDIT' ? 'active' : '')}
-              onClick={() => {
-                setMethod('CREDIT');
-                setAmountTendered('0');
-              }}
-            >
-              <Clock size={20} />
-              <span>آجل (على الحساب)</span>
+              {splitMode ? '✓ إلغاء الدفع المجزأ' : '⚡ دفع مجزأ (أكثر من وسيلة)'}
             </button>
           </div>
 
-          {/* Cash Tender & Quick Buttons */}
-          {method === 'CASH' && (
-            <div className="pos-cash-tender-section">
-              <Field label="المبلغ المستلم من العميل (ج.م) *">
+          {/* SPLIT PAYMENT MODE */}
+          {splitMode ? (
+            <div className="pos-split-mode-box">
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}
+              >
+                <strong style={{ fontSize: '13.5px', color: 'var(--slate-800)' }}>
+                  توزيع مبلغ الفاتورة على وسائل الدفع:
+                </strong>
+                <span
+                  className={
+                    'pos-split-status-bar ' + (splitRemainingCents === 0 ? 'matched' : 'unmatched')
+                  }
+                  style={{ padding: '4px 10px', fontSize: '12.5px' }}
+                >
+                  {splitRemainingCents === 0 ? (
+                    <span>✓ المبلغ موزع بالكامل</span>
+                  ) : splitRemainingCents > 0 ? (
+                    <span>متبقي للتوزيع: {money(splitRemainingCents)} ج.م</span>
+                  ) : (
+                    <span>زيادة في التوزيع: {money(Math.abs(splitRemainingCents))} ج.م</span>
+                  )}
+                </span>
+              </div>
+
+              {/* Cash Split Row */}
+              <div className="pos-split-row">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
+                  <Coins size={16} style={{ color: '#d97706' }} />
+                  <span>نقداً (كاش):</span>
+                </div>
                 <input
                   type="number"
                   step="any"
-                  min={totalCents / 100}
-                  required
-                  autoFocus
-                  value={amountTendered}
-                  onChange={(e) => setAmountTendered(e.target.value)}
+                  min="0"
+                  value={splitCash}
+                  onChange={(e) => setSplitCash(e.target.value)}
+                  placeholder="المبلغ كاش"
+                  style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
                 />
-              </Field>
-
-              <div className="pos-quick-cash-chips">
-                {quickCashOptions.map((opt) => (
-                  <button
-                    key={opt.label}
-                    type="button"
-                    className="pos-quick-cash-chip"
-                    onClick={() => setAmountTendered((opt.val / 100).toFixed(2))}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
+                <span style={{ fontSize: '12px', color: 'var(--slate-500)' }}>من الدرج</span>
               </div>
 
-              {/* Change Due Card */}
-              <div className="pos-change-card">
-                <span>الباقي للعميل:</span>
-                <strong className={changeDueCents > 0 ? 'has-change' : ''}>
-                  {money(changeDueCents)} ج.م
-                </strong>
+              {/* Card Split Row */}
+              <div className="pos-split-row">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
+                  <CreditCard size={16} style={{ color: '#2563eb' }} />
+                  <span>بطاقة / فيزا:</span>
+                </div>
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  value={splitCard}
+                  onChange={(e) => setSplitCard(e.target.value)}
+                  placeholder="المبلغ بالفيزا"
+                  style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                />
+                <input
+                  type="text"
+                  placeholder="رقم إيصال الماكينة (اختياري)"
+                  value={splitCardRef}
+                  onChange={(e) => setSplitCardRef(e.target.value)}
+                  style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                />
+              </div>
+
+              {/* InstaPay Split Row */}
+              <div className="pos-split-row">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
+                  <Building size={16} style={{ color: '#059669' }} />
+                  <span>إنستاباي / محفظة:</span>
+                </div>
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  value={splitBank}
+                  onChange={(e) => setSplitBank(e.target.value)}
+                  placeholder="المبلغ عبر إنستاباي"
+                  style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                />
+                <input
+                  type="text"
+                  placeholder="رقم العملية المرجعي / IPN"
+                  value={splitBankRef}
+                  onChange={(e) => setSplitBankRef(e.target.value)}
+                  style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                />
+              </div>
+
+              {/* Credit Split Row */}
+              <div className="pos-split-row">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
+                  <Clock size={16} style={{ color: '#7c3aed' }} />
+                  <span>آجل (على الحساب):</span>
+                </div>
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  disabled={customer.id === 'walk-in-customer'}
+                  value={splitCredit}
+                  onChange={(e) => setSplitCredit(e.target.value)}
+                  placeholder="المبلغ الآجل"
+                  style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                />
+                <span style={{ fontSize: '12px', color: 'var(--slate-500)' }}>
+                  {customer.id === 'walk-in-customer'
+                    ? 'يتطلب اختيار عميل مسجل'
+                    : `على حساب: ${customer.name}`}
+                </span>
               </div>
             </div>
-          )}
+          ) : (
+            <>
+              {/* Standard Single Payment Method Selector */}
+              <div className="pos-payment-methods">
+                <button
+                  type="button"
+                  className={'pos-pay-method-btn ' + (method === 'CASH' ? 'active' : '')}
+                  onClick={() => {
+                    setMethod('CASH');
+                    setAmountTendered((totalCents / 100).toFixed(2));
+                  }}
+                >
+                  <Coins size={20} />
+                  <span>نقداً (كاش)</span>
+                </button>
 
-          {method === 'CREDIT' && customer.id === 'walk-in-customer' && (
-            <div className="warning-banner">
-              ⚠️ لا يمكن إتمام عملية بيع آجل لـ «عميل نقدي طائر». يرجى اختيار عميل مسجل أولاً.
-            </div>
+                <button
+                  type="button"
+                  className={'pos-pay-method-btn ' + (method === 'CARD' ? 'active' : '')}
+                  onClick={() => {
+                    setMethod('CARD');
+                    setAmountTendered((totalCents / 100).toFixed(2));
+                  }}
+                >
+                  <CreditCard size={20} />
+                  <span>بطاقة بنكية / فيزا</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={'pos-pay-method-btn ' + (method === 'BANK' ? 'active' : '')}
+                  onClick={() => {
+                    setMethod('BANK');
+                    setAmountTendered((totalCents / 100).toFixed(2));
+                  }}
+                >
+                  <Building size={20} />
+                  <span>محفظة / إنستاباي</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={'pos-pay-method-btn ' + (method === 'CREDIT' ? 'active' : '')}
+                  onClick={() => {
+                    setMethod('CREDIT');
+                    setAmountTendered('0');
+                  }}
+                >
+                  <Clock size={20} />
+                  <span>آجل (على الحساب)</span>
+                </button>
+              </div>
+
+              {/* Cash Tender & Quick Buttons */}
+              {method === 'CASH' && (
+                <div className="pos-cash-tender-section">
+                  <Field label="المبلغ المستلم من العميل (ج.م) *">
+                    <input
+                      type="number"
+                      step="any"
+                      min={totalCents / 100}
+                      required
+                      autoFocus
+                      value={amountTendered}
+                      onChange={(e) => setAmountTendered(e.target.value)}
+                    />
+                  </Field>
+
+                  <div className="pos-quick-cash-chips">
+                    {quickCashOptions.map((opt) => (
+                      <button
+                        key={opt.label}
+                        type="button"
+                        className="pos-quick-cash-chip"
+                        onClick={() => setAmountTendered((opt.val / 100).toFixed(2))}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Change Due Card */}
+                  <div className="pos-change-card">
+                    <span>الباقي للعميل:</span>
+                    <strong className={changeDueCents > 0 ? 'has-change' : ''}>
+                      {money(changeDueCents)} ج.م
+                    </strong>
+                  </div>
+                </div>
+              )}
+
+              {/* Card Reference Input */}
+              {method === 'CARD' && (
+                <div className="pos-tender-section-box">
+                  <Field label="رقم إيصال ماكينة الدفع / الفيزا (Slip # / RRN) - لمطابقة الوردية">
+                    <input
+                      type="text"
+                      autoFocus
+                      placeholder="مثال: SLIP-4921 / 003829"
+                      value={cardRef}
+                      onChange={(e) => setCardRef(e.target.value)}
+                    />
+                  </Field>
+                </div>
+              )}
+
+              {/* InstaPay Reference Input */}
+              {method === 'BANK' && (
+                <div className="pos-tender-section-box">
+                  <Field label="رقم العملية المرجعي / إنستاباي (InstaPay Ref #) - إثبات التحويل">
+                    <input
+                      type="text"
+                      autoFocus
+                      placeholder="مثال: IPN-89214792 / 123456"
+                      value={bankRef}
+                      onChange={(e) => setBankRef(e.target.value)}
+                    />
+                  </Field>
+                </div>
+              )}
+
+              {method === 'CREDIT' && customer.id === 'walk-in-customer' && (
+                <div className="warning-banner">
+                  ⚠️ لا يمكن إتمام عملية بيع آجل لـ «عميل نقدي طائر». يرجى اختيار عميل مسجل أولاً.
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -2030,7 +3167,11 @@ function CheckoutModal({
           <Button
             type="submit"
             busy={busy}
-            disabled={method === 'CREDIT' && customer.id === 'walk-in-customer'}
+            disabled={
+              splitMode
+                ? splitRemainingCents !== 0
+                : method === 'CREDIT' && customer.id === 'walk-in-customer'
+            }
           >
             تأكيد الدفع وطباعة الإيصال
           </Button>
@@ -2081,8 +3222,10 @@ function ThermalReceiptModal({
       : result.payment.method === 'CARD'
         ? 'بطاقة دفع إلكتروني (شبكة / فيزا)'
         : result.payment.method === 'BANK'
-          ? 'محفظة إلكترونية / تحويل'
-          : 'حساب آجل (ذمم مدينة)';
+          ? 'محفظة إلكترونية / إنستاباي'
+          : result.payment.method === 'SPLIT'
+            ? 'دفع مجزأ (متعدد الوسائل)'
+            : 'حساب آجل (ذمم مدينة)';
 
   return (
     <Modal title="إيصال استلام نقطة البيع (POS)" onClose={onClose}>
@@ -2191,6 +3334,42 @@ function ThermalReceiptModal({
               <span>طريقة الدفع:</span>
               <span className="font-semibold">{paymentMethodLabel}</span>
             </div>
+
+            {result.payment.reference && (
+              <div className="receipt-row">
+                <span>رقم إيصال / مرجع الدفع:</span>
+                <span className="num font-semibold">{result.payment.reference}</span>
+              </div>
+            )}
+
+            {/* Split payments breakdown on receipt */}
+            {result.payment.splits && result.payment.splits.length > 0 && (
+              <div style={{ margin: '4px 0', padding: '4px 0', borderTop: '1px dashed #e2e8f0' }}>
+                <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>
+                  تفاصيل الدفع المجزأ:
+                </span>
+                {result.payment.splits.map((s, idx) => (
+                  <div
+                    key={idx}
+                    className="receipt-row"
+                    style={{ fontSize: '11px', color: '#334155' }}
+                  >
+                    <span>
+                      •{' '}
+                      {s.method === 'CASH'
+                        ? 'كاش'
+                        : s.method === 'CARD'
+                          ? 'فيزا'
+                          : s.method === 'BANK'
+                            ? 'إنستاباي'
+                            : 'آجل'}
+                      {s.reference ? ` (مرجع: ${s.reference})` : ''}:
+                    </span>
+                    <span className="num">{money(s.amount)} ج.م</span>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {result.payment.method === 'CASH' && (
               <>

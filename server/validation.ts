@@ -367,16 +367,44 @@ export const posCashMovementSchema = z
 
 export const posShiftSubmitSchema = z
   .object({
-    declared_cash: money.refine((n) => n >= 0, 'المبلغ الفعلي لا يمكن أن يكون سالباً'),
+    declared_cash: money.refine((n) => n >= 0, 'المبلغ الفعلي للنقدية لا يمكن أن يكون سالباً'),
+    declared_card: money
+      .refine((n) => n >= 0, 'المبلغ الفعلي للبطاقات لا يمكن أن يكون سالباً')
+      .optional(),
+    declared_bank: money
+      .refine((n) => n >= 0, 'المبلغ الفعلي لإنستاباي لا يمكن أن يكون سالباً')
+      .optional(),
+    terminal_batch_number: optionalText(100),
+    card_slips_count: z.number().int().min(0).optional().default(0),
+    bank_transfers_count: z.number().int().min(0).optional().default(0),
+    safe_envelope_number: optionalText(100),
+    proof_documents: optionalText(1000),
     notes: optionalText(500),
   })
   .strict();
 
 export const posShiftApproveSchema = z
   .object({
-    closing_cash: money.refine((n) => n >= 0, 'المبلغ المعتمد لا يمكن أن يكون سالباً').optional(),
-    verified_cash: money.refine((n) => n >= 0, 'المبلغ المعتمد لا يمكن أن يكون سالباً').optional(),
+    closing_cash: money
+      .refine((n) => n >= 0, 'المبلغ المعتمد للنقدية لا يمكن أن يكون سالباً')
+      .optional(),
+    verified_cash: money
+      .refine((n) => n >= 0, 'المبلغ المعتمد للنقدية لا يمكن أن يكون سالباً')
+      .optional(),
+    closing_card: money
+      .refine((n) => n >= 0, 'المبلغ المعتمد للبطاقات لا يمكن أن يكون سالباً')
+      .optional(),
+    verified_card: money
+      .refine((n) => n >= 0, 'المبلغ المعتمد للبطاقات لا يمكن أن يكون سالباً')
+      .optional(),
+    closing_bank: money
+      .refine((n) => n >= 0, 'المبلغ المعتمد لإنستاباي لا يمكن أن يكون سالباً')
+      .optional(),
+    verified_bank: money
+      .refine((n) => n >= 0, 'المبلغ المعتمد لإنستاباي لا يمكن أن يكون سالباً')
+      .optional(),
     review_notes: optionalText(500),
+    verification_checklist: optionalText(2000),
   })
   .strict()
   .transform((data, ctx) => {
@@ -385,21 +413,31 @@ export const posShiftApproveSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['closing_cash'],
-        message: 'المبلغ المعتمد مطلوب',
+        message: 'المبلغ المعتمد للنقدية مطلوب',
       });
       return z.NEVER;
     }
     return {
       closing_cash,
+      closing_card: data.closing_card ?? data.verified_card,
+      closing_bank: data.closing_bank ?? data.verified_bank,
       review_notes: data.review_notes,
+      verification_checklist: data.verification_checklist,
     };
   });
 
 export const posShiftCloseSchema = z
   .object({
     closing_cash: money.refine((n) => n >= 0, 'المبلغ النهائي لا يمكن أن يكون سالباً'),
+    closing_card: money
+      .refine((n) => n >= 0, 'المبلغ النهائي للبطاقات لا يمكن أن يكون سالباً')
+      .optional(),
+    closing_bank: money
+      .refine((n) => n >= 0, 'المبلغ النهائي لإنستاباي لا يمكن أن يكون سالباً')
+      .optional(),
     notes: optionalText(500),
     review_notes: optionalText(500),
+    verification_checklist: optionalText(2000),
   })
   .strict();
 
@@ -420,12 +458,28 @@ export const posCheckoutSchema = z
         }),
       )
       .min(1, 'يجب إضافة صنف واحد على الأقل في السلة'),
-    payment: z.object({
-      method: z.enum(['CASH', 'BANK', 'CARD', 'CREDIT']),
-      amount_tendered: money.refine((n) => n >= 0),
-      amount_paid: money.refine((n) => n >= 0),
-      reference: optionalText(100),
-      account_id: id().nullable().optional(),
-    }),
+    payment: z
+      .object({
+        method: z.enum(['CASH', 'BANK', 'CARD', 'CREDIT']),
+        amount_tendered: money.refine((n) => n >= 0),
+        amount_paid: money.refine((n) => n >= 0),
+        reference: optionalText(100),
+        account_id: id().nullable().optional(),
+      })
+      .default({
+        method: 'CASH',
+        amount_tendered: 0,
+        amount_paid: 0,
+      }),
+    split_payments: z
+      .array(
+        z.object({
+          method: z.enum(['CASH', 'BANK', 'CARD']),
+          amount: money.refine((n) => n > 0),
+          reference: optionalText(100),
+          account_id: id().nullable().optional(),
+        }),
+      )
+      .optional(),
   })
   .strict();

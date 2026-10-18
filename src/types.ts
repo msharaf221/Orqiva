@@ -60,6 +60,20 @@ export interface PosShift {
   closing_cash: number | null;
   difference: number;
   cashier_declared_cash?: number | null;
+  expected_card?: number;
+  expected_bank?: number;
+  cashier_declared_card?: number | null;
+  cashier_declared_bank?: number | null;
+  closing_card?: number | null;
+  closing_bank?: number | null;
+  card_difference?: number;
+  bank_difference?: number;
+  terminal_batch_number?: string;
+  card_slips_count?: number;
+  bank_transfers_count?: number;
+  safe_envelope_number?: string;
+  proof_documents?: string;
+  verification_checklist?: string;
   reviewed_by?: string | null;
   reviewer_name?: string | null;
   review_notes?: string;
@@ -81,6 +95,18 @@ export interface PosCashMovement {
   user_name?: string;
 }
 
+export interface PosShiftPaymentDetail {
+  id: string;
+  document_id: string;
+  document_number: string;
+  party_name: string;
+  amount: number;
+  method: string;
+  date: string;
+  reference: string;
+  created_at?: string;
+}
+
 export interface PosShiftSummary {
   shift: PosShift;
   cash_sales: number;
@@ -93,11 +119,26 @@ export interface PosShiftSummary {
   cash_out: number;
   opening_cash: number;
   expected_cash: number;
+  expected_card: number;
+  expected_bank: number;
   closing_cash: number | null;
+  closing_card: number | null;
+  closing_bank: number | null;
   difference: number;
+  card_difference: number;
+  bank_difference: number;
   cashier_declared_cash?: number | null;
+  cashier_declared_card?: number | null;
+  cashier_declared_bank?: number | null;
+  terminal_batch_number?: string;
+  card_slips_count?: number;
+  bank_transfers_count?: number;
+  safe_envelope_number?: string;
+  proof_documents?: string;
+  verification_checklist?: string;
   discrepancy_expense_id?: string | null;
   movements: PosCashMovement[];
+  payments: PosShiftPaymentDetail[];
 }
 
 export interface PosCartLine {
