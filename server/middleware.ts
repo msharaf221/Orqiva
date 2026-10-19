@@ -12,6 +12,10 @@ import type { Document, User } from '../src/types';
 export const tokenHash = (token: string): string =>
   createHash('sha256').update(token).digest('hex');
 
+/**
+ * Guard for administrator-only audit endpoints (e.g. cost history).
+ * Role ADMIN, the admin:all super permission, or a users:manage holder pass.
+ */
 export const admin = (req: Request, _res: Response, next: NextFunction): void => {
   if (
     req.user.role !== 'ADMIN' &&

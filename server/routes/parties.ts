@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { all, id, now, one, run, transaction } from '../db';
 import { AppError, audit, requireRow } from '../service';
-import { admin } from '../middleware';
+import { requirePermission } from '../rbac';
 import { partySchema } from '../validation';
 import type { Party } from '../../src/types';
 
@@ -26,7 +26,8 @@ partiesRouter.get('/', (req, res) => {
   );
 });
 
-partiesRouter.post('/', (req, res) => {
+// فتح حسابات العملاء متاح لحاملي parties:manage، أما الموردون فيبقون للمدير فقط.
+partiesRouter.post('/', requirePermission('parties:manage'), (req, res) => {
   const p = partySchema.parse(req.body);
   if (p.type === 'SUPPLIER' && req.user.role !== 'ADMIN') {
     throw new AppError(403, 'إدارة الموردين متاحة للمدير فقط');
@@ -51,7 +52,7 @@ partiesRouter.post('/', (req, res) => {
   res.status(201).json(one('SELECT * FROM parties WHERE id=?', partyId));
 });
 
-partiesRouter.put('/:id', (req, res) => {
+partiesRouter.put('/:id', requirePermission('parties:manage'), (req, res) => {
   const partyId = String(req.params.id);
   const p = partySchema.parse(req.body);
   const existing = requireRow(one<Party>('SELECT * FROM parties WHERE id=?', partyId));
@@ -75,7 +76,7 @@ partiesRouter.put('/:id', (req, res) => {
   res.json(one('SELECT * FROM parties WHERE id=?', partyId));
 });
 
-partiesRouter.patch('/:id/active', admin, (req, res) => {
+partiesRouter.patch('/:id/active', requirePermission('parties:manage'), (req, res) => {
   const entityId = String(req.params.id);
   const { active } = z.object({ active: z.boolean() }).strict().parse(req.body);
   requireRow(one('SELECT id FROM parties WHERE id=?', entityId));

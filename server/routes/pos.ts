@@ -36,13 +36,7 @@ posRouter.post(
 
 posRouter.get(
   '/shifts/:id/summary',
-  requirePermission(
-    'pos:access',
-    'pos:shift_close',
-    'finance:view',
-    'finance:accounts',
-    'admin:all',
-  ),
+  requirePermission('pos:access', 'pos:shift_close', 'finance:view', 'finance:accounts'),
   (req, res) => {
     res.json(getShiftSummary(String(req.params.id), req.user));
   },
@@ -52,13 +46,9 @@ posRouter.post('/shifts/:id/submit', requirePermission('pos:access'), (req, res)
   res.json(submitShiftClosing(String(req.params.id), req.body, req.user));
 });
 
-posRouter.post(
-  '/shifts/:id/approve',
-  requirePermission('pos:shift_close', 'admin:all'),
-  (req, res) => {
-    res.json(approveShiftClosing(String(req.params.id), req.body, req.user));
-  },
-);
+posRouter.post('/shifts/:id/approve', requirePermission('pos:shift_close'), (req, res) => {
+  res.json(approveShiftClosing(String(req.params.id), req.body, req.user));
+});
 
 posRouter.post(
   '/shifts/:id/close',
@@ -68,24 +58,14 @@ posRouter.post(
   },
 );
 
-posRouter.get(
-  '/shifts/pending-review',
-  requirePermission('pos:shift_close', 'admin:all'),
-  (req, res) => {
-    const scope = scopeFor(req.user, req.query.branch_id);
-    res.json(listPendingReviewShifts(scope));
-  },
-);
+posRouter.get('/shifts/pending-review', requirePermission('pos:shift_close'), (req, res) => {
+  const scope = scopeFor(req.user, req.query.branch_id);
+  res.json(listPendingReviewShifts(scope));
+});
 
 posRouter.get(
   '/shifts',
-  requirePermission(
-    'pos:access',
-    'pos:shift_close',
-    'finance:view',
-    'finance:accounts',
-    'admin:all',
-  ),
+  requirePermission('pos:access', 'pos:shift_close', 'finance:view', 'finance:accounts'),
   (req, res) => {
     const scope = scopeFor(req.user, req.query.branch_id);
     res.json(listShifts(scope, req.query.status ? String(req.query.status) : undefined));

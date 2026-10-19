@@ -11,37 +11,37 @@ export type Role =
   | 'STAFF'
   | (string & {});
 
+/**
+ * The single, canonical permission vocabulary — mirrors server/rbac.ts PERMISSIONS
+ * and the seeds in database/migrations. Legacy role aliases no longer exist.
+ */
 export type PermissionKey =
-  | 'sales:view'
-  | 'sales:create'
-  | 'sales:post'
-  | 'sales:cancel'
+  | 'admin:all'
   | 'pos:access'
   | 'pos:shift_open'
   | 'pos:shift_close'
   | 'pos:cash_movement'
   | 'pos:discount'
-  | 'purchases:view'
-  | 'purchases:create'
-  | 'purchases:post'
-  | 'purchases:cancel'
-  | 'products:view'
-  | 'products:manage'
+  | 'documents:view'
+  | 'documents:create_sale'
+  | 'documents:create_purchase'
+  | 'documents:post'
+  | 'documents:cancel'
   | 'inventory:view'
   | 'inventory:adjust'
+  | 'catalog:manage'
   | 'transfers:manage'
-  | 'customers:manage'
-  | 'suppliers:manage'
   | 'parties:view'
   | 'parties:manage'
-  | 'expenses:manage'
-  | 'payments:manage'
+  | 'finance:view'
+  | 'finance:payments'
+  | 'finance:expenses'
+  | 'finance:accounts'
   | 'reports:view'
-  | 'distributions:manage'
+  | 'reports:group_overview'
+  | 'distribution:manage'
   | 'branches:manage'
   | 'users:manage'
-  | 'company:manage'
-  | 'audit:view'
   | (string & {});
 
 export type PosShiftStatus = 'OPEN' | 'PENDING_REVIEW' | 'CLOSED';

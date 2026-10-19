@@ -59,27 +59,14 @@ export const PERMISSIONS: PermissionDef[] = [
   { id: 'users:manage', name: 'إدارة المستخدمين والأدوار والصلاحيات', group: 'الإدارة' },
 ];
 
-export const ALL_PERMISSION_IDS = PERMISSIONS.map((p) => p.id);
-ALL_PERMISSION_IDS.push(
-  'admin:all',
-  'sales:view',
-  'sales:create',
-  'sales:post',
-  'sales:cancel',
-  'purchases:view',
-  'purchases:create',
-  'purchases:post',
-  'purchases:cancel',
-  'products:view',
-  'products:manage',
-  'customers:manage',
-  'suppliers:manage',
-  'expenses:manage',
-  'payments:manage',
-  'distributions:manage',
-  'company:manage',
-  'audit:view',
-);
+/**
+ * Super permission that bypasses every check. It is intentionally NOT part of the
+ * assignable PERMISSIONS catalog; only the ADMIN role / explicit grants carry it.
+ */
+export const SUPER_PERMISSION = 'admin:all';
+
+/** The canonical, assignable permission vocabulary (single source of truth). */
+export const ALL_PERMISSION_IDS = [...PERMISSIONS.map((p) => p.id), SUPER_PERMISSION];
 
 export function listPermissions(): PermissionDef[] {
   return PERMISSIONS;
@@ -126,6 +113,10 @@ export function getUserPermissionOverrides(userId: string): Record<string, boole
  * 4. User-specific overrides (user_permission_overrides) are applied.
  * 5. Canonical aliases are expanded for bidirectional compatibility.
  */
+/**
+ * Resolves every permission for a user: role permissions from role_permissions, then
+ * individual overrides. This is the single permission vocabulary — no aliases.
+ */
 export function getUserPermissions(user: {
   id: string;
   role: string;
@@ -149,7 +140,9 @@ export function getUserPermissions(user: {
       roleId = 'role_cashier';
     } else if (user.role === 'TREASURY_ACCOUNTANT') {
       roleId = 'role_treasury';
-    } else if (user.role === 'GENERAL_ACCOUNTANT' || user.role === 'ACCOUNTANT') {
+    } else if (user.role === 'GENERAL_ACCOUNTANT') {
+      roleId = 'role_gen_acc';
+    } else if (user.role === 'ACCOUNTANT') {
       roleId = 'role_accountant';
     } else if (user.role === 'BRANCH_MANAGER') {
       roleId = 'role_branch_mgr';
@@ -173,104 +166,14 @@ export function getUserPermissions(user: {
     }
   }
 
-  // Predefined role fallbacks if not yet migrated into role_permissions
-  if (user.role === 'CASHIER') {
-    [
-      'pos:access',
-      'pos:shift_open',
-      'pos:shift_close',
-      'pos:cash_movement',
-      'pos:discount',
-      'documents:create_sale',
-      'documents:view',
-      'parties:view',
-      'inventory:view',
-    ].forEach((p) => permsSet.add(p));
-  } else if (user.role === 'TREASURY_ACCOUNTANT') {
-    [
-      'pos:access',
-      'pos:shift_close',
-      'pos:cash_movement',
-      'finance:expenses',
-      'finance:payments',
-      'finance:view',
-      'reports:view',
-    ].forEach((p) => permsSet.add(p));
-  } else if (user.role === 'STAFF') {
-    [
-      'documents:view',
-      'documents:create_sale',
-      'documents:post',
-      'parties:view',
-      'parties:manage',
-      'finance:view',
-      'finance:payments',
-      'inventory:view',
-    ].forEach((p) => permsSet.add(p));
-  }
-
-  // Bidirectional alias helper
-  const expandAliases = (key: string, add: boolean) => {
-    const map: Record<string, string[]> = {
-      'sales:view': ['documents:view'],
-      'documents:view': ['sales:view', 'purchases:view'],
-      'sales:create': ['documents:create_sale'],
-      'documents:create_sale': ['sales:create'],
-      'sales:post': ['documents:post'],
-      'sales:cancel': ['documents:cancel'],
-      'documents:cancel': ['sales:cancel', 'purchases:cancel'],
-      'purchases:view': ['documents:view'],
-      'purchases:create': ['documents:create_purchase'],
-      'documents:create_purchase': ['purchases:create'],
-      'purchases:post': ['documents:post'],
-      'documents:post': ['sales:post', 'purchases:post'],
-      'products:view': ['inventory:view'],
-      'inventory:view': ['products:view'],
-      'products:manage': ['catalog:manage'],
-      'catalog:manage': ['products:manage'],
-      'customers:manage': ['parties:manage'],
-      'suppliers:manage': ['parties:manage'],
-      'parties:manage': ['customers:manage', 'suppliers:manage'],
-      'expenses:manage': ['finance:expenses'],
-      'finance:expenses': ['expenses:manage'],
-      'payments:manage': ['finance:payments'],
-      'finance:payments': ['payments:manage'],
-      'distributions:manage': ['distribution:manage'],
-      'distribution:manage': ['distributions:manage'],
-    };
-
-    if (add) {
-      permsSet.add(key);
-      const aliases = map[key] || [];
-      aliases.forEach((a) => permsSet.add(a));
-    } else {
-      permsSet.delete(key);
-      const aliases = map[key] || [];
-      aliases.forEach((a) => permsSet.delete(a));
-    }
-  };
-
-  // Expand base role aliases
-  const currentPerms = Array.from(permsSet);
-  for (const p of currentPerms) {
-    expandAliases(p, true);
-  }
-
-  // Apply individual overrides
+  // Apply individual overrides (stored with canonical permission keys only)
   const overrides = getUserPermissionOverrides(user.id);
   for (const [permKey, isGranted] of Object.entries(overrides)) {
-    expandAliases(permKey, isGranted);
+    if (isGranted) permsSet.add(permKey);
+    else permsSet.delete(permKey);
   }
 
   return Array.from(permsSet);
-}
-
-export function getEffectivePermissions(user: {
-  id: string;
-  role: string;
-  role_id?: string | null;
-}): string[] {
-  return getUserPermissions(user);
 }
 
 /**
@@ -285,26 +188,7 @@ export function hasPermission(
   if (user.permissions?.includes('admin:all')) return true;
 
   const perms = new Set(user.permissions || []);
-
-  const checkSingle = (p: string) => {
-    if (perms.has(p)) return true;
-    if (p === 'sales:view' && perms.has('documents:view')) return true;
-    if (p === 'sales:create' && perms.has('documents:create_sale')) return true;
-    if (p === 'sales:post' && perms.has('documents:post')) return true;
-    if (p === 'sales:cancel' && perms.has('documents:cancel')) return true;
-    if (p === 'purchases:view' && perms.has('documents:view')) return true;
-    if (p === 'purchases:create' && perms.has('documents:create_purchase')) return true;
-    if (p === 'purchases:post' && perms.has('documents:post')) return true;
-    if (p === 'purchases:cancel' && perms.has('documents:cancel')) return true;
-    if (p === 'products:view' && perms.has('inventory:view')) return true;
-    if (p === 'products:manage' && perms.has('catalog:manage')) return true;
-    if ((p === 'customers:manage' || p === 'suppliers:manage') && perms.has('parties:manage'))
-      return true;
-    if (p === 'expenses:manage' && perms.has('finance:expenses')) return true;
-    if (p === 'payments:manage' && perms.has('finance:payments')) return true;
-    if (p === 'distributions:manage' && perms.has('distribution:manage')) return true;
-    return false;
-  };
+  const checkSingle = (p: string) => perms.has(p);
 
   if (Array.isArray(permission)) {
     return permission.some(checkSingle);

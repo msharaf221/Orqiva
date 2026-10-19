@@ -12,20 +12,26 @@ import {
 
 export const accountsRouter = Router();
 
-accountsRouter.get('/', (req, res) => {
+/**
+ * قراءة الصناديق النقدية متاحة لكل من يملك قراءة المالية أو تسجيل الدفعات أو المصروفات
+ * (نماذج الدفع/التحصيل تعتمد على قائمة الصناديق)؛ أما الإنشاء والتعديل فبصلاحية finance:accounts.
+ */
+const canReadAccounts = requirePermission('finance:view', 'finance:payments', 'finance:expenses');
+
+accountsRouter.get('/', canReadAccounts, (req, res) => {
   const branchId = typeof req.query.branch_id === 'string' ? req.query.branch_id : undefined;
   res.json(listCashAccounts(branchId));
 });
 
-accountsRouter.get('/transfers', (_req, res) => {
+accountsRouter.get('/transfers', canReadAccounts, (_req, res) => {
   res.json(listAccountTransfers());
 });
 
-accountsRouter.get('/:id', (req, res) => {
+accountsRouter.get('/:id', canReadAccounts, (req, res) => {
   res.json(getCashAccount(String(req.params.id)));
 });
 
-accountsRouter.get('/:id/statement', (req, res) => {
+accountsRouter.get('/:id/statement', canReadAccounts, (req, res) => {
   const from = typeof req.query.from === 'string' ? req.query.from : undefined;
   const to = typeof req.query.to === 'string' ? req.query.to : undefined;
   res.json(getAccountStatement(String(req.params.id), from, to));
