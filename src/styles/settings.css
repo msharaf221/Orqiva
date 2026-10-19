@@ -1,0 +1,139 @@
+/* Settings */
+.settings-layout {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.settings-nav {
+  padding: 14px;
+}
+.settings-nav > button {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  text-align: right;
+  padding: 16px 14px;
+  border-radius: var(--radius-md);
+  margin-bottom: 6px;
+  color: var(--slate-600);
+  transition: all 0.15s;
+}
+.settings-nav > button:hover {
+  background: var(--slate-100);
+  color: var(--slate-900);
+}
+.settings-nav > button.active {
+  background: var(--indigo-50);
+  color: var(--indigo-700);
+  font-weight: 700;
+}
+.settings-nav > button > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.settings-nav strong {
+  font-size: 15.5px;
+  font-weight: 700;
+}
+.settings-nav small {
+  font-size: 13px;
+  color: var(--slate-500);
+}
+.settings-nav-note {
+  border-top: 1px solid var(--slate-200);
+  margin: 14px 8px 0;
+  padding: 24px 10px 16px;
+  color: var(--slate-500);
+  text-align: center;
+}
+.settings-nav-note p {
+  font-size: 13px;
+  line-height: 1.8;
+  margin-top: 10px;
+  color: var(--slate-500);
+}
+.settings-card .card-heading {
+  border-bottom: 1px solid var(--slate-100);
+  padding: 24px;
+}
+.settings-company-icon {
+  height: 48px;
+  width: 48px;
+  background: var(--indigo-50);
+  color: var(--indigo-600);
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+}
+fieldset {
+  border: 0;
+  margin: 0;
+  min-width: 0;
+}
+.settings-card .modal-footer {
+  padding: 20px 24px;
+}
+.user-list {
+  padding: 6px 24px;
+}
+.user-list-item {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--slate-100);
+}
+.user-list-item:last-child {
+  border: 0;
+}
+.user-list-item .initials {
+  height: 42px;
+  width: 42px;
+  font-size: 14.5px;
+}
+.user-list-item > div {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.user-list-item strong {
+  font-size: 15.5px;
+  color: var(--slate-900);
+  font-weight: 700;
+}
+.user-list-item strong small {
+  font-size: 13px;
+  color: var(--slate-400);
+}
+.user-list-item > div > span {
+  font-family: 'Manrope Variable', sans-serif;
+  font-size: 13px;
+  color: var(--slate-500);
+}
+.permissions-note {
+  margin: 16px 24px 24px;
+  padding: 20px;
+  background: var(--indigo-50);
+  border: 1px solid var(--indigo-100);
+  border-radius: var(--radius-md);
+}
+.permissions-note h3 {
+  font-size: 15.5px;
+  color: var(--indigo-950);
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.permissions-note p {
+  font-size: 13.5px;
+  line-height: 1.8;
+  color: var(--indigo-900);
+  margin: 6px 0;
+}
+.permissions-note p b {
+  color: var(--indigo-950);
+  font-weight: 700;
+}

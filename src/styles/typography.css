@@ -1,0 +1,334 @@
+/* Readable typography across accounting screens - FinTech Theme */
+.field > span {
+  color: var(--slate-700);
+  font-weight: 600;
+  font-size: 15px;
+}
+.field input,
+.field select,
+.field textarea {
+  color: var(--slate-900);
+  font-size: 15.5px;
+}
+.field > small,
+.modal-heading p,
+.summary-hint {
+  color: var(--slate-500);
+  font-size: 14px;
+}
+.form-card .card-heading h2,
+.editor-summary h2,
+.settings-card h2 {
+  color: var(--slate-900);
+  font-weight: 700;
+  font-size: 20px;
+}
+.summary-row {
+  color: var(--slate-600);
+  font-size: 15px;
+}
+.summary-total > strong {
+  color: var(--indigo-600);
+  font-weight: 800;
+  font-size: 28px;
+}
+.summary-total > span {
+  color: var(--slate-700);
+  font-size: 16px;
+  font-weight: 600;
+}
+.invoice-header h2,
+.invoice-parties h3,
+.invoice-table td strong {
+  color: var(--slate-900);
+  font-size: 16px;
+}
+.invoice-header p,
+.invoice-parties p,
+.invoice-dates span,
+.invoice-notes p {
+  color: var(--slate-600);
+  font-size: 14.5px;
+}
+.invoice-title > span:first-child {
+  color: var(--slate-900);
+  font-size: 24px;
+  font-weight: 800;
+}
+.invoice-title h2.num {
+  color: var(--indigo-600);
+  font-size: 18px;
+  font-weight: 800;
+}
+.invoice-dates strong,
+.invoice-table td,
+.invoice-totals > div {
+  color: var(--slate-800);
+  font-size: 15px;
+}
+.invoice-totals strong {
+  color: var(--slate-900);
+  font-size: 16px;
+}
+.invoice-totals .grand-total strong {
+  color: var(--indigo-600);
+  font-size: 28px;
+  font-weight: 800;
+}
+.invoice-totals .grand-total > span {
+  color: var(--slate-900);
+  font-size: 17px;
+  font-weight: 700;
+}
+.invoice-totals .balance-row {
+  color: var(--slate-900);
+}
+.invoice-signoff {
+  color: var(--slate-500);
+  font-size: 13.5px;
+}
+.financial-summary > div {
+  color: var(--slate-600);
+  font-size: 14.5px;
+}
+.financial-summary strong {
+  color: var(--slate-900);
+  font-weight: 700;
+  font-size: 16px;
+}
+.financial-summary .summary-emphasis {
+  background: var(--indigo-50);
+  border: 1px solid var(--indigo-100);
+  color: var(--indigo-800);
+  border-radius: var(--radius-md);
+  font-weight: 700;
+}
+.expense-breakdown > div > div:first-child {
+  color: var(--slate-600);
+  font-size: 14.5px;
+}
+.expense-breakdown strong {
+  color: var(--slate-900);
+  font-size: 15.5px;
+}
+.settings-nav strong,
+.user-list-item strong {
+  color: var(--slate-900);
+  font-size: 15.5px;
+}
+.settings-nav small,
+.settings-nav-note p,
+.permissions-note p {
+  color: var(--slate-500);
+  font-size: 13.5px;
+}
+.user-list-item > div > span {
+  color: var(--slate-500);
+  font-size: 13.5px;
+}
+.permissions-note h3,
+.permissions-note p b {
+  color: var(--slate-900);
+}
+.payment-doc-list strong,
+.payment-item strong {
+  color: var(--slate-900);
+  font-size: 17px;
+}
+.payment-doc-list span,
+.detail-status p {
+  color: var(--slate-500);
+  font-size: 14px;
+}
+.detail-status h3 {
+  color: var(--slate-900);
+  font-size: 18px;
+}
+.modal-heading h2 {
+  color: var(--slate-900);
+  font-size: 22px;
+}
+.info-banner {
+  background: var(--indigo-50);
+  border: 1px solid var(--indigo-200);
+  color: var(--indigo-800);
+  font-size: 14.5px;
+}
+.login-form h2 {
+  color: var(--slate-900);
+  font-size: 32px;
+}
+.login-form > p {
+  color: var(--slate-500);
+  font-size: 16px;
+}
+.login-form .field > span {
+  color: var(--slate-700);
+  font-size: 15px;
+  font-weight: 600;
+}
+.demo-note > b {
+  color: var(--slate-900);
+  font-size: 15px;
+}
+.demo-note > span {
+  color: var(--slate-600);
+  font-size: 14px;
+}
+.modal .table-scroll table {
+  font-size: 15px;
+}
+.cash-flow-bars {
+  display: flex;
+  gap: 4px;
+  height: 8px;
+  border-radius: 6px;
+  overflow: hidden;
+  margin: 16px 0 10px;
+}
+.cash-flow-bars span {
+  background: var(--indigo-600);
+  min-width: 3px;
+}
+.cash-flow-bars span:last-child {
+  background: var(--slate-200);
+}
+.cash-flow-labels {
+  display: flex;
+  justify-content: space-between;
+  color: var(--slate-500);
+  font-size: 13.5px;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.cash-flow-labels b {
+  font-family: 'Manrope Variable';
+  font-weight: 700;
+  color: var(--slate-800);
+}
+@media print {
+  body {
+    background: white !important;
+    color: #111 !important;
+    font-size: 11pt !important;
+  }
+  .sidebar,
+  .topbar,
+  .page-heading,
+  .page-footer,
+  .no-print,
+  .toast-stack,
+  body:not(.printing-pos-receipt) .modal-backdrop,
+  .document-side {
+    display: none !important;
+  }
+  .main-shell {
+    margin: 0 !important;
+  }
+  .main-content {
+    padding: 0 !important;
+    max-width: none !important;
+  }
+  .document-detail-grid {
+    display: block !important;
+  }
+  .invoice-paper {
+    border: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    width: 100% !important;
+    overflow: visible !important;
+    color: #111 !important;
+  }
+  .invoice-paper * {
+    color: #222 !important;
+  }
+  .invoice-paper .table-scroll {
+    overflow: visible !important;
+  }
+  .invoice-paper table {
+    white-space: normal !important;
+    min-width: 0 !important;
+  }
+  .invoice-paper td,
+  .invoice-paper th {
+    font-size: 10pt !important;
+    padding: 12px 8px !important;
+  }
+  .invoice-paper tr {
+    break-inside: avoid;
+  }
+  .invoice-paper thead {
+    display: table-header-group;
+  }
+  .invoice-header {
+    flex-direction: row !important;
+  }
+  .invoice-header .invoice-title {
+    display: block !important;
+    text-align: left !important;
+    border: 0 !important;
+    padding: 0 !important;
+  }
+  .invoice-title > span:first-child {
+    font-size: 20pt !important;
+    margin-bottom: 12px !important;
+  }
+  .invoice-title h2.num {
+    margin-bottom: 10px !important;
+  }
+  .invoice-parties {
+    flex-direction: row !important;
+  }
+  .invoice-bottom {
+    flex-direction: row !important;
+    break-inside: avoid;
+  }
+  .invoice-notes {
+    max-width: 45% !important;
+  }
+  .invoice-totals {
+    width: 45% !important;
+    max-width: none !important;
+    margin: 0 !important;
+  }
+  .invoice-signoff {
+    font-size: 8pt !important;
+  }
+  .invoice-brand {
+    font-size: 30pt !important;
+  }
+  .invoice-paper .badge {
+    border: 1px solid #ddd !important;
+  }
+  .invoice-header h2,
+  .invoice-parties h3 {
+    font-size: 13pt !important;
+  }
+  .invoice-header p,
+  .invoice-parties p,
+  .invoice-notes p {
+    font-size: 9pt !important;
+  }
+  .invoice-dates > div {
+    font-size: 9pt !important;
+  }
+  .invoice-totals > div {
+    font-size: 10pt !important;
+  }
+  .invoice-totals .grand-total strong {
+    font-size: 16pt !important;
+  }
+  @page {
+    size: A4;
+    margin: 17mm;
+  }
+}
+.cash-main {
+  padding-bottom: 16px;
+}
+.cash-flow-labels {
+  flex-wrap: wrap;
+  line-height: 1.8;
+}
