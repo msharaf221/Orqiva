@@ -1,0 +1,29 @@
+/**
+ * Orqiva stylesheet entrypoint.
+ *
+ * The original 9,291-line src/styles.css is split into ordered partials:
+ *   base        — design tokens (:root), reset, base typography, utilities
+ *   components  — tables, filters, forms
+ *   feedback    — modals, toasts, loading/empty states, financial tools
+ *   settings    — settings screens
+ *   auth        — welcome/login screens
+ *   responsive  — workspace responsive rules
+ *   typography  — readable typography across accounting screens
+ *   features    — suggestions, transfers, distributions, group, treasury
+ *   rbac        — role management
+ *   pos         — POS high-speed interface, catalog panel, receipt presentation
+ *   print       — receipt & print engine (A4 invoices & thermal receipts)
+ *
+ * Order matters: later partials may intentionally refine earlier rules.
+ */
+@import './base.css';
+@import './components.css';
+@import './feedback.css';
+@import './settings.css';
+@import './auth.css';
+@import './responsive.css';
+@import './typography.css';
+@import './features.css';
+@import './rbac.css';
+@import './pos.css';
+@import './print.css';

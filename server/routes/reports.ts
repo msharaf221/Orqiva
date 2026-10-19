@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { admin, period } from '../middleware';
+import { period } from '../middleware';
+import { requirePermission } from '../rbac';
 import { scopeFor } from '../scope';
 import { report, groupOverview } from '../reports';
 
@@ -12,7 +13,7 @@ reportsRouter.get('/dashboard', (req, res) => {
   );
 });
 
-reportsRouter.get('/group/overview', admin, (req, res) => {
+reportsRouter.get('/group/overview', requirePermission('reports:group_overview'), (req, res) => {
   const input = period.parse(req.query);
   res.json(groupOverview(input.from, input.to));
 });

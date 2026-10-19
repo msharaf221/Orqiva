@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { all, one, run, transaction } from '../db';
 import { audit, requireRow } from '../service';
 import { admin } from '../middleware';
+import { requirePermission } from '../rbac';
 import { scopeFor, scopeSql } from '../scope';
 import { listProducts, createProduct, updateProduct, adjustStock } from '../catalog';
 import { stockMatrix } from '../reports';
@@ -14,19 +15,19 @@ catalogRouter.get('/products', (req, res) =>
   res.json(listProducts(scopeFor(req.user, req.query.branch_id))),
 );
 
-catalogRouter.post('/products', admin, (req, res) =>
+catalogRouter.post('/products', requirePermission('catalog:manage'), (req, res) =>
   res.status(201).json(createProduct(req.body, req.user)),
 );
 
-catalogRouter.put('/products/:id', admin, (req, res) =>
+catalogRouter.put('/products/:id', requirePermission('catalog:manage'), (req, res) =>
   res.json(updateProduct(String(req.params.id), req.body, req.user)),
 );
 
-catalogRouter.post('/products/:id/adjust', admin, (req, res) =>
+catalogRouter.post('/products/:id/adjust', requirePermission('inventory:adjust'), (req, res) =>
   res.json(adjustStock(String(req.params.id), req.body, req.user)),
 );
 
-catalogRouter.patch('/products/:id/active', admin, (req, res) => {
+catalogRouter.patch('/products/:id/active', requirePermission('catalog:manage'), (req, res) => {
   const entityId = String(req.params.id);
   const { active } = z.object({ active: z.boolean() }).strict().parse(req.body);
   requireRow(one('SELECT id FROM products WHERE id=?', entityId));

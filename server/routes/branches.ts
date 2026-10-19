@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { admin } from '../middleware';
+import { requirePermission } from '../rbac';
 import { scopeFor } from '../scope';
 import {
   listBranches,
@@ -19,7 +19,7 @@ branchesRouter.get('/', (req, res) =>
   res.json(listBranches(req.user, req.query.include_archived === '1')),
 );
 
-branchesRouter.post('/', admin, (req, res) =>
+branchesRouter.post('/', requirePermission('branches:manage'), (req, res) =>
   res.status(201).json(createBranch(req.body, req.user)),
 );
 
@@ -29,11 +29,11 @@ branchesRouter.get('/:id', (req, res) => {
   res.json(branchDetail(branchId));
 });
 
-branchesRouter.put('/:id', admin, (req, res) =>
+branchesRouter.put('/:id', requirePermission('branches:manage'), (req, res) =>
   res.json(updateBranch(String(req.params.id), req.body, req.user)),
 );
 
-branchesRouter.patch('/:id/active', admin, (req, res) =>
+branchesRouter.patch('/:id/active', requirePermission('branches:manage'), (req, res) =>
   res.json(setBranchActive(String(req.params.id), req.body, req.user)),
 );
 
@@ -43,14 +43,16 @@ branchesRouter.get('/:id/assortment', (req, res) => {
   res.json(assortment(branchId));
 });
 
-branchesRouter.put('/:id/products/:productId', admin, (req, res) =>
+branchesRouter.put('/:id/products/:productId', requirePermission('branches:manage'), (req, res) =>
   res.json(
     setAssortmentItem(String(req.params.id), String(req.params.productId), req.body, req.user),
   ),
 );
 
-branchesRouter.get('/:id/staff', admin, (req, res) => res.json(branchStaff(String(req.params.id))));
+branchesRouter.get('/:id/staff', requirePermission('branches:manage'), (req, res) =>
+  res.json(branchStaff(String(req.params.id))),
+);
 
-branchesRouter.put('/:id/staff', admin, (req, res) =>
+branchesRouter.put('/:id/staff', requirePermission('branches:manage'), (req, res) =>
   res.json(setBranchStaff(String(req.params.id), req.body, req.user)),
 );

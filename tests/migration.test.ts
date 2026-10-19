@@ -48,6 +48,7 @@ describe('upgrading a single-warehouse installation', () => {
       '007_granular_rbac.sql',
       '008_pos_and_treasury.sql',
       '009_pos_multitender_and_proofs.sql',
+      '010_rbac_cleanup.sql',
     ]);
     expect(one("SELECT role_id FROM user_roles WHERE user_id='u-admin'")).toEqual({
       role_id: 'role_admin',

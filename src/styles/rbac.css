@@ -1,0 +1,51 @@
+/* Permissions Modal */
+.perms-group-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+  margin-top: 10px;
+}
+.perm-group-box {
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.perm-group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--slate-100);
+  padding-bottom: 8px;
+}
+.perm-group-header strong {
+  font-size: 14.5px;
+  color: var(--slate-900);
+  font-weight: 700;
+}
+.perm-group-toggle {
+  background: none;
+  border: none;
+  font-size: 13px;
+  color: var(--indigo-600);
+  cursor: pointer;
+  padding: 0;
+  font-weight: 600;
+}
+.perm-check-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--slate-700);
+  cursor: pointer;
+}
+.perm-check-item input[type='checkbox'] {
+  accent-color: var(--indigo-600);
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+}

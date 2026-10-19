@@ -27,15 +27,15 @@ describe('Dynamic & Granular Permissions Management', () => {
   it('loads effective permissions on auth/me and auth/login', async () => {
     const adminMe = await admin.get('/api/auth/me').set(header).expect(200);
     expect(adminMe.body.role).toBe('ADMIN');
-    expect(adminMe.body.permissions).toContain('sales:view');
+    expect(adminMe.body.permissions).toContain('documents:view');
     expect(adminMe.body.permissions).toContain('pos:access');
     expect(adminMe.body.permissions).toContain('users:manage');
 
     const staffMe = await staff.get('/api/auth/me').set(header).expect(200);
     expect(staffMe.body.role).toBe('STAFF');
-    expect(staffMe.body.permissions).toContain('sales:view');
+    expect(staffMe.body.permissions).toContain('documents:view');
     expect(staffMe.body.permissions).not.toContain('users:manage');
-    expect(staffMe.body.permissions).not.toContain('purchases:create');
+    expect(staffMe.body.permissions).not.toContain('documents:create_purchase');
   });
 
   it('allows creating users with diverse roles (CASHIER, BRANCH_MANAGER, GENERAL_ACCOUNTANT)', async () => {
@@ -54,7 +54,7 @@ describe('Dynamic & Granular Permissions Management', () => {
     expect(res.body.role).toBe('CASHIER');
     expect(res.body.permissions).toContain('pos:access');
     expect(res.body.permissions).toContain('pos:shift_open');
-    expect(res.body.permissions).not.toContain('purchases:create');
+    expect(res.body.permissions).not.toContain('documents:create_purchase');
 
     const cashierAgent = await signIn('cashier@test.local');
     const me = await cashierAgent.get('/api/auth/me').set(header).expect(200);
@@ -77,19 +77,19 @@ describe('Dynamic & Granular Permissions Management', () => {
       })
       .expect(403);
 
-    // 2. Admin explicitly grants 'expenses:manage' override to this staff member
+    // 2. Admin explicitly grants the canonical 'finance:expenses' override to this staff member
     await admin
       .put('/api/users/staff/permissions')
       .set(header)
       .send({
-        'expenses:manage': true,
+        'finance:expenses': true,
       })
       .expect(200);
 
     // Re-login staff to pick up new session/permissions
     staff = await signIn('staff@test.local');
     const me = await staff.get('/api/auth/me').set(header).expect(200);
-    expect(me.body.permissions).toContain('expenses:manage');
+    expect(me.body.permissions).toContain('finance:expenses');
 
     // 3. Staff can now create an expense!
     const expenseRes = await staff
@@ -108,20 +108,20 @@ describe('Dynamic & Granular Permissions Management', () => {
 
     expect(expenseRes.body.title).toBe('مصروف نظافة');
 
-    // 4. Admin explicitly revokes 'expenses:manage' and 'sales:create'
+    // 4. Admin explicitly revokes 'finance:expenses' and 'documents:create_sale'
     await admin
       .put('/api/users/staff/permissions')
       .set(header)
       .send({
-        'expenses:manage': false,
-        'sales:create': false,
+        'finance:expenses': false,
+        'documents:create_sale': false,
       })
       .expect(200);
 
     staff = await signIn('staff@test.local');
     const meAfterRevoke = await staff.get('/api/auth/me').set(header).expect(200);
-    expect(meAfterRevoke.body.permissions).not.toContain('expenses:manage');
-    expect(meAfterRevoke.body.permissions).not.toContain('sales:create');
+    expect(meAfterRevoke.body.permissions).not.toContain('finance:expenses');
+    expect(meAfterRevoke.body.permissions).not.toContain('documents:create_sale');
 
     // Attempting expense now returns 403
     await staff

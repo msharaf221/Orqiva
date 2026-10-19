@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { scopeFor } from '../scope';
+import { requirePermission } from '../rbac';
 import { visibleTransfer } from '../middleware';
 import {
   listTransfers,
@@ -13,6 +14,9 @@ import {
 } from '../transfers';
 
 export const transfersRouter = Router();
+
+// إدارة التحويلات تتطلب صلاحية صريحة؛ وتظل قيود النطاق (الفروع المسندة) مطبقة داخل الخدمة.
+transfersRouter.use(requirePermission('transfers:manage'));
 
 transfersRouter.get('/', (req, res) => {
   const status = req.query.status

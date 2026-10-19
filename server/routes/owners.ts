@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { one, run, transaction } from '../db';
 import { audit } from '../service';
-import { admin } from '../middleware';
+import { requirePermission } from '../rbac';
 import { companySchema } from '../validation';
 import {
   listOwners,
@@ -30,7 +30,7 @@ ownersRouter.get('/company', (_req, res) =>
   res.json(one<Company>('SELECT * FROM company WHERE id=1')),
 );
 
-ownersRouter.put('/company', admin, (req, res) => {
+ownersRouter.put('/company', requirePermission('branches:manage'), (req, res) => {
   const c = companySchema.parse(req.body);
   transaction(() => {
     run(
@@ -49,54 +49,65 @@ ownersRouter.put('/company', admin, (req, res) => {
 });
 
 // Owners & Equity (Administrators only)
-ownersRouter.get('/owners', admin, (_req, res) => res.json(listOwners()));
+ownersRouter.get('/owners', requirePermission('distribution:manage'), (_req, res) =>
+  res.json(listOwners()),
+);
 
-ownersRouter.post('/owners', admin, (req, res) =>
+ownersRouter.post('/owners', requirePermission('distribution:manage'), (req, res) =>
   res.status(201).json(createOwner(req.body, req.user)),
 );
 
-ownersRouter.put('/owners/:id', admin, (req, res) =>
+ownersRouter.put('/owners/:id', requirePermission('distribution:manage'), (req, res) =>
   res.json(updateOwner(String(req.params.id), req.body, req.user)),
 );
 
-ownersRouter.patch('/owners/:id/active', admin, (req, res) => {
+ownersRouter.patch('/owners/:id/active', requirePermission('distribution:manage'), (req, res) => {
   const { active } = z.object({ active: z.boolean() }).strict().parse(req.body);
   res.json(setOwnerActive(String(req.params.id), active, req.user));
 });
 
-ownersRouter.get('/owners/:id/ledger', admin, (req, res) =>
+ownersRouter.get('/owners/:id/ledger', requirePermission('distribution:manage'), (req, res) =>
   res.json(ownerLedger(String(req.params.id))),
 );
 
-ownersRouter.post('/owners/:id/entries', admin, (req, res) =>
+ownersRouter.post('/owners/:id/entries', requirePermission('distribution:manage'), (req, res) =>
   res.status(201).json(addEquityEntry(String(req.params.id), req.body, req.user)),
 );
 
 // Profit Distributions (Administrators only)
-ownersRouter.get('/distributions', admin, (_req, res) => res.json(listDistributions()));
+ownersRouter.get('/distributions', requirePermission('distribution:manage'), (_req, res) =>
+  res.json(listDistributions()),
+);
 
-ownersRouter.post('/distributions/preview', admin, (req, res) =>
+ownersRouter.post('/distributions/preview', requirePermission('distribution:manage'), (req, res) =>
   res.json(previewDistribution(req.body)),
 );
 
-ownersRouter.post('/distributions', admin, (req, res) =>
+ownersRouter.post('/distributions', requirePermission('distribution:manage'), (req, res) =>
   res.status(201).json(createDistribution(req.body, req.user)),
 );
 
-ownersRouter.get('/distributions/:id', admin, (req, res) =>
+ownersRouter.get('/distributions/:id', requirePermission('distribution:manage'), (req, res) =>
   res.json(distributionDetail(String(req.params.id))),
 );
 
-ownersRouter.post('/distributions/:id/approve', admin, (req, res) =>
-  res.json(approveDistribution(String(req.params.id), req.user)),
+ownersRouter.post(
+  '/distributions/:id/approve',
+  requirePermission('distribution:manage'),
+  (req, res) => res.json(approveDistribution(String(req.params.id), req.user)),
 );
 
-ownersRouter.post('/distributions/:id/cancel', admin, (req, res) =>
-  res.json(cancelDistribution(String(req.params.id), req.user)),
+ownersRouter.post(
+  '/distributions/:id/cancel',
+  requirePermission('distribution:manage'),
+  (req, res) => res.json(cancelDistribution(String(req.params.id), req.user)),
 );
 
-ownersRouter.post('/distributions/:id/payments', admin, (req, res) =>
-  res
-    .status(201)
-    .json(payDistribution(String(req.params.id), req.body, req.user, req.get('Idempotency-Key'))),
+ownersRouter.post(
+  '/distributions/:id/payments',
+  requirePermission('distribution:manage'),
+  (req, res) =>
+    res
+      .status(201)
+      .json(payDistribution(String(req.params.id), req.body, req.user, req.get('Idempotency-Key'))),
 );
