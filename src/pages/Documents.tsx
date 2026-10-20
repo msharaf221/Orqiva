@@ -872,6 +872,8 @@ export function DocumentDetail() {
     invoiceDate: doc.date,
     total: doc.total,
     tax: doc.tax,
+    uuid: doc.internal_code,
+    timestamp: doc.date,
   });
 
   const docTypeLabel =

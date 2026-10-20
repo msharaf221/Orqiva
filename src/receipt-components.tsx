@@ -9,27 +9,80 @@ export interface InvoiceQrPayload {
   invoiceDate: string;
   total: number; // in cents
   tax: number; // in cents
+  /** UBL 2.1 document UUID (ETA). Falls back to invoice number when absent. */
+  uuid?: string;
+  /** ISO-8601 issuance timestamp used by the ETA TLV QR; defaults to invoice date. */
+  timestamp?: string;
+}
+
+function base64FromBytes(bytes: number[]): string {
+  if (typeof Buffer !== 'undefined') return Buffer.from(bytes).toString('base64');
+  let binary = '';
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary);
+}
+
+/**
+ * Builds the Egyptian Tax Authority TLV QR payload (base64).
+ * Tags: 1=Seller, 2=VAT number, 3=Timestamp, 4=Total, 5=VAT total.
+ * Mirrors `buildEtaQrData` on the server so printed receipts verify in the ETA app.
+ */
+export function buildEtaTlvQr(payload: {
+  sellerName: string;
+  taxNumber: string;
+  timestamp: string;
+  total: number;
+  tax: number;
+}): string {
+  const records: Array<[number, string]> = [
+    [1, payload.sellerName],
+    [2, payload.taxNumber],
+    [3, payload.timestamp],
+    [4, (payload.total / 100).toFixed(2)],
+    [5, (payload.tax / 100).toFixed(2)],
+  ];
+  const bytes: number[] = [];
+  for (const [tag, value] of records) {
+    const utf8 = Array.from(new TextEncoder().encode(value));
+    bytes.push(tag, utf8.length, ...utf8);
+  }
+  return base64FromBytes(bytes);
 }
 
 /**
  * Formats data for electronic invoice verification QR code.
+ * Returns the ETA TLV base64 payload when tax identity is available; otherwise a
+ * human-readable summary so offline/test receipts still carry a scannable code.
  */
 export function generateInvoiceQrData(data: InvoiceQrPayload): string {
   const totalFormatted = (data.total / 100).toFixed(2);
   const taxFormatted = (data.tax / 100).toFixed(2);
 
-  // Human-friendly readable invoice data for smartphone cameras
+  if (data.taxNumber) {
+    return buildEtaTlvQr({
+      sellerName: data.sellerName,
+      taxNumber: data.taxNumber,
+      timestamp: data.timestamp || normalizeTimestamp(data.invoiceDate),
+      total: data.total,
+      tax: data.tax,
+    });
+  }
+
+  // Human-friendly readable invoice data for smartphone cameras (no tax identity yet)
   return [
     `مؤسسة: ${data.sellerName}`,
-    data.taxNumber ? `رقم ضريبي: ${data.taxNumber}` : null,
     `فاتورة: ${data.invoiceNumber}`,
     `التاريخ: ${data.invoiceDate}`,
     `الإجمالي: ${totalFormatted} ج.م`,
     `الضريبة: ${taxFormatted} ج.م`,
-    `نظام أوركيفا Orqiva ERP`,
-  ]
-    .filter(Boolean)
-    .join('\n');
+    'نظام أوركيفا Orqiva ERP',
+  ].join('\n');
+}
+
+/** Best-effort ISO-8601 conversion; returns the input when it cannot be parsed. */
+function normalizeTimestamp(value: string): string {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString();
 }
 
 /**

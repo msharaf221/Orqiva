@@ -12,6 +12,7 @@ import {
   Activity,
   Shield,
   Trash2,
+  ReceiptText,
 } from 'lucide-react';
 import {
   api,
@@ -29,6 +30,7 @@ import {
 import type { User, RoleDef, PermissionDef } from '../../types';
 import { useBranch } from '../../branch';
 import { PermissionsModal } from '../PermissionsModal';
+import { EInvoicePanel } from './e-invoice';
 
 export function SettingsPage() {
   const { user } = useSession();
@@ -74,6 +76,18 @@ export function SettingsPage() {
               </div>
             </button>
           )}
+          {can(user, 'eta:view') && (
+            <button
+              onClick={() => setTab('einvoice')}
+              className={tab === 'einvoice' ? 'active' : ''}
+            >
+              <ReceiptText size={19} />
+              <div>
+                <strong>الفاتورة الإلكترونية</strong>
+                <small>حالة الإرسال لهيئة الضرائب</small>
+              </div>
+            </button>
+          )}
           <button onClick={() => setTab('security')} className={tab === 'security' ? 'active' : ''}>
             <LockKeyhole size={19} />
             <div>
@@ -97,6 +111,8 @@ export function SettingsPage() {
             <UserSettings />
           ) : tab === 'roles' ? (
             <RolesSettings />
+          ) : tab === 'einvoice' ? (
+            <EInvoicePanel />
           ) : (
             <SecuritySettings />
           )}
@@ -119,8 +135,11 @@ function CompanySettings() {
         phone: f.get('phone'),
         address: f.get('address'),
         tax_number: f.get('tax_number'),
+        tax_registration_number: f.get('tax_registration_number'),
+        activity_code: f.get('activity_code'),
         tax_rate: Math.round(Number(f.get('tax_rate')) * 100),
         invoice_note: f.get('invoice_note'),
+        eta_environment: f.get('eta_environment'),
       });
       refreshCompany();
     }, 'تم حفظ إعدادات الشركة');
@@ -174,6 +193,37 @@ function CompanySettings() {
             />
           </Field>
         </div>
+        <div className="form-row">
+          <Field
+            label="رقم التسجيل الضريبي (ETA)"
+            hint="يُستخدم في حمولة الفاتورة الإلكترونية UBL 2.1."
+          >
+            <input
+              name="tax_registration_number"
+              dir="ltr"
+              maxLength={50}
+              defaultValue={company.tax_registration_number}
+            />
+          </Field>
+          <Field label="كود النشاط (ETA)" hint="كود النشاط الضريبي المسجّل لدى هيئة الضرائب.">
+            <input
+              name="activity_code"
+              dir="ltr"
+              maxLength={50}
+              defaultValue={company.activity_code}
+            />
+          </Field>
+        </div>
+        <Field
+          label="بيئة الفاتورة الإلكترونية"
+          hint="تظل «تجريبية» حتى تركيب مفاتيح sandbox من هيئة الضرائب."
+        >
+          <select name="eta_environment" defaultValue={company.eta_environment || 'stub'}>
+            <option value="stub">تجريبية (بدون إرسال فعلي)</option>
+            <option value="preprod">اختبار مبدئي (Preprod)</option>
+            <option value="production">إنتاج (Production)</option>
+          </select>
+        </Field>
         <Field
           label="العملة الأساسية"
           hint="هذه النسخة تعمل بالجنيه المصري لتجنب خلط العملات في التقارير."

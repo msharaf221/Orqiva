@@ -48,6 +48,7 @@ export function resetBusinessData() {
     DELETE FROM distributions; DELETE FROM equity_entries; DELETE FROM cost_movements;
     DELETE FROM branch_cost; DELETE FROM stock_movements;
     DELETE FROM transfer_lines; DELETE FROM transfers; DELETE FROM payments;
+    DELETE FROM e_invoice_submissions;
     DELETE FROM document_lines; DELETE FROM documents; DELETE FROM sequences;
     DELETE FROM pos_cash_movements; DELETE FROM pos_shifts;
     DELETE FROM branch_stock; DELETE FROM branch_products; DELETE FROM products;

@@ -39,6 +39,8 @@ export type PermissionKey =
   | 'finance:accounts'
   | 'reports:view'
   | 'reports:group_overview'
+  | 'eta:view'
+  | 'eta:manage'
   | 'distribution:manage'
   | 'branches:manage'
   | 'users:manage'
@@ -210,6 +212,37 @@ export interface Company {
   currency: string;
   tax_rate: number;
   invoice_note: string;
+  /** ETA (Egyptian Tax Authority) taxpayer registration number. */
+  tax_registration_number: string;
+  /** ETA activity code describing the business activity. */
+  activity_code: string;
+  /** ETA submission environment: stub (offline), preprod or production. */
+  eta_environment: 'stub' | 'preprod' | 'production';
+}
+
+export type EtaDocumentStatus =
+  'NOT_SUBMITTED' | 'PENDING' | 'VALID' | 'INVALID' | 'FAILED' | 'CANCELLED';
+
+export interface EInvoiceSubmission {
+  id: string;
+  document_id: string;
+  uuid: string;
+  document_type: 'INVOICE' | 'CREDIT_NOTE' | 'DEBIT_NOTE';
+  status: 'PENDING' | 'SUBMITTED' | 'VALID' | 'INVALID' | 'FAILED' | 'CANCELLED';
+  attempt: number;
+  max_attempts: number;
+  next_attempt_at: string;
+  submitted_at: string | null;
+  completed_at: string | null;
+  eta_long_id: string;
+  eta_response: string;
+  last_error: string;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  document_number?: string;
+  document_total?: number;
+  party_name?: string;
 }
 export interface Branch {
   id: string;
@@ -317,6 +350,14 @@ export interface Document {
   original_document_id?: string | null;
   original_document_number?: string | null;
   pos_shift_id?: string | null;
+  /** UBL 2.1 document UUID (mandatory for Egyptian e-invoice). */
+  internal_code: string;
+  /** ETA submission status (stub pipeline until real credentials are set). */
+  eta_status: EtaDocumentStatus;
+  /** ETA long submission id once accepted. */
+  eta_long_id: string;
+  /** UUID of the referenced invoice (Credit/Debit notes). */
+  reference_uuid?: string | null;
   date: string;
   due_date: string;
   subtotal: number;

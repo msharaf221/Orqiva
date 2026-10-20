@@ -47,6 +47,18 @@ export const PERMISSIONS: PermissionDef[] = [
   { id: 'reports:view', name: 'عرض التقارير ولوحة المؤشرات', group: 'التقارير' },
   { id: 'reports:group_overview', name: 'عرض تقرير المجموعة الشامل', group: 'التقارير' },
 
+  // الفاتورة الإلكترونية (هيئة الضرائب ETA)
+  {
+    id: 'eta:view',
+    name: 'عرض حالة الفاتورة الإلكترونية وإرسالاتها',
+    group: 'الفاتورة الإلكترونية',
+  },
+  {
+    id: 'eta:manage',
+    name: 'إدارة إرسال الفواتير الإلكترونية وإعادة المحاولة',
+    group: 'الفاتورة الإلكترونية',
+  },
+
   // الشركاء والتوزيعات
   {
     id: 'distribution:manage',

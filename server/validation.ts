@@ -139,8 +139,11 @@ export const companySchema = z
     phone: optionalText(40),
     address: optionalText(),
     tax_number: optionalText(50),
+    tax_registration_number: optionalText(50),
+    activity_code: optionalText(50),
     tax_rate: z.number().int().min(0).max(10000),
     invoice_note: optionalText(1000),
+    eta_environment: z.enum(['stub', 'preprod', 'production']).default('stub').optional(),
   })
   .strict();
 export const userSchema = z

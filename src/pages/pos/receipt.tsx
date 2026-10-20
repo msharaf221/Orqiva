@@ -38,6 +38,8 @@ export function ThermalReceiptModal({
     invoiceDate: `${invoiceDateStr} ${invoiceTimeStr}`,
     total: result.document.total,
     tax: result.document.tax,
+    uuid: result.document.internal_code,
+    timestamp: result.document.date,
   });
 
   const paymentMethodLabel =

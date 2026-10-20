@@ -6,6 +6,7 @@ import { writableBranch, type Actor } from './scope';
 import { effectiveCost, recordCostIn, recordCostOut } from './cost';
 import { validateReturnLines } from './returns';
 import { resolveDefaultAccountId, assertAccountFunds } from './accounts';
+import { enqueueEtaSubmission, isEtaEligible } from './eta';
 import type { Document, DocLine, Party, Payment, Branch } from '../src/types';
 
 export { AppError } from './errors';
@@ -293,8 +294,16 @@ export function saveDocument(raw: unknown, actor: Actor, existingId?: string) {
       else if (input.type === 'PURCHASE_RETURN') prefixType = 'DN';
       const prefix = prefixType + '-' + branch.code;
       const number = nextNumber(prefix, input.date.slice(0, 4));
+      // UBL 2.1 document UUID + reference to the original invoice's UUID (for returns).
+      const internalCode = id();
+      const referenceUuid = input.original_document_id
+        ? (one<{ internal_code: string | null }>(
+            'SELECT internal_code FROM documents WHERE id=?',
+            input.original_document_id,
+          )?.internal_code ?? '')
+        : '';
       run(
-        'INSERT INTO documents(id,number,type,status,branch_id,party_id,original_document_id,date,due_date,subtotal,discount,tax_rate,tax,total,paid,notes,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,?)',
+        'INSERT INTO documents(id,number,type,status,branch_id,party_id,original_document_id,date,due_date,subtotal,discount,tax_rate,tax,total,paid,notes,created_by,created_at,internal_code,reference_uuid) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,?,?,?)',
         documentId,
         number,
         input.type,
@@ -312,6 +321,8 @@ export function saveDocument(raw: unknown, actor: Actor, existingId?: string) {
         input.notes,
         actor.id,
         now(),
+        internalCode,
+        referenceUuid,
       );
     }
     for (const line of computed.lines)
@@ -406,6 +417,8 @@ export function postDocument(documentId: string, actor: Actor) {
       }
     }
     run("UPDATE documents SET status='POSTED' WHERE id=?", documentId);
+    // Queue the Egyptian e-invoice submission (runs asynchronously in the outbox).
+    enqueueEtaSubmission(documentId, actor.id);
     audit(
       actor,
       doc.type === 'SALE' || doc.type === 'PURCHASE' ? 'اعتماد فاتورة' : 'اعتماد مرتجع',
@@ -496,6 +509,18 @@ export function cancelDocument(documentId: string, actor: Actor) {
         }
       }
     run("UPDATE documents SET status='CANCELLED' WHERE id=?", documentId);
+    // A cancelled invoice must not remain queued for submission.
+    if (isEtaEligible(doc.type)) {
+      run(
+        "UPDATE e_invoice_submissions SET status='CANCELLED', updated_at=? WHERE document_id=? AND status IN ('PENDING','FAILED')",
+        now(),
+        documentId,
+      );
+      run(
+        "UPDATE documents SET eta_status='CANCELLED' WHERE id=? AND eta_status<>'VALID'",
+        documentId,
+      );
+    }
     audit(
       actor,
       doc.type === 'SALE' || doc.type === 'PURCHASE' ? 'إلغاء فاتورة' : 'إلغاء مرتجع',

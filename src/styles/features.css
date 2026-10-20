@@ -740,3 +740,46 @@
   flex: 1;
   font-size: 14px;
 }
+
+/* ETA e-invoice submission panel */
+.eta-summary-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 24px 16px;
+}
+.eta-summary-row .category-tag {
+  text-transform: none;
+}
+.eta-payload {
+  border-top: 1px solid var(--slate-100);
+  padding: 20px 24px;
+}
+.eta-payload h3 {
+  margin: 0 0 12px;
+  font-size: 15px;
+}
+.eta-payload pre {
+  max-height: 360px;
+  overflow: auto;
+  background: var(--slate-50);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  direction: ltr;
+  text-align: left;
+}
+.eta-payload button {
+  margin-top: 12px;
+}
+.table-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 4px 4px;
+}
+.small {
+  font-size: 12px;
+}

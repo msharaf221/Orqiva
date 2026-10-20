@@ -21,6 +21,7 @@ export interface CheckoutResult {
     tax: number;
     tax_rate: number;
     notes?: string;
+    internal_code?: string;
   };
   lines?: {
     id?: string;
