@@ -19,9 +19,9 @@ import {
   Store,
   RefreshCw,
 } from 'lucide-react';
-import { api, Button, Loading, money, useSession, useToast } from '../../lib';
+import { api, Button, Loading, Modal, money, useSession, useToast } from '../../lib';
 import { useBranch } from '../../branch';
-import type { PosShift, PosShiftSummary, Party } from '../../types';
+import type { PosShift, PosShiftSummary, Party, PosParkedSale, ParkedCartLine } from '../../types';
 import {
   playSound,
   DEFAULT_WALK_IN_CUSTOMER,
@@ -75,6 +75,8 @@ export function POS() {
   const [hotkeysModal, setHotkeysModal] = useState(false);
   const [receiptResult, setReceiptResult] = useState<CheckoutResult | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
+  const [parkedModal, setParkedModal] = useState(false);
+  const [parkedSales, setParkedSales] = useState<PosParkedSale[]>([]);
 
   // Load Data
   const reloadData = async () => {
@@ -296,6 +298,86 @@ export function POS() {
     setCart([]);
     setDiscountCents(0);
     setCustomer(DEFAULT_WALK_IN_CUSTOMER);
+  };
+
+  // Parked (held) sales — suspend the current cart and resume it later.
+  const refreshParkedSales = async () => {
+    if (!activeBranch) return;
+    try {
+      setParkedSales(await api<PosParkedSale[]>(`/pos/parked?branch_id=${activeBranch.id}`));
+    } catch {
+      setParkedSales([]);
+    }
+  };
+
+  const holdCart = async () => {
+    if (cart.length === 0 || !activeBranch) return;
+    try {
+      await api('/pos/parked', 'POST', {
+        branch_id: activeBranch.id,
+        shift_id: shift?.id,
+        label: customer.id === 'walk-in-customer' ? '' : customer.name,
+        customer_id: customer.id,
+        discount: discountCents,
+        cart: cart.map((c) => ({
+          product_id: c.product.id,
+          name: c.product.name,
+          sku: c.product.sku,
+          quantity: c.quantity,
+          unit_price: c.unit_price,
+        })),
+      });
+      clearCart();
+      playSound(true);
+      toast('تم تعليق السلة. يمكنك استئنافها في أي وقت.');
+      void refreshParkedSales();
+    } catch (err: any) {
+      toast(err.message || 'تعذر تعليق السلة');
+    }
+  };
+
+  const resumeCart = async (parked: PosParkedSale) => {
+    try {
+      const lines = JSON.parse(parked.cart || '[]') as ParkedCartLine[];
+      const restored: CartItem[] = lines.map((line) => {
+        const product = products.find((p) => p.id === line.product_id) || {
+          id: line.product_id,
+          sku: line.sku || '',
+          name: line.name,
+          category: '',
+          unit: '',
+          sale_price: line.unit_price,
+          cost_price: 0,
+          min_stock: 0,
+          active: 1,
+          created_at: '',
+          stock: line.quantity,
+        };
+        return { product, quantity: line.quantity, unit_price: line.unit_price };
+      });
+      await api(`/pos/parked/${parked.id}/resume`, 'POST', {});
+      const customerMatch = [DEFAULT_WALK_IN_CUSTOMER, ...customers].find(
+        (c) => c.id === parked.customer_id,
+      );
+      setCart(restored);
+      setDiscountCents(parked.label_discount || 0);
+      setCustomer(customerMatch || DEFAULT_WALK_IN_CUSTOMER);
+      setParkedModal(false);
+      toast('تم استئناف السلة المعلّقة.');
+      void refreshParkedSales();
+    } catch (err: any) {
+      toast(err.message || 'تعذر استئناف السلة');
+    }
+  };
+
+  const discardParked = async (parked: PosParkedSale) => {
+    try {
+      await api(`/pos/parked/${parked.id}`, 'DELETE');
+      toast('تم حذف السلة المعلّقة.');
+      void refreshParkedSales();
+    } catch (err: any) {
+      toast(err.message || 'تعذر حذف السلة');
+    }
   };
 
   // Calculations
@@ -563,6 +645,29 @@ export function POS() {
             <div className="pos-cart-actions">
               <Button
                 variant="secondary"
+                onClick={holdCart}
+                disabled={cart.length === 0}
+                className="pos-clear-btn"
+              >
+                <Clock size={16} /> تعليق
+              </Button>
+
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  void refreshParkedSales();
+                  setParkedModal(true);
+                }}
+                className="pos-clear-btn"
+              >
+                <ShoppingCart size={16} /> المعلّقة
+                {parkedSales.length > 0 && (
+                  <span className="parked-count-chip">{parkedSales.length}</span>
+                )}
+              </Button>
+
+              <Button
+                variant="secondary"
                 onClick={clearCart}
                 disabled={cart.length === 0}
                 className="pos-clear-btn"
@@ -816,6 +921,41 @@ export function POS() {
 
       {/* MODAL 8: Hotkeys Guide Modal */}
       {hotkeysModal && <HotkeysModal onClose={() => setHotkeysModal(false)} />}
+
+      {/* MODAL 9: Parked (held) sales */}
+      {parkedModal && (
+        <Modal title="السلات المعلّقة" onClose={() => setParkedModal(false)}>
+          <div className="modal-body">
+            {parkedSales.length === 0 ? (
+              <p className="muted">لا توجد سلات معلّقة حالياً.</p>
+            ) : (
+              <div className="parked-list">
+                {parkedSales.map((p) => (
+                  <div className="parked-item" key={p.id}>
+                    <div className="parked-item-info">
+                      <strong>{p.label || 'بدون وصف'}</strong>
+                      <small className="muted">
+                        {p.user_name} · {new Date(p.created_at).toLocaleTimeString('ar-EG')}
+                      </small>
+                    </div>
+                    <div className="parked-item-meta">
+                      <span>{money(p.total)} ج.م</span>
+                      <div className="row-actions">
+                        <Button variant="secondary" onClick={() => resumeCart(p)}>
+                          استئناف
+                        </Button>
+                        <Button variant="danger" onClick={() => discardParked(p)}>
+                          حذف
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

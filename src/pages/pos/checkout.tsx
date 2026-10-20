@@ -2,7 +2,14 @@ import { useState, useMemo, type FormEvent } from 'react';
 import { Search, CreditCard, Building, Clock, Coins } from 'lucide-react';
 import { api, Button, Field, Modal, money, useAction, useToast } from '../../lib';
 import type { Party } from '../../types';
-import { playSound, DEFAULT_WALK_IN_CUSTOMER, type CheckoutResult, type CartItem } from './helpers';
+import {
+  playSound,
+  DEFAULT_WALK_IN_CUSTOMER,
+  findStockShortages,
+  type CheckoutResult,
+  type CartItem,
+  type PosProduct,
+} from './helpers';
 
 export function CustomerPickerModal({
   customers,
@@ -210,6 +217,36 @@ export function CheckoutModal({
     { label: '1000 ج.م', val: 100000 },
   ];
 
+  /**
+   * Refetches live branch availability and aborts when a cart line can no longer be
+   * fulfilled (e.g. a parallel till sold the last unit while this cart was open).
+   */
+  const revalidateStock = async (): Promise<boolean> => {
+    try {
+      const fresh = await api<PosProduct[]>(`/pos/products?branch_id=${branchId}`);
+      const shortages = findStockShortages(
+        cart.map((c) => ({
+          product_id: c.product.id,
+          name: c.product.name,
+          quantity: c.quantity,
+        })),
+        fresh.map((p) => ({ id: p.id, stock: p.stock, name: p.name })),
+      );
+      if (shortages.length > 0) {
+        const first = shortages[0];
+        playSound(false);
+        toast(
+          `تغيّرت الكميات المتاحة: «${first.name}» المتاح الآن (${first.available}) والمطلوب (${first.requested}). راجع السلة.`,
+        );
+        return false;
+      }
+      return true;
+    } catch {
+      // If the availability check itself fails, fall back to the server-side guard.
+      return true;
+    }
+  };
+
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
 
@@ -241,6 +278,7 @@ export function CheckoutModal({
       const nonCreditSum = splitCashCents + splitCardCents + splitBankCents;
 
       void act(async () => {
+        if (!(await revalidateStock())) return;
         const res = await api<CheckoutResult>('/pos/checkout', 'POST', {
           branch_id: branchId,
           shift_id: shiftId,
@@ -289,6 +327,7 @@ export function CheckoutModal({
     }
 
     void act(async () => {
+      if (!(await revalidateStock())) return;
       const res = await api<CheckoutResult>('/pos/checkout', 'POST', {
         branch_id: branchId,
         shift_id: shiftId,

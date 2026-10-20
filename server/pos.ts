@@ -18,12 +18,14 @@ import {
   posShiftApproveSchema,
   posShiftCloseSchema,
   posCheckoutSchema,
+  posParkedSaleSchema,
 } from './validation';
 import type {
   PosShift,
   PosCashMovement,
   PosShiftSummary,
   PosShiftPaymentDetail,
+  PosParkedSale,
   Document,
   DocLine,
 } from '../src/types';
@@ -183,9 +185,17 @@ export function getShiftSummary(shiftId: string, actor: Actor): PosShiftSummary 
   // Total sales from documents
   const docTotals = one<{ total: number; count: number; paid: number }>(
     `SELECT COALESCE(SUM(total), 0) total, COUNT(id) count, COALESCE(SUM(paid), 0) paid
-     FROM documents WHERE pos_shift_id=? AND status='POSTED'`,
+     FROM documents WHERE pos_shift_id=? AND status='POSTED' AND type='SALE'`,
     shiftId,
   ) || { total: 0, count: 0, paid: 0 };
+
+  // Cash refunds issued from this shift (credit notes linked by pos_shift_id).
+  const refundRow = one<{ total: number; count: number }>(
+    `SELECT COALESCE(SUM(total), 0) total, COUNT(id) count
+     FROM documents WHERE pos_shift_id=? AND status='POSTED' AND type='SALE_RETURN'`,
+    shiftId,
+  ) || { total: 0, count: 0 };
+  const refundsTotal = refundRow.total;
 
   const creditSales = Math.max(0, docTotals.total - docTotals.paid);
 
@@ -199,7 +209,11 @@ export function getShiftSummary(shiftId: string, actor: Actor): PosShiftSummary 
   ) || { cash_in: 0, cash_out: 0 };
 
   const expectedCash =
-    shift.opening_cash + cashSales + movementsTotals.cash_in - movementsTotals.cash_out;
+    shift.opening_cash +
+    cashSales +
+    movementsTotals.cash_in -
+    movementsTotals.cash_out -
+    refundsTotal;
   const expectedCard = cardSales;
   const expectedBank = bankSales;
 
@@ -253,6 +267,8 @@ export function getShiftSummary(shiftId: string, actor: Actor): PosShiftSummary 
     credit_sales: creditSales,
     total_sales: docTotals.total,
     sales_count: docTotals.count,
+    refunds_total: refundsTotal,
+    refunds_count: refundRow.count,
     cash_in: movementsTotals.cash_in,
     cash_out: movementsTotals.cash_out,
     opening_cash: shift.opening_cash,
@@ -693,5 +709,103 @@ export function posCheckout(raw: unknown, actor: Actor) {
       shift_id: shiftId,
       payment: paymentResult,
     };
+  });
+}
+
+/**
+ * Parks (holds) the current cart so the cashier can serve another customer and resume later.
+ * Parked sales are scoped to the branch and visible to every cashier on that branch.
+ */
+export function parkSale(raw: unknown, actor: Actor): PosParkedSale {
+  const input = posParkedSaleSchema.parse(raw);
+  const branch = writableBranch(actor, input.branch_id);
+
+  return transaction(() => {
+    const parkedId = id();
+    const total = input.cart.reduce((sum, l) => sum + l.quantity * l.unit_price, 0);
+    run(
+      `INSERT INTO pos_parked_sales(id, branch_id, shift_id, user_id, label, customer_id, label_discount, cart, total, created_at)
+       VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      parkedId,
+      branch.id,
+      input.shift_id ?? null,
+      actor.id,
+      input.label || '',
+      input.customer_id,
+      input.discount,
+      JSON.stringify(input.cart),
+      total,
+      now(),
+    );
+    audit(
+      actor,
+      'تعليق بيع في نقطة البيع',
+      'POS_PARKED',
+      parkedId,
+      input.label || `${total / 100} ج.م`,
+    );
+    return requireRow(
+      one<PosParkedSale>(
+        `SELECT p.*, u.name user_name, pt.name customer_name
+         FROM pos_parked_sales p
+         JOIN users u ON u.id=p.user_id
+         LEFT JOIN parties pt ON pt.id=p.customer_id
+         WHERE p.id=?`,
+        parkedId,
+      ),
+    );
+  });
+}
+
+/** Lists parked sales for a branch (optionally only the current user's own). */
+export function listParkedSales(
+  scope: Scope,
+  options: { branchId?: string; userId?: string } = {},
+): PosParkedSale[] {
+  const f = scopeSql('p.branch_id', scope);
+  const clauses = [f.sql];
+  const params: (string | number)[] = [...f.params];
+  if (options.branchId) {
+    clauses.push('p.branch_id=?');
+    params.push(options.branchId);
+  }
+  if (options.userId) {
+    clauses.push('p.user_id=?');
+    params.push(options.userId);
+  }
+  return all<PosParkedSale>(
+    `SELECT p.*, u.name user_name, pt.name customer_name
+     FROM pos_parked_sales p
+     JOIN users u ON u.id=p.user_id
+     LEFT JOIN parties pt ON pt.id=p.customer_id
+     WHERE ${clauses.join(' AND ')}
+     ORDER BY p.created_at DESC LIMIT 100`,
+    ...params,
+  );
+}
+
+/** Removes a parked sale once resumed (the cart is restored client-side). */
+export function resumeParkedSale(parkedId: string, actor: Actor): { id: string } {
+  return transaction(() => {
+    const parked = requireRow(
+      one<PosParkedSale>('SELECT * FROM pos_parked_sales WHERE id=?', parkedId),
+    );
+    writableBranch(actor, parked.branch_id);
+    run('DELETE FROM pos_parked_sales WHERE id=?', parkedId);
+    audit(actor, 'استئناف بيع معلّق', 'POS_PARKED', parkedId, parked.label || '');
+    return { id: parkedId };
+  });
+}
+
+/** Discards a parked sale without resuming it. */
+export function discardParkedSale(parkedId: string, actor: Actor): { id: string } {
+  return transaction(() => {
+    const parked = requireRow(
+      one<PosParkedSale>('SELECT * FROM pos_parked_sales WHERE id=?', parkedId),
+    );
+    writableBranch(actor, parked.branch_id);
+    run('DELETE FROM pos_parked_sales WHERE id=?', parkedId);
+    audit(actor, 'حذف بيع معلّق', 'POS_PARKED', parkedId, parked.label || '');
+    return { id: parkedId };
   });
 }

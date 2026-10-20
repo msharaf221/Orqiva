@@ -486,3 +486,24 @@ export const posCheckoutSchema = z
       .optional(),
   })
   .strict();
+
+export const posParkedSaleSchema = z
+  .object({
+    branch_id: id(),
+    shift_id: id().optional(),
+    label: optionalText(80),
+    customer_id: id().default('walk-in-customer'),
+    discount: money.default(0),
+    cart: z
+      .array(
+        z.object({
+          product_id: id(),
+          name: text(),
+          sku: optionalText(60),
+          quantity: z.number().int().min(1).max(10000),
+          unit_price: money.refine((n) => n >= 0),
+        }),
+      )
+      .min(1, 'لا يمكن تعليق سلة فارغة'),
+  })
+  .strict();

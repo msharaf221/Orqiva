@@ -97,6 +97,29 @@ export interface PosCashMovement {
   user_name?: string;
 }
 
+export interface ParkedCartLine {
+  product_id: string;
+  name: string;
+  sku?: string;
+  quantity: number;
+  unit_price: number;
+}
+
+export interface PosParkedSale {
+  id: string;
+  branch_id: string;
+  shift_id: string | null;
+  user_id: string;
+  label: string;
+  customer_id: string;
+  label_discount: number;
+  cart: string;
+  total: number;
+  created_at: string;
+  user_name?: string;
+  customer_name?: string;
+}
+
 export interface PosShiftPaymentDetail {
   id: string;
   document_id: string;
@@ -117,6 +140,8 @@ export interface PosShiftSummary {
   credit_sales: number;
   total_sales: number;
   sales_count: number;
+  refunds_total: number;
+  refunds_count: number;
   cash_in: number;
   cash_out: number;
   opening_cash: number;

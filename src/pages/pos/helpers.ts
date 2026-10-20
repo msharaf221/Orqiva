@@ -74,3 +74,45 @@ export function playSound(success = true) {
     // Audio might not be available or permitted
   }
 }
+
+export interface StockShortage {
+  product_id: string;
+  name: string;
+  available: number;
+  requested: number;
+}
+
+/**
+ * Pure comparison of a cart against freshly-fetched branch availability.
+ * Used to detect a product that was sold on another till while this cart was open
+ * (the server still rejects overselling, but only at post time — this surfaces the
+ * conflict to the cashier before the payment form is submitted).
+ */
+export function findStockShortages(
+  lines: { product_id: string; name: string; quantity: number }[],
+  availability: { id: string; stock: number; name: string }[],
+): StockShortage[] {
+  const byId = new Map(availability.map((p) => [p.id, p]));
+  const shortages: StockShortage[] = [];
+  for (const line of lines) {
+    const product = byId.get(line.product_id);
+    if (!product) {
+      shortages.push({
+        product_id: line.product_id,
+        name: line.name,
+        available: 0,
+        requested: line.quantity,
+      });
+      continue;
+    }
+    if (product.stock < line.quantity) {
+      shortages.push({
+        product_id: line.product_id,
+        name: product.name || line.name,
+        available: product.stock,
+        requested: line.quantity,
+      });
+    }
+  }
+  return shortages;
+}

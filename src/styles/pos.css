@@ -685,6 +685,46 @@
   font-weight: 700;
   box-shadow: var(--shadow-xs);
 }
+.parked-count-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  margin-inline-start: 6px;
+  border-radius: 999px;
+  background: var(--indigo-600);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+}
+.parked-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.parked-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-md);
+  background: var(--slate-50);
+}
+.parked-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.parked-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-weight: 700;
+}
 .pos-prod-info {
   display: flex;
   flex-direction: column;

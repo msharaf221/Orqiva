@@ -296,14 +296,18 @@ export function saveDocument(raw: unknown, actor: Actor, existingId?: string) {
       const number = nextNumber(prefix, input.date.slice(0, 4));
       // UBL 2.1 document UUID + reference to the original invoice's UUID (for returns).
       const internalCode = id();
-      const referenceUuid = input.original_document_id
-        ? (one<{ internal_code: string | null }>(
-            'SELECT internal_code FROM documents WHERE id=?',
+      const originalDoc = input.original_document_id
+        ? one<{ internal_code: string | null; pos_shift_id: string | null }>(
+            'SELECT internal_code, pos_shift_id FROM documents WHERE id=?',
             input.original_document_id,
-          )?.internal_code ?? '')
-        : '';
+          )
+        : undefined;
+      const referenceUuid = originalDoc?.internal_code ?? '';
+      // A return inherits the POS shift of the original sale so refunds net against
+      // the cashier's shift reconciliation.
+      const inheritedShiftId = originalDoc?.pos_shift_id ?? null;
       run(
-        'INSERT INTO documents(id,number,type,status,branch_id,party_id,original_document_id,date,due_date,subtotal,discount,tax_rate,tax,total,paid,notes,created_by,created_at,internal_code,reference_uuid) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,?,?,?)',
+        'INSERT INTO documents(id,number,type,status,branch_id,party_id,original_document_id,date,due_date,subtotal,discount,tax_rate,tax,total,paid,notes,created_by,created_at,internal_code,reference_uuid,pos_shift_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,?,?,?,?)',
         documentId,
         number,
         input.type,
@@ -323,6 +327,7 @@ export function saveDocument(raw: unknown, actor: Actor, existingId?: string) {
         now(),
         internalCode,
         referenceUuid,
+        inheritedShiftId,
       );
     }
     for (const line of computed.lines)
