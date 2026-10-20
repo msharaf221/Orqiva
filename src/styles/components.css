@@ -283,8 +283,8 @@
 }
 .field > span {
   font-size: 15px;
-  color: var(--slate-800);
-  font-weight: 700;
+  color: var(--slate-700);
+  font-weight: 600;
 }
 .field > small {
   font-size: 13px;

@@ -52,6 +52,7 @@ import {
   money,
   today,
   dayOffset,
+  useDensity,
 } from './lib';
 import type { User, Company, Product, Party, Document, Dashboard as DashboardData } from './types';
 import { ApiError } from './api';
@@ -331,6 +332,7 @@ export function App() {
 }
 function Authenticated({ user, onLogout }: { user: User; onLogout: () => void }) {
   const company = useData<Company>('/company');
+  useDensity();
   return (
     <SessionContext.Provider
       value={{

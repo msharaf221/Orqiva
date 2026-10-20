@@ -86,6 +86,17 @@ export function usePref<T>(key: string, initial: T) {
   return [value, update] as const;
 }
 
+export type Density = 'comfortable' | 'normal' | 'compact';
+
+/** Table density across admin screens, applied to <html> via a data attribute. */
+export function useDensity() {
+  const [density, setDensity] = usePref<Density>('table.density', 'normal');
+  useEffect(() => {
+    document.documentElement.dataset.density = density;
+  }, [density]);
+  return [density, setDensity] as const;
+}
+
 export function useData<T>(url: string | null) {
   const [data, setData] = useState<T | null>(null),
     [error, setError] = useState(''),
@@ -378,11 +389,36 @@ export function Confirm({
     </Modal>
   );
 }
-export function Loading() {
+export function Loading({
+  variant = 'rows',
+  rows = 6,
+}: { variant?: 'rows' | 'cards' | 'inline'; rows?: number } = {}) {
+  // Skeletons make the wait feel like the real screen arriving rather than a generic spinner.
+  if (variant === 'inline') {
+    return (
+      <div className="loading-state inline">
+        <LoaderCircle className="spin" size={22} />
+        <span>جاري تحميل بياناتك...</span>
+      </div>
+    );
+  }
   return (
-    <div className="loading-state">
-      <LoaderCircle className="spin" size={27} />
-      <span>جاري تحميل بياناتك...</span>
+    <div className={'skeleton-block ' + variant} aria-busy="true" aria-label="جاري تحميل بياناتك">
+      {variant === 'cards'
+        ? Array.from({ length: rows }, (_, i) => (
+            <div key={i} className="skeleton-card">
+              <div className="skeleton-line w-40" />
+              <div className="skeleton-line w-90 h-lg" />
+              <div className="skeleton-line w-60" />
+            </div>
+          ))
+        : Array.from({ length: rows }, (_, i) => (
+            <div key={i} className="skeleton-row">
+              <div className="skeleton-line w-30" />
+              <div className="skeleton-line w-50" />
+              <div className="skeleton-line w-20" />
+            </div>
+          ))}
     </div>
   );
 }

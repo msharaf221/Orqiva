@@ -114,26 +114,14 @@ export function ShiftTreasuryAuditModal({
         <Loading />
       ) : summary ? (
         <form onSubmit={handleApprove}>
-          <div className="modal-body form-grid" style={{ maxHeight: '74vh', overflowY: 'auto' }}>
+          <div className="modal-body form-grid treasury-scroll">
             {/* Shift Header Bar */}
-            <div
-              style={{
-                padding: '12px 14px',
-                background: '#f8fafc',
-                border: '1px solid #e2e8f0',
-                borderRadius: '8px',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                gap: '8px',
-              }}
-            >
+            <div className="info-tile row-between-wrap">
               <div>
                 <strong style={{ fontSize: '14px', color: 'var(--slate-900)' }}>
                   وردية #{summary.shift.number}
                 </strong>
-                <div style={{ fontSize: '12px', color: 'var(--slate-500)' }}>
+                <div className="text-muted-sm">
                   الكاشير: <b>{summary.shift.user_name}</b> | الفرع: {summary.shift.branch_id}
                 </div>
               </div>
@@ -152,7 +140,7 @@ export function ShiftTreasuryAuditModal({
             </div>
 
             {/* Multi-Tender Table */}
-            <div style={{ overflowX: 'auto' }}>
+            <div className="table-scroll">
               <table className="pos-reconciliation-table">
                 <thead>
                   <tr>
@@ -166,11 +154,11 @@ export function ShiftTreasuryAuditModal({
                 <tbody>
                   <tr>
                     <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <div className="row-gap-6">
                         <Coins size={15} style={{ color: '#d97706' }} />
                         <strong>النقدية بالدرج</strong>
                       </div>
-                      <small style={{ color: 'var(--muted)', fontSize: '11px' }}>
+                      <small className="treasury-shift-meta">
                         العهدة {money(summary.opening_cash)} + مبيعات {money(summary.cash_sales)}
                       </small>
                     </td>
@@ -190,13 +178,7 @@ export function ShiftTreasuryAuditModal({
                         required
                         value={verifiedCash}
                         onChange={(e) => setVerifiedCash(e.target.value)}
-                        style={{
-                          width: '100%',
-                          padding: '5px 8px',
-                          fontSize: '13px',
-                          borderRadius: '6px',
-                          border: '1px solid #cbd5e1',
-                        }}
+                        className="treasury-verify-input"
                       />
                     </td>
                     <td>
@@ -222,11 +204,11 @@ export function ShiftTreasuryAuditModal({
 
                   <tr>
                     <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <div className="row-gap-6">
                         <CreditCard size={15} style={{ color: '#2563eb' }} />
                         <strong>بطاقات / فيزا</strong>
                       </div>
-                      <small style={{ color: 'var(--muted)', fontSize: '11px' }}>
+                      <small className="treasury-shift-meta">
                         باتش: {summary.shift.terminal_batch_number || 'غير مسجل'} |{' '}
                         {summary.shift.card_slips_count || 0} إيصال
                       </small>
@@ -247,13 +229,7 @@ export function ShiftTreasuryAuditModal({
                         required
                         value={verifiedCard}
                         onChange={(e) => setVerifiedCard(e.target.value)}
-                        style={{
-                          width: '100%',
-                          padding: '5px 8px',
-                          fontSize: '13px',
-                          borderRadius: '6px',
-                          border: '1px solid #cbd5e1',
-                        }}
+                        className="treasury-verify-input"
                       />
                     </td>
                     <td>
@@ -279,11 +255,11 @@ export function ShiftTreasuryAuditModal({
 
                   <tr>
                     <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <div className="row-gap-6">
                         <Building2 size={15} style={{ color: '#059669' }} />
                         <strong>إنستاباي / محفظة</strong>
                       </div>
-                      <small style={{ color: 'var(--muted)', fontSize: '11px' }}>
+                      <small className="treasury-shift-meta">
                         {summary.shift.bank_transfers_count || 0} عملية تحويل
                       </small>
                     </td>
@@ -303,13 +279,7 @@ export function ShiftTreasuryAuditModal({
                         required
                         value={verifiedBank}
                         onChange={(e) => setVerifiedBank(e.target.value)}
-                        style={{
-                          width: '100%',
-                          padding: '5px 8px',
-                          fontSize: '13px',
-                          borderRadius: '6px',
-                          border: '1px solid #cbd5e1',
-                        }}
+                        className="treasury-verify-input"
                       />
                     </td>
                     <td>
@@ -335,7 +305,7 @@ export function ShiftTreasuryAuditModal({
 
                   <tr>
                     <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <div className="row-gap-6">
                         <Clock size={15} style={{ color: '#7c3aed' }} />
                         <strong>مبيعات آجلة</strong>
                       </div>
@@ -344,10 +314,10 @@ export function ShiftTreasuryAuditModal({
                       <b>{money(summary.credit_sales)} ج.م</b>
                     </td>
                     <td>
-                      <span style={{ color: 'var(--muted)' }}>—</span>
+                      <span className="muted">—</span>
                     </td>
                     <td>
-                      <span style={{ color: 'var(--muted)', fontSize: '12px' }}>
+                      <span className="muted" style={{ fontSize: '12px' }}>
                         {money(summary.credit_sales)} ج.م
                       </span>
                     </td>
@@ -471,22 +441,11 @@ export function ShiftTreasuryAuditModal({
             </div>
 
             {/* EXPANDABLE PAYMENTS AUDIT TABLE */}
-            <div style={{ marginTop: '2px' }}>
+            <div>
               <button
                 type="button"
                 onClick={() => setShowPaymentsTable(!showPaymentsTable)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  background: 'none',
-                  border: 'none',
-                  color: 'var(--indigo-600)',
-                  fontSize: '13px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  padding: '4px 0',
-                }}
+                className="treasury-audit-toggle"
               >
                 {showPaymentsTable ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                 <span>
@@ -511,14 +470,14 @@ export function ShiftTreasuryAuditModal({
                     <tbody>
                       {!summary.payments || summary.payments.length === 0 ? (
                         <tr>
-                          <td colSpan={6} style={{ textAlign: 'center', color: 'var(--muted)' }}>
+                          <td colSpan={6} className="text-center muted">
                             لا توجد مدفوعات مسجلة في هذه الوردية
                           </td>
                         </tr>
                       ) : (
                         summary.payments.map((p, idx) => (
                           <tr key={idx}>
-                            <td style={{ fontSize: '11.5px', color: 'var(--muted)' }}>
+                            <td className="treasury-chip-meta">
                               {p.created_at
                                 ? new Date(p.created_at).toLocaleTimeString('ar-EG', {
                                     hour: '2-digit',
@@ -532,28 +491,7 @@ export function ShiftTreasuryAuditModal({
                             <td>{p.party_name || 'عميل نقدي'}</td>
                             <td>
                               <span
-                                style={{
-                                  padding: '2px 6px',
-                                  borderRadius: '4px',
-                                  fontSize: '11px',
-                                  fontWeight: 700,
-                                  background:
-                                    p.method === 'CASH'
-                                      ? '#fef3c7'
-                                      : p.method === 'CARD'
-                                        ? '#dbeafe'
-                                        : p.method === 'BANK'
-                                          ? '#dcfce7'
-                                          : '#ede9fe',
-                                  color:
-                                    p.method === 'CASH'
-                                      ? '#92400e'
-                                      : p.method === 'CARD'
-                                        ? '#1e40af'
-                                        : p.method === 'BANK'
-                                          ? '#15803d'
-                                          : '#6b21a8',
-                                }}
+                                className={'treasury-method-chip method-' + p.method.toLowerCase()}
                               >
                                 {p.method === 'CASH'
                                   ? 'كاش'
@@ -567,9 +505,7 @@ export function ShiftTreasuryAuditModal({
                             <td>
                               <b>{money(p.amount)} ج.م</b>
                             </td>
-                            <td style={{ fontSize: '11.5px', color: 'var(--slate-600)' }}>
-                              {p.reference || '—'}
-                            </td>
+                            <td className="treasury-chip-meta">{p.reference || '—'}</td>
                           </tr>
                         ))
                       )}
@@ -585,7 +521,7 @@ export function ShiftTreasuryAuditModal({
                 <AlertCircle size={18} />
                 <div>
                   <strong>تسجيل قيد عجز تلقائي:</strong>
-                  <p style={{ margin: '2px 0 0', fontSize: '12px' }}>
+                  <p className="shortage-note">
                     سيتم تلقائياً إنشاء قيد مصروف تشغيلي بقيمة ({money(Math.abs(cashDiffCents))}{' '}
                     ج.م) في تصنيف «عجز نقدية نقطة بيع» لضبط الخزنة وحساب الأرباح والخسائر.
                   </p>

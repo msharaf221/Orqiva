@@ -1138,23 +1138,25 @@
 .receipt-items-table {
   width: 100%;
   border-collapse: collapse;
+  margin: 8px 0;
   font-size: 11.5px;
 }
 .receipt-items-table th {
-  padding: 5px 2px;
-  border-bottom: 1.5px solid #000000;
-  font-weight: 800;
+  text-align: right;
+  padding: 4px 2px;
+  border-bottom: 1px dashed #777;
+  font-weight: 700;
   font-size: 11px;
   color: #000000;
 }
 .receipt-items-table td {
-  padding: 6px 2px;
+  padding: 5px 2px;
   vertical-align: top;
-  border-bottom: 1px dotted #cbd5e1;
+  border-bottom: 1px dotted #e5e5e5;
   color: #000000;
 }
 .receipt-items-table .col-item {
-  width: 44%;
+  width: 48%;
   text-align: right;
 }
 .receipt-items-table .item-name {
@@ -1173,13 +1175,13 @@
   font-weight: 600;
 }
 .receipt-items-table .col-price {
-  width: 20%;
+  width: 16%;
   text-align: center;
 }
 .receipt-items-table .col-total {
   width: 20%;
   text-align: left;
-  font-weight: 700;
+  font-weight: 600;
 }
 .receipt-totals {
   display: flex;
@@ -1362,40 +1364,6 @@
 .receipt-meta-row {
   display: flex;
   justify-content: space-between;
-}
-.receipt-items-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 8px 0;
-  font-size: 11.5px;
-}
-.receipt-items-table th {
-  text-align: right;
-  padding: 4px 2px;
-  border-bottom: 1px dashed #777;
-  font-weight: 700;
-  font-size: 11px;
-}
-.receipt-items-table td {
-  padding: 5px 2px;
-  vertical-align: top;
-  border-bottom: 1px dotted #e5e5e5;
-}
-.receipt-items-table .col-item {
-  width: 48%;
-}
-.receipt-items-table .col-qty {
-  width: 16%;
-  text-align: center;
-}
-.receipt-items-table .col-price {
-  width: 16%;
-  text-align: center;
-}
-.receipt-items-table .col-total {
-  width: 20%;
-  text-align: left;
-  font-weight: 600;
 }
 .receipt-barcode-box {
   text-align: center;
@@ -2521,4 +2489,53 @@
   bottom: 0;
   background: #ffffff;
   padding-top: 12px;
+}
+
+/* Phase 5.1 — POS checkout split payment (extracted from inline styles) */
+.pos-checkout-body {
+  max-height: 74vh;
+  overflow-y: auto;
+}
+.pos-split-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  min-height: 44px;
+  background: #ffffff;
+  color: var(--indigo-600);
+  border: 1px solid var(--indigo-600);
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 13px;
+  transition: all 0.15s ease;
+}
+.pos-split-toggle.active {
+  background: var(--indigo-600);
+  color: #ffffff;
+}
+.pos-split-heading {
+  font-size: 13.5px;
+  color: var(--slate-800);
+}
+.pos-split-status-bar {
+  padding: 4px 10px;
+  font-size: 12.5px;
+}
+.pos-split-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.pos-split-input {
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  min-height: 44px;
+}
+.pos-split-hint {
+  font-size: 12px;
+  color: var(--slate-500);
 }

@@ -26,6 +26,8 @@ import {
   Loading,
   ErrorState,
   Initials,
+  useDensity,
+  type Density,
 } from '../../lib';
 import type { User, RoleDef, PermissionDef } from '../../types';
 import { useBranch } from '../../branch';
@@ -114,7 +116,10 @@ export function SettingsPage() {
           ) : tab === 'einvoice' ? (
             <EInvoicePanel />
           ) : (
-            <SecuritySettings />
+            <>
+              <SecuritySettings />
+              <AppearanceSettings />
+            </>
           )}
         </div>
       </div>
@@ -320,6 +325,40 @@ function SecuritySettings() {
         </Button>
       </div>
     </form>
+  );
+}
+function AppearanceSettings() {
+  const [density, setDensity] = useDensity();
+  const options: { id: Density; label: string; hint: string }[] = [
+    { id: 'comfortable', label: 'مريحة', hint: 'صفوف أوسع وأكثر راحة للقراءة' },
+    { id: 'normal', label: 'عادية', hint: 'الكثافة الافتراضية' },
+    { id: 'compact', label: 'مضغوطة', hint: 'أكبر عدد من الصفوف على الشاشة' },
+  ];
+  return (
+    <section className="card settings-card">
+      <div className="card-heading">
+        <div>
+          <h2>المظهر وكثافة الجداول</h2>
+          <p>تحكم في كثافة صفوف الجداول في كل شاشات الإدارة.</p>
+        </div>
+      </div>
+      <div className="form-card-body">
+        <div className="density-options">
+          {options.map((opt) => (
+            <button
+              key={opt.id}
+              type="button"
+              className={'density-option ' + (density === opt.id ? 'active' : '')}
+              onClick={() => setDensity(opt.id)}
+              aria-pressed={density === opt.id}
+            >
+              <strong>{opt.label}</strong>
+              <small>{opt.hint}</small>
+            </button>
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }
 function UserSettings() {

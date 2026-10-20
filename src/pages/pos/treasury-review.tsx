@@ -146,28 +146,20 @@ export function TreasuryReviewModal({
       description="مراجعة ورديات الكاشير، فحص أشرطة تسوية الماكينات وإيصالات الفيزا وإنستاباي، والتحقق من المستندات الثبوتية وترحيل قيود الفروقات."
       onClose={onClose}
     >
-      <div className="modal-body form-grid" style={{ maxHeight: '78vh', overflowY: 'auto' }}>
+      <div className="modal-body form-grid treasury-scroll">
         {loading ? (
           <Loading />
         ) : pendingList.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '36px 12px', color: 'var(--muted)' }}>
-            <CheckCircle2 size={46} style={{ color: 'var(--green)', marginBottom: '10px' }} />
+          <div className="panel-note">
+            <CheckCircle2 size={46} />
             <h4>لا توجد ورديات معلقة بانتظار الاعتماد</h4>
             <p>جميع ورديات الكاشير في هذا الفرع معتمدة ومطابقة بالكامل.</p>
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: '16px' }}>
+          <div className="treasury-layout">
             {/* Shifts Sidebar */}
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '8px',
-                borderLeft: '1px solid var(--border)',
-                paddingLeft: '12px',
-              }}
-            >
-              <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--muted)' }}>
+            <div className="treasury-sidebar">
+              <span className="section-label">
                 الورديات المعلقة للاعتماد ({pendingList.length})
               </span>
               {pendingList.map((s) => (
@@ -175,55 +167,18 @@ export function TreasuryReviewModal({
                   key={s.id}
                   type="button"
                   onClick={() => selectShift(s.id)}
-                  style={{
-                    padding: '10px 12px',
-                    borderRadius: '8px',
-                    border:
-                      '1px solid ' + (selectedShiftId === s.id ? 'var(--green)' : 'var(--border)'),
-                    background: selectedShiftId === s.id ? '#f0f7f4' : '#fff',
-                    textAlign: 'right',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '4px',
-                    boxShadow: 'var(--shadow-xs)',
-                  }}
+                  className={'treasury-shift-btn ' + (selectedShiftId === s.id ? 'active' : '')}
                 >
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                    }}
-                  >
-                    <strong style={{ fontSize: '13px' }}>{s.number}</strong>
+                  <div className="row-between">
+                    <strong className="treasury-shift-number">{s.number}</strong>
                     {s.safe_envelope_number && (
-                      <span
-                        style={{
-                          fontSize: '10.5px',
-                          background: '#ede9fe',
-                          color: '#5b21b6',
-                          padding: '1px 6px',
-                          borderRadius: '4px',
-                          fontWeight: 700,
-                        }}
-                      >
-                        ظرف #{s.safe_envelope_number}
-                      </span>
+                      <span className="treasury-envelope-chip">ظرف #{s.safe_envelope_number}</span>
                     )}
                   </div>
-                  <span style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                  <span className="treasury-shift-meta">
                     الكاشير: <b>{s.user_name || '—'}</b>
                   </span>
-                  <div
-                    style={{
-                      fontSize: '11px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '2px',
-                      marginTop: '2px',
-                    }}
-                  >
+                  <div className="treasury-declared">
                     <span style={{ color: '#b45309', fontWeight: 600 }}>
                       كاش مسلّم: {money(s.cashier_declared_cash || 0)} ج.م
                     </span>
@@ -248,26 +203,14 @@ export function TreasuryReviewModal({
                 <Loading />
               ) : summary ? (
                 <form onSubmit={handleApprove}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <div className="stack">
                     {/* Shift Metadata Bar */}
-                    <div
-                      style={{
-                        padding: '12px 14px',
-                        background: '#f8fafc',
-                        border: '1px solid #e2e8f0',
-                        borderRadius: '8px',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        flexWrap: 'wrap',
-                        gap: '8px',
-                      }}
-                    >
+                    <div className="info-tile row-between-wrap">
                       <div>
                         <strong style={{ fontSize: '14px', color: 'var(--slate-900)' }}>
                           وردية #{summary.shift.number}
                         </strong>
-                        <div style={{ fontSize: '12px', color: 'var(--slate-500)' }}>
+                        <div className="text-muted-sm">
                           الكاشير: <b>{summary.shift.user_name}</b> | الفرع:{' '}
                           {summary.shift.branch_id}
                         </div>
@@ -289,7 +232,7 @@ export function TreasuryReviewModal({
                     </div>
 
                     {/* Multi-Tender Reconciliation Table */}
-                    <div style={{ overflowX: 'auto' }}>
+                    <div className="table-scroll">
                       <table className="pos-reconciliation-table">
                         <thead>
                           <tr>
@@ -304,11 +247,11 @@ export function TreasuryReviewModal({
                           {/* Cash Row */}
                           <tr>
                             <td>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <div className="row-gap-6">
                                 <Coins size={15} style={{ color: '#d97706' }} />
                                 <strong>النقدية بالدرج</strong>
                               </div>
-                              <small style={{ color: 'var(--muted)', fontSize: '11px' }}>
+                              <small className="treasury-shift-meta">
                                 رصيد البداية {money(summary.opening_cash)} + مبيعات{' '}
                                 {money(summary.cash_sales)}
                               </small>
@@ -329,13 +272,7 @@ export function TreasuryReviewModal({
                                 required
                                 value={verifiedCash}
                                 onChange={(e) => setVerifiedCash(e.target.value)}
-                                style={{
-                                  width: '100%',
-                                  padding: '5px 8px',
-                                  fontSize: '13px',
-                                  borderRadius: '6px',
-                                  border: '1px solid #cbd5e1',
-                                }}
+                                className="treasury-verify-input"
                               />
                             </td>
                             <td>
@@ -362,11 +299,11 @@ export function TreasuryReviewModal({
                           {/* Card Row */}
                           <tr>
                             <td>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <div className="row-gap-6">
                                 <CreditCard size={15} style={{ color: '#2563eb' }} />
                                 <strong>بطاقات / فيزا</strong>
                               </div>
-                              <small style={{ color: 'var(--muted)', fontSize: '11px' }}>
+                              <small className="treasury-shift-meta">
                                 باتش: {summary.shift.terminal_batch_number || 'غير مسجل'} |{' '}
                                 {summary.shift.card_slips_count || 0} إيصال
                               </small>
@@ -387,13 +324,7 @@ export function TreasuryReviewModal({
                                 required
                                 value={verifiedCard}
                                 onChange={(e) => setVerifiedCard(e.target.value)}
-                                style={{
-                                  width: '100%',
-                                  padding: '5px 8px',
-                                  fontSize: '13px',
-                                  borderRadius: '6px',
-                                  border: '1px solid #cbd5e1',
-                                }}
+                                className="treasury-verify-input"
                               />
                             </td>
                             <td>
@@ -420,11 +351,11 @@ export function TreasuryReviewModal({
                           {/* Bank / InstaPay Row */}
                           <tr>
                             <td>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <div className="row-gap-6">
                                 <Building size={15} style={{ color: '#059669' }} />
                                 <strong>إنستاباي / محفظة</strong>
                               </div>
-                              <small style={{ color: 'var(--muted)', fontSize: '11px' }}>
+                              <small className="treasury-shift-meta">
                                 {summary.shift.bank_transfers_count || 0} عملية تحويل
                               </small>
                             </td>
@@ -444,13 +375,7 @@ export function TreasuryReviewModal({
                                 required
                                 value={verifiedBank}
                                 onChange={(e) => setVerifiedBank(e.target.value)}
-                                style={{
-                                  width: '100%',
-                                  padding: '5px 8px',
-                                  fontSize: '13px',
-                                  borderRadius: '6px',
-                                  border: '1px solid #cbd5e1',
-                                }}
+                                className="treasury-verify-input"
                               />
                             </td>
                             <td>
@@ -477,11 +402,11 @@ export function TreasuryReviewModal({
                           {/* Credit Sales Row */}
                           <tr>
                             <td>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <div className="row-gap-6">
                                 <Clock size={15} style={{ color: '#7c3aed' }} />
                                 <strong>مبيعات آجلة</strong>
                               </div>
-                              <small style={{ color: 'var(--muted)', fontSize: '11px' }}>
+                              <small className="treasury-shift-meta">
                                 ترحل تلقائياً لذمم العملاء
                               </small>
                             </td>
@@ -489,10 +414,10 @@ export function TreasuryReviewModal({
                               <b>{money(summary.credit_sales)} ج.م</b>
                             </td>
                             <td>
-                              <span style={{ color: 'var(--muted)' }}>—</span>
+                              <span className="muted">—</span>
                             </td>
                             <td>
-                              <span style={{ color: 'var(--muted)', fontSize: '12px' }}>
+                              <span className="muted" style={{ fontSize: '12px' }}>
                                 {money(summary.credit_sales)} ج.م
                               </span>
                             </td>
@@ -633,22 +558,11 @@ export function TreasuryReviewModal({
                     </div>
 
                     {/* EXPANDABLE ITEMIZED TRANSACTIONS AUDIT */}
-                    <div style={{ marginTop: '2px' }}>
+                    <div>
                       <button
                         type="button"
                         onClick={() => setShowPaymentsTable(!showPaymentsTable)}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          background: 'none',
-                          border: 'none',
-                          color: 'var(--indigo-600)',
-                          fontSize: '13px',
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          padding: '4px 0',
-                        }}
+                        className="treasury-audit-toggle"
                       >
                         {showPaymentsTable ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                         <span>
@@ -673,17 +587,14 @@ export function TreasuryReviewModal({
                             <tbody>
                               {!summary.payments || summary.payments.length === 0 ? (
                                 <tr>
-                                  <td
-                                    colSpan={6}
-                                    style={{ textAlign: 'center', color: 'var(--muted)' }}
-                                  >
+                                  <td colSpan={6} className="text-center muted">
                                     لا توجد مدفوعات مسجلة في هذه الوردية
                                   </td>
                                 </tr>
                               ) : (
                                 summary.payments.map((p, idx) => (
                                   <tr key={idx}>
-                                    <td style={{ fontSize: '11.5px', color: 'var(--muted)' }}>
+                                    <td className="treasury-chip-meta">
                                       {p.created_at
                                         ? new Date(p.created_at).toLocaleTimeString('ar-EG', {
                                             hour: '2-digit',
@@ -697,28 +608,9 @@ export function TreasuryReviewModal({
                                     <td>{p.party_name || 'عميل نقدي'}</td>
                                     <td>
                                       <span
-                                        style={{
-                                          padding: '2px 6px',
-                                          borderRadius: '4px',
-                                          fontSize: '11px',
-                                          fontWeight: 700,
-                                          background:
-                                            p.method === 'CASH'
-                                              ? '#fef3c7'
-                                              : p.method === 'CARD'
-                                                ? '#dbeafe'
-                                                : p.method === 'BANK'
-                                                  ? '#dcfce7'
-                                                  : '#ede9fe',
-                                          color:
-                                            p.method === 'CASH'
-                                              ? '#92400e'
-                                              : p.method === 'CARD'
-                                                ? '#1e40af'
-                                                : p.method === 'BANK'
-                                                  ? '#15803d'
-                                                  : '#6b21a8',
-                                        }}
+                                        className={
+                                          'treasury-method-chip method-' + p.method.toLowerCase()
+                                        }
                                       >
                                         {p.method === 'CASH'
                                           ? 'كاش'
@@ -732,9 +624,7 @@ export function TreasuryReviewModal({
                                     <td>
                                       <b>{money(p.amount)} ج.م</b>
                                     </td>
-                                    <td style={{ fontSize: '11.5px', color: 'var(--slate-600)' }}>
-                                      {p.reference || '—'}
-                                    </td>
+                                    <td className="treasury-chip-meta">{p.reference || '—'}</td>
                                   </tr>
                                 ))
                               )}
@@ -750,7 +640,7 @@ export function TreasuryReviewModal({
                         <AlertCircle size={18} />
                         <div>
                           <strong>تسجيل قيد عجز تلقائي:</strong>
-                          <p style={{ margin: '2px 0 0', fontSize: '12px' }}>
+                          <p className="shortage-note">
                             سيتم تلقائياً إنشاء قيد مصروف تشغيلي بقيمة (
                             {money(Math.abs(cashDiffCents))} ج.م) في تصنيف «عجز نقدية نقطة بيع» لضبط
                             الخزنة وحساب الأرباح والخسائر.
@@ -768,7 +658,7 @@ export function TreasuryReviewModal({
                       />
                     </Field>
 
-                    <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+                    <div className="row" style={{ marginTop: '6px' }}>
                       <Button type="submit" busy={busy}>
                         <CheckCircle2 size={16} /> اعتماد إغلاق الوردية وترحيل القيود
                       </Button>
