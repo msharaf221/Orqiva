@@ -30,6 +30,11 @@ export const PERMISSIONS: PermissionDef[] = [
   // المخزون والأصناف والتحويلات
   { id: 'inventory:view', name: 'عرض المخزون وحركاته وتكاليفه', group: 'المخزون' },
   { id: 'inventory:adjust', name: 'تسوية المخزون وتعديل التكاليف', group: 'المخزون' },
+  {
+    id: 'inventory:stocktake_approve',
+    name: 'اعتماد فروقات الجرد الدوري وترحيلها للمخزون',
+    group: 'المخزون',
+  },
   { id: 'catalog:manage', name: 'إدارة المنتجات وقائمة الأصناف والتسعير', group: 'المخزون' },
   { id: 'transfers:manage', name: 'إدارة تحويلات البضائع بين الفروع', group: 'المخزون' },
 

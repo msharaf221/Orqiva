@@ -29,6 +29,7 @@ export type PermissionKey =
   | 'documents:cancel'
   | 'inventory:view'
   | 'inventory:adjust'
+  | 'inventory:stocktake_approve'
   | 'catalog:manage'
   | 'transfers:manage'
   | 'parties:view'
@@ -118,6 +119,56 @@ export interface PosParkedSale {
   created_at: string;
   user_name?: string;
   customer_name?: string;
+}
+
+export type StocktakeStatus = 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'CANCELLED';
+
+export interface StocktakeSession {
+  id: string;
+  number: string;
+  branch_id: string;
+  status: StocktakeStatus;
+  notes: string;
+  counted_by: string;
+  approved_by: string | null;
+  created_at: string;
+  submitted_at: string | null;
+  approved_at: string | null;
+  branch_name?: string;
+  counted_by_name?: string;
+  approved_by_name?: string | null;
+  lines_count?: number;
+  variance_lines?: number;
+  variance_value?: number;
+}
+
+export interface StocktakeLine {
+  id: string;
+  session_id: string;
+  product_id: string;
+  product_name: string;
+  sku: string;
+  unit: string;
+  expected_qty: number;
+  counted_qty: number | null;
+  unit_cost: number;
+  counted_at: string | null;
+}
+
+export interface ReorderSuggestion {
+  product_id: string;
+  sku: string;
+  name: string;
+  unit: string;
+  branch_id: string;
+  branch_name: string;
+  stock: number;
+  min_stock: number;
+  suggested_qty: number;
+  cost_price: number;
+  avg_cost: number;
+  estimated_cost: number;
+  below_threshold: boolean;
 }
 
 export interface PosShiftPaymentDetail {

@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   Package,
   Boxes,
+  ClipboardList,
   Users,
   Truck,
   ReceiptText,
@@ -58,6 +59,9 @@ const Dashboard = lazy(() => import('./pages/Dashboard').then((m) => ({ default:
 const POS = lazy(() => import('./pages/POS').then((m) => ({ default: m.POS })));
 const Products = lazy(() => import('./pages/Catalog').then((m) => ({ default: m.Products })));
 const Inventory = lazy(() => import('./pages/Catalog').then((m) => ({ default: m.Inventory })));
+const Stocktake = lazy(() =>
+  import('./pages/Stocktake').then((m) => ({ default: m.StocktakePage })),
+);
 const Parties = lazy(() => import('./pages/Catalog').then((m) => ({ default: m.Parties })));
 const Documents = lazy(() => import('./pages/Documents').then((m) => ({ default: m.Documents })));
 const DocumentEditor = lazy(() =>
@@ -384,6 +388,12 @@ const navigation: { label: string; items: NavItem[] }[] = [
       { to: '/products', label: 'المنتجات', icon: Package, permission: 'catalog:manage' },
       { to: '/inventory', label: 'المخزون', icon: Boxes, permission: 'inventory:view' },
       {
+        to: '/stocktake',
+        label: 'الجرد الدوري',
+        icon: ClipboardList,
+        permission: 'inventory:view',
+      },
+      {
         to: '/transfers',
         label: 'التحويلات بين الفروع',
         icon: ArrowRightLeft,
@@ -584,6 +594,7 @@ function Layout() {
               <Route path="/pos" element={<POS />} />
               <Route path="/products" element={<Products />} />
               <Route path="/inventory" element={<Inventory />} />
+              <Route path="/stocktake" element={<Stocktake />} />
               <Route path="/customers" element={<Parties type="CUSTOMER" key="customers" />} />
               <Route path="/suppliers" element={<Parties type="SUPPLIER" key="suppliers" />} />
               <Route path="/sales" element={<Documents type="SALE" key="sales" />} />

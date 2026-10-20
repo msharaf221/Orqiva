@@ -57,6 +57,27 @@ export const adjustSchema = z
     reason: z.string().trim().min(3).max(300),
   })
   .strict();
+
+export const stocktakeSubmitSchema = z
+  .object({
+    branch_id: id(),
+    notes: optionalText(500),
+  })
+  .strict();
+
+export const stocktakeCountsSchema = z
+  .object({
+    notes: optionalText(500),
+    counts: z
+      .array(
+        z.object({
+          line_id: id(),
+          counted_qty: z.number().int().min(0).max(1_000_000).nullable(),
+        }),
+      )
+      .min(1, 'لا توجد بنود جرد للتحديث'),
+  })
+  .strict();
 export const documentSchema = z
   .object({
     type: z.enum(['SALE', 'PURCHASE', 'SALE_RETURN', 'PURCHASE_RETURN']),

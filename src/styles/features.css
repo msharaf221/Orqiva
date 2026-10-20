@@ -280,6 +280,24 @@
   color: var(--slate-500);
 }
 
+/* Stocktake */
+.stocktake-lines {
+  max-height: 55vh;
+}
+.stocktake-input {
+  width: 110px;
+  padding: 7px 10px;
+  border: 1px solid var(--slate-300);
+  border-radius: var(--radius-sm);
+  text-align: center;
+  font-weight: 600;
+}
+.stocktake-input:focus {
+  border-color: var(--indigo-400);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--indigo-50);
+}
+
 /* Transfers */
 .transfer-lines {
   border: 1px solid var(--slate-200);
