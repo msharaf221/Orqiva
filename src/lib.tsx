@@ -286,12 +286,15 @@ export function Modal({
   children,
   onClose,
   wide = false,
+  sheet = false,
 }: {
   title: string;
   description?: string;
   children: ReactNode;
   onClose: () => void;
   wide?: boolean;
+  /** On small/touch viewports, present as a bottom sheet (~85vh) instead of a centered dialog. */
+  sheet?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
@@ -341,7 +344,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={'modal ' + (wide ? 'modal-wide' : '')}
+        className={'modal ' + (wide ? 'modal-wide ' : '') + (sheet ? 'modal-sheet' : '')}
       >
         <div className="modal-heading">
           <div>

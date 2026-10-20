@@ -2539,3 +2539,23 @@
   font-size: 12px;
   color: var(--slate-500);
 }
+
+/* Phase 5.1 — quick product creation from the till */
+.pos-quick-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  min-height: 44px;
+  border: 1px solid var(--indigo-600);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--indigo-600);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pos-quick-add:hover {
+  background: var(--indigo-50);
+}

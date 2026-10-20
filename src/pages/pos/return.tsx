@@ -111,6 +111,7 @@ export function PosReturnModal({
         title="إرجاع فاتورة بيع (مرتجع كاشير)"
         description="ابحث برقم الفاتورة ثم اختر الأصناف المرتجعة"
         onClose={onClose}
+        sheet
       >
         <div className="modal-body">
           <div className="pos-search-input-wrap">
@@ -169,6 +170,7 @@ export function PosReturnModal({
       description={`${sale.party_name} · ${sale.date}`}
       onClose={onClose}
       wide
+      sheet
     >
       <div className="modal-body">
         <div className="table-scroll">

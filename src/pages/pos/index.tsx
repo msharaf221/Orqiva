@@ -38,6 +38,8 @@ import { CustomerPickerModal, DiscountModal, CheckoutModal } from './checkout';
 import { ThermalReceiptModal } from './receipt';
 import { HotkeysModal } from './hotkeys';
 import { PosReturnModal } from './return';
+import { can } from '../../auth';
+import { ProductForm } from '../Catalog';
 
 export function POS() {
   const { user, company } = useSession();
@@ -90,6 +92,7 @@ export function POS() {
   const [parkedModal, setParkedModal] = useState(false);
   const [parkedSales, setParkedSales] = useState<PosParkedSale[]>([]);
   const [returnModal, setReturnModal] = useState(false);
+  const [quickProductModal, setQuickProductModal] = useState(false);
 
   // Load Data
   const reloadData = async (silent = false) => {
@@ -793,6 +796,18 @@ export function POS() {
               <Barcode size={18} />
               <span>ماسح الباركود متصل</span>
             </div>
+
+            {can(user, 'catalog:manage') && (
+              <button
+                type="button"
+                className="pos-quick-add"
+                title="تعريف منتج جديد من شاشة الكاشير"
+                onClick={() => setQuickProductModal(true)}
+              >
+                <Plus size={16} />
+                <span>منتج جديد</span>
+              </button>
+            )}
           </div>
 
           {/* Fast movers: top sellers for this branch (one tap away) */}
@@ -1020,6 +1035,20 @@ export function POS() {
           onClose={() => setReturnModal(false)}
           onDone={() => {
             setReturnModal(false);
+            void reloadData(true);
+          }}
+        />
+      )}
+
+      {/* MODAL: Quick product creation without leaving the till */}
+      {quickProductModal && (
+        <ProductForm
+          quick
+          defaultCategory={selectedCategory !== 'ALL' ? selectedCategory : undefined}
+          onClose={() => setQuickProductModal(false)}
+          onSaved={() => {
+            setQuickProductModal(false);
+            toast('تم تعريف المنتج وأضيف للكتالوج.');
             void reloadData(true);
           }}
         />

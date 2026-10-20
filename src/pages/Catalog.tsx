@@ -292,11 +292,17 @@ export function Products() {
     </>
   );
 }
-function ProductForm({
+export function ProductForm({
   product,
   onClose,
   onSaved,
+  defaultCategory,
+  quick,
 }: {
+  /** Pre-fill the category (used by the POS quick-create flow). */
+  defaultCategory?: string;
+  /** Compact wording/layout for the till: emphasise name, SKU, price and opening stock. */
+  quick?: boolean;
   product?: Product;
   onClose: () => void;
   onSaved: () => void;
@@ -326,9 +332,14 @@ function ProductForm({
   };
   return (
     <Modal
-      title={product ? 'تعديل المنتج' : 'إضافة منتج جديد'}
-      description="أضف التفاصيل الأساسية. يمكنك تسوية المخزون لاحقاً من صفحة المخزون."
+      title={product ? 'تعديل المنتج' : quick ? 'تعريف منتج جديد (بيع سريع)' : 'إضافة منتج جديد'}
+      description={
+        quick
+          ? 'عرّف المنتج فوراً وأضفه للسلة دون مغادرة شاشة الكاشير.'
+          : 'أضف التفاصيل الأساسية. يمكنك تسوية المخزون لاحقاً من صفحة المخزون.'
+      }
       onClose={onClose}
+      sheet={quick}
     >
       <form onSubmit={submit}>
         <div className="modal-body form-grid">
@@ -357,7 +368,7 @@ function ProductForm({
                 name="category"
                 required
                 maxLength={80}
-                defaultValue={product?.category || 'عام'}
+                defaultValue={product?.category || defaultCategory || 'عام'}
                 list="categories"
               />
               <datalist id="categories">

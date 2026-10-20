@@ -378,6 +378,7 @@ export function CheckoutModal({
       title="إتمام عملية الدفع وإنهاء الطلب (F2)"
       description={`المبلغ المطلوب سداده: ${money(totalCents)} ج.م`}
       onClose={onClose}
+      sheet
     >
       <form onSubmit={handleSubmit}>
         <div className="modal-body form-grid pos-checkout-body">

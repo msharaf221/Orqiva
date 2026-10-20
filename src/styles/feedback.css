@@ -25,6 +25,26 @@
 .modal-wide {
   width: 920px;
 }
+/* Bottom-sheet presentation on small touch viewports (Phase 5.1). */
+@media (max-width: 640px) {
+  .modal-sheet {
+    width: 100%;
+    align-self: flex-end;
+    max-height: 85vh;
+    border-radius: 18px 18px 0 0;
+    animation: sheet-up 0.22s ease-out;
+  }
+}
+@keyframes sheet-up {
+  from {
+    transform: translateY(24px);
+    opacity: 0.4;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
 .modal-heading {
   display: flex;
   align-items: flex-start;
