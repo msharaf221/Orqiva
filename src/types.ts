@@ -38,6 +38,8 @@ export type PermissionKey =
   | 'finance:payments'
   | 'finance:expenses'
   | 'finance:accounts'
+  | 'gl:view'
+  | 'gl:manage'
   | 'reports:view'
   | 'reports:group_overview'
   | 'eta:view'
@@ -169,6 +171,101 @@ export interface ReorderSuggestion {
   avg_cost: number;
   estimated_cost: number;
   below_threshold: boolean;
+}
+
+// ── General Ledger ───────────────────────────────────────────────────────────────────────
+
+export type GlAccountType = 'ASSET' | 'LIABILITY' | 'EQUITY' | 'REVENUE' | 'EXPENSE';
+export type JournalSourceType =
+  | 'SALE'
+  | 'PURCHASE'
+  | 'SALE_RETURN'
+  | 'PURCHASE_RETURN'
+  | 'PAYMENT'
+  | 'EXPENSE'
+  | 'ACCOUNT_TRANSFER'
+  | 'POS_CASH'
+  | 'POS_SHIFT'
+  | 'TRANSFER'
+  | 'STOCKTAKE'
+  | 'DISTRIBUTION'
+  | 'EQUITY'
+  | 'MANUAL'
+  | 'REVERSAL'
+  | 'OPENING';
+
+export interface ChartAccount {
+  id: string;
+  code: string;
+  name: string;
+  type: GlAccountType;
+  normal_side: 'DEBIT' | 'CREDIT';
+  parent_id: string | null;
+  is_system: number;
+  system_key: string | null;
+  active: number;
+  notes: string;
+  created_at: string;
+  lines_count?: number;
+}
+
+export interface JournalEntry {
+  id: string;
+  number: string;
+  date: string;
+  memo: string;
+  source_type: JournalSourceType;
+  source_id: string | null;
+  branch_id: string | null;
+  status: 'DRAFT' | 'POSTED' | 'REVERSED';
+  reversal_of: string | null;
+  created_by: string;
+  created_at: string;
+  branch_name?: string | null;
+  created_by_name?: string;
+  total?: number;
+}
+
+export interface JournalLine {
+  id: string;
+  entry_id: string;
+  account_id: string;
+  debit: number;
+  credit: number;
+  branch_id: string | null;
+  memo: string;
+  account_code?: string;
+  account_name?: string;
+  account_type?: GlAccountType;
+  entry_number?: string;
+  date?: string;
+  source_type?: JournalSourceType;
+  source_id?: string | null;
+  running_balance?: number;
+}
+
+export interface TrialBalanceRow {
+  account_id: string;
+  code: string;
+  name: string;
+  type: GlAccountType;
+  normal_side: 'DEBIT' | 'CREDIT';
+  debit: number;
+  credit: number;
+  balance: number;
+  opening: number;
+}
+
+export interface LedgerAccountStatement {
+  account: ChartAccount;
+  opening: number;
+  lines: JournalLine[];
+}
+
+export interface GlSettings {
+  fiscal_year_start_month: number;
+  closed_through: string | null;
+  updated_at: string | null;
 }
 
 export interface PosShiftPaymentDetail {
@@ -687,7 +784,6 @@ export interface StockMatrix {
 }
 
 export type AccountType = 'CASH' | 'BANK' | 'WALLET';
-
 export interface CashAccount {
   id: string;
   name: string;

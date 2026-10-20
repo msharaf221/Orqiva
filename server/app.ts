@@ -23,6 +23,7 @@ import { ownersRouter } from './routes/owners';
 import { rbacRouter } from './routes/rbac';
 import { posRouter } from './routes/pos';
 import { etaRouter } from './routes/eta';
+import { ledgerRouter } from './routes/ledger';
 
 import type { User } from '../src/types';
 
@@ -121,6 +122,7 @@ app.use('/api', ownersRouter);
 app.use('/api', rbacRouter);
 app.use('/api/pos', posRouter);
 app.use('/api', etaRouter);
+app.use('/api', ledgerRouter);
 
 // API 404 handler
 app.use('/api', (_req, res) => res.status(404).json({ error: 'المسار غير موجود' }));

@@ -21,6 +21,7 @@ import { audit, moveStock, branchStock } from './service';
 import { nextNumber } from './service';
 import { writableBranch, type Actor, type Scope, scopeSql } from './scope';
 import { stocktakeSubmitSchema, stocktakeCountsSchema } from './validation';
+import { postShrinkageLedger } from './posting';
 import type { StocktakeSession, StocktakeLine } from '../src/types';
 
 interface ProductRow {
@@ -220,6 +221,7 @@ export function approveStocktake(sessionId: string, actor: Actor): StocktakeView
 
   transaction(() => {
     const lines = all<StocktakeLine>('SELECT * FROM stocktake_lines WHERE session_id=?', sessionId);
+    let varianceValue = 0;
     for (const line of lines) {
       if (line.counted_qty === null) continue;
       const delta = line.counted_qty - line.expected_qty;
@@ -232,12 +234,24 @@ export function approveStocktake(sessionId: string, actor: Actor): StocktakeView
         actor,
         unitCost: delta > 0 ? line.unit_cost : undefined,
       });
+      varianceValue += delta * line.unit_cost;
     }
     run(
       "UPDATE stocktake_sessions SET status='APPROVED', approved_by=?, approved_at=? WHERE id=?",
       actor.id,
       now(),
       sessionId,
+    );
+    // Ledger: a shortage is an expense, a surplus reduces it. Posted once, at approval.
+    postShrinkageLedger(
+      {
+        id: sessionId,
+        number: session.number,
+        date: now().slice(0, 10),
+        branchId: session.branch_id,
+        amount: varianceValue,
+      },
+      actor,
     );
     audit(actor, 'اعتماد جرد دوري', 'STOCKTAKE', sessionId, session.number);
   });

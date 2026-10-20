@@ -5,8 +5,9 @@ import { AppError } from './errors';
 import { writableBranch, type Actor } from './scope';
 import { effectiveCost, recordCostIn, recordCostOut } from './cost';
 import { validateReturnLines } from './returns';
-import { resolveDefaultAccountId, assertAccountFunds } from './accounts';
+import { resolveDefaultAccountId, assertAccountFunds, glAccountForCashAccount } from './accounts';
 import { enqueueEtaSubmission, isEtaEligible } from './eta';
+import { postDocumentLedger, reverseDocumentLedger, postPaymentLedger } from './posting';
 import type { Document, DocLine, Party, Payment, Branch } from '../src/types';
 
 export { AppError } from './errors';
@@ -422,6 +423,9 @@ export function postDocument(documentId: string, actor: Actor) {
       }
     }
     run("UPDATE documents SET status='POSTED' WHERE id=?", documentId);
+    // Post to the double-entry ledger in the same transaction, so the books never drift.
+    const posted = documentDetail(documentId);
+    postDocumentLedger(posted, actor);
     // Queue the Egyptian e-invoice submission (runs asynchronously in the outbox).
     enqueueEtaSubmission(documentId, actor.id);
     audit(
@@ -514,6 +518,8 @@ export function cancelDocument(documentId: string, actor: Actor) {
         }
       }
     run("UPDATE documents SET status='CANCELLED' WHERE id=?", documentId);
+    // Reverse any ledger entry this document had posted.
+    reverseDocumentLedger(doc, actor);
     // A cancelled invoice must not remain queued for submission.
     if (isEtaEligible(doc.type)) {
       run(
@@ -574,9 +580,10 @@ export function addPayment(documentId: string, raw: unknown, actor: Actor, reque
     if (doc.type === 'PURCHASE' || doc.type === 'SALE_RETURN') {
       assertAccountFunds(accountId, input.amount, actor, input.override_overdraft);
     }
+    const paymentId = id();
     run(
       'INSERT INTO payments(id,document_id,amount,method,date,reference,created_by,created_at,request_key,account_id) VALUES(?,?,?,?,?,?,?,?,?,?)',
-      id(),
+      paymentId,
       documentId,
       input.amount,
       input.method,
@@ -588,6 +595,22 @@ export function addPayment(documentId: string, raw: unknown, actor: Actor, reque
       accountId,
     );
     run('UPDATE documents SET paid=paid+? WHERE id=?', input.amount, documentId);
+    // Ledger: cash/bank against the customer or supplier balance.
+    postPaymentLedger(
+      {
+        id: paymentId,
+        documentId,
+        documentType: doc.type,
+        documentNumber: doc.number,
+        partyName: '',
+        amount: input.amount,
+        date: input.date,
+        branchId: doc.branch_id,
+        glAccountId: glAccountForCashAccount(accountId),
+        reference: input.reference,
+      },
+      actor,
+    );
     audit(actor, 'تسجيل دفعة', doc.type, documentId, doc.number);
     return documentDetail(documentId);
   });

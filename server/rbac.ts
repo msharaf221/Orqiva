@@ -48,6 +48,14 @@ export const PERMISSIONS: PermissionDef[] = [
   { id: 'finance:expenses', name: 'إدارة وتسجيل المصروفات', group: 'المالية' },
   { id: 'finance:accounts', name: 'إدارة الخزائن والتحويلات النقدية', group: 'المالية' },
 
+  // دفتر الأستاذ (القيد المزدوج)
+  { id: 'gl:view', name: 'عرض دليل الحسابات والقيود وميزان المراجعة', group: 'دفتر الأستاذ' },
+  {
+    id: 'gl:manage',
+    name: 'إدارة دليل الحسابات وترحيل القيود وإقفال الفترات',
+    group: 'دفتر الأستاذ',
+  },
+
   // التقارير والمؤشرات
   { id: 'reports:view', name: 'عرض التقارير ولوحة المؤشرات', group: 'التقارير' },
   { id: 'reports:group_overview', name: 'عرض تقرير المجموعة الشامل', group: 'التقارير' },

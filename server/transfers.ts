@@ -11,6 +11,8 @@ import {
   type ProductRow,
 } from './service';
 import { effectiveCost } from './cost';
+import { postTransferShipLedger, postTransferReceiveLedger } from './posting';
+import { reverseBySource } from './ledger';
 import { accessibleBranchIds, scopeSql, writableBranch, type Scope } from './scope';
 import type { Branch, Transfer, TransferLine, TransferSuggestion } from '../src/types';
 
@@ -153,6 +155,18 @@ export function shipTransfer(transferId: string, actor: Actor) {
       now(),
       transferId,
     );
+    // Ledger: goods leave the source branch's inventory.
+    const shippedValue = lines.reduce((s, l) => s + l.quantity_sent * (l.unit_cost || 0), 0);
+    postTransferShipLedger(
+      {
+        id: transferId,
+        number: transfer.number,
+        date: now().slice(0, 10),
+        branchId: from.id,
+        amount: shippedValue,
+      },
+      actor,
+    );
     audit(actor, 'شحن تحويل', 'TRANSFER', transferId, transfer.number);
     return transferDetail(transferId);
   });
@@ -195,6 +209,21 @@ export function receiveTransfer(transferId: string, raw: unknown, actor: Actor) 
       now(),
       transferId,
     );
+    // Ledger: goods enter the destination branch's inventory at the shipped WAC.
+    const receivedValue = lines.reduce(
+      (s, l) => s + received.get(l.product_id)! * (l.unit_cost || 0),
+      0,
+    );
+    postTransferReceiveLedger(
+      {
+        id: transferId,
+        number: transfer.number,
+        date: now().slice(0, 10),
+        branchId: to.id,
+        amount: receivedValue,
+      },
+      actor,
+    );
     const shortage = lines.reduce(
       (sum, l) => sum + Math.max(0, l.quantity_sent - received.get(l.product_id)!),
       0,
@@ -235,6 +264,8 @@ export function cancelTransfer(transferId: string, actor: Actor) {
         });
     }
     run("UPDATE transfers SET status='CANCELLED',cancelled_at=? WHERE id=?", now(), transferId);
+    // Reverse whatever the transfer had already posted to the ledger.
+    reverseBySource('TRANSFER', transferId, actor, `إلغاء تحويل ${transfer.number}`);
     audit(actor, 'إلغاء تحويل', 'TRANSFER', transferId, transfer.number);
     return transferDetail(transferId);
   });

@@ -34,6 +34,7 @@ import {
   TrendingUp,
   Activity,
   Building2,
+  BookOpen,
 } from 'lucide-react';
 import { BranchProvider, BranchSwitcher, useBranch, withBranch } from './branch';
 import {
@@ -73,6 +74,7 @@ const DocumentDetail = lazy(() =>
 const Expenses = lazy(() => import('./pages/Finance').then((m) => ({ default: m.Expenses })));
 const Accounts = lazy(() => import('./pages/Finance').then((m) => ({ default: m.Accounts })));
 const Payments = lazy(() => import('./pages/Finance').then((m) => ({ default: m.Payments })));
+const Ledger = lazy(() => import('./pages/Finance').then((m) => ({ default: m.Ledger })));
 const Reports = lazy(() => import('./pages/Finance').then((m) => ({ default: m.Reports })));
 const SettingsPage = lazy(() =>
   import('./pages/Finance').then((m) => ({ default: m.SettingsPage })),
@@ -408,6 +410,7 @@ const navigation: { label: string; items: NavItem[] }[] = [
     label: 'الإدارة المالية',
     items: [
       { to: '/accounts', label: 'الخزائن والبنوك', icon: Building2, permission: 'finance:view' },
+      { to: '/ledger', label: 'دفتر الأستاذ', icon: BookOpen, permission: 'gl:view' },
       { to: '/expenses', label: 'المصروفات', icon: Wallet, permission: 'finance:expenses' },
       { to: '/payments', label: 'المدفوعات', icon: ArrowLeftRight, permission: 'finance:payments' },
       {
@@ -620,6 +623,7 @@ function Layout() {
               <Route path="/accounts" element={<Accounts />} />
               <Route path="/expenses" element={<Expenses />} />
               <Route path="/payments" element={<Payments />} />
+              <Route path="/ledger" element={<Ledger />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route

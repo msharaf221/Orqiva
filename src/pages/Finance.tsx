@@ -19,3 +19,4 @@ export { SettingsPage } from './finance/settings';
 export { EInvoicePanel } from './finance/e-invoice';
 export { ActivityPage } from './finance/activity';
 export { Accounts, CashAccountModal, TransferModal, StatementModal } from './finance/accounts';
+export { Ledger } from './finance/ledger';

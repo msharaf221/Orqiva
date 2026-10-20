@@ -664,6 +664,31 @@
   font-weight: 700;
 }
 
+/* ── General Ledger (دفتر الأستاذ) ─────────────────────────────────────────────── */
+.ledger-group {
+  margin-bottom: 26px;
+}
+.ledger-group h3 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--slate-800);
+  margin: 0 0 12px;
+}
+.ledger-settings-card h3 {
+  margin: 0 0 8px;
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--slate-800);
+}
+.ledger-settings-card .muted {
+  margin: 0 0 18px;
+  max-width: 68ch;
+  line-height: 1.7;
+}
+
 /* RBAC & Role Management */
 .role-cards-grid {
   display: grid;

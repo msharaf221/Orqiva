@@ -78,6 +78,57 @@ export const stocktakeCountsSchema = z
       .min(1, 'لا توجد بنود جرد للتحديث'),
   })
   .strict();
+
+// ── General Ledger ───────────────────────────────────────────────────────────────────────
+
+const glAccountType = z.enum(['ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'EXPENSE']);
+export const chartAccountSchema = z
+  .object({
+    code: z
+      .string()
+      .trim()
+      .regex(/^\d{3,10}$/, 'كود الحساب أرقام فقط (٣ خانات على الأقل)'),
+    name: text(120),
+    type: glAccountType,
+    normal_side: z.enum(['DEBIT', 'CREDIT']),
+    parent_id: id().nullable().optional(),
+    active: z.boolean().default(true),
+    notes: optionalText(500),
+  })
+  .strict();
+
+const journalLineSchema = z
+  .object({
+    account_id: id(),
+    debit: money.default(0),
+    credit: money.default(0),
+    memo: optionalText(200),
+  })
+  .strict()
+  .refine((l) => l.debit > 0 !== l.credit > 0, {
+    message: 'كل بند يجب أن يكون مديناً أو دائناً بمبلغ واحد فقط',
+  });
+
+export const journalEntrySchema = z
+  .object({
+    date,
+    memo: optionalText(300),
+    branch_id: id().nullable().optional(),
+    lines: z.array(journalLineSchema).min(2, 'القيد يحتاج بندين على الأقل').max(200),
+  })
+  .strict()
+  .refine(
+    (e) => e.lines.reduce((s, l) => s + l.debit, 0) === e.lines.reduce((s, l) => s + l.credit, 0),
+    { message: 'القيد غير متوازن: إجمالي المدين يجب أن يساوي إجمالي الدائن' },
+  );
+
+export const glSettingsSchema = z
+  .object({
+    fiscal_year_start_month: z.number().int().min(1).max(12),
+    closed_through: date.nullable().optional(),
+  })
+  .strict();
+
 export const documentSchema = z
   .object({
     type: z.enum(['SALE', 'PURCHASE', 'SALE_RETURN', 'PURCHASE_RETURN']),

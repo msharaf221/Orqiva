@@ -10,6 +10,7 @@ import {
   requireRow,
 } from './service';
 import { resolveDefaultAccountId } from './accounts';
+import { postPosCashMovementLedger } from './posting';
 import { writableBranch, type Actor, type Scope, scopeSql } from './scope';
 import {
   posShiftOpenSchema,
@@ -135,6 +136,20 @@ export function addCashMovement(shiftId: string, raw: unknown, actor: Actor): Po
       'POS_SHIFT',
       shiftId,
       `${input.amount / 100} ج.م - ${input.reason}`,
+    );
+
+    // Ledger: a drawer movement changes cash and its balancing account.
+    postPosCashMovementLedger(
+      {
+        id: movementId,
+        shiftNumber: shift.number,
+        type: input.type,
+        amount: input.amount,
+        date: now().slice(0, 10),
+        branchId: shift.branch_id,
+        reason: input.reason,
+      },
+      actor,
     );
 
     return requireRow(
