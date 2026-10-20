@@ -7,6 +7,17 @@ import { requirePermission } from '../rbac';
 import { scopeFor, scopeSql } from '../scope';
 import { listProducts, createProduct, updateProduct, adjustStock } from '../catalog';
 import { stockMatrix } from '../reports';
+import {
+  startStocktake,
+  listStocktakes,
+  getStocktake,
+  stocktakeLines,
+  saveCounts,
+  submitStocktake,
+  approveStocktake,
+  cancelStocktake,
+  reorderSuggestions,
+} from '../stocktake';
 
 export const catalogRouter = Router();
 
@@ -42,6 +53,60 @@ catalogRouter.patch('/products/:id/active', requirePermission('catalog:manage'),
 catalogRouter.get('/stock/matrix', (req, res) =>
   res.json(stockMatrix(scopeFor(req.user, req.query.branch_id))),
 );
+
+/**
+ * The branch query parameter is `all` for the group view; only a concrete branch id should narrow
+ * the query further, since the scope already resolves the group case.
+ */
+function explicitBranch(value: unknown): string | undefined {
+  return typeof value === 'string' && value && value !== 'all' ? value : undefined;
+}
+
+// Reorder suggestions — products at or below their reorder threshold
+catalogRouter.get('/inventory/reorder', requirePermission('inventory:view'), (req, res) => {
+  res.json(
+    reorderSuggestions(
+      scopeFor(req.user, req.query.branch_id),
+      explicitBranch(req.query.branch_id),
+    ),
+  );
+});
+
+// Periodic Stocktake (جرد دوري)
+catalogRouter.get('/stocktakes', requirePermission('inventory:view'), (req, res) => {
+  res.json(
+    listStocktakes(scopeFor(req.user, req.query.branch_id), explicitBranch(req.query.branch_id)),
+  );
+});
+
+catalogRouter.post('/stocktakes', requirePermission('inventory:adjust'), (req, res) => {
+  res.status(201).json(startStocktake(req.body, req.user));
+});
+
+catalogRouter.get('/stocktakes/:id', requirePermission('inventory:view'), (req, res) => {
+  const session = getStocktake(String(req.params.id));
+  res.json({ session, lines: stocktakeLines(String(req.params.id)) });
+});
+
+catalogRouter.put('/stocktakes/:id/counts', requirePermission('inventory:adjust'), (req, res) => {
+  res.json(saveCounts(String(req.params.id), req.body, req.user));
+});
+
+catalogRouter.post('/stocktakes/:id/submit', requirePermission('inventory:adjust'), (req, res) => {
+  res.json(submitStocktake(String(req.params.id), req.user));
+});
+
+catalogRouter.post(
+  '/stocktakes/:id/approve',
+  requirePermission('inventory:stocktake_approve'),
+  (req, res) => {
+    res.json(approveStocktake(String(req.params.id), req.user));
+  },
+);
+
+catalogRouter.post('/stocktakes/:id/cancel', requirePermission('inventory:adjust'), (req, res) => {
+  res.json(cancelStocktake(String(req.params.id), req.user));
+});
 
 // Stock Movements
 catalogRouter.get('/movements', (req, res) => {

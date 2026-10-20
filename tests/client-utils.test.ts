@@ -84,4 +84,32 @@ describe('Client-Side Utility & RBAC Functions', () => {
       expect(can(undefined, 'admin:all')).toBe(false);
     });
   });
+
+  describe('ETA TLV QR encoding', () => {
+    it('encodes tags 1..5 for invoices carrying a tax number', async () => {
+      const { generateInvoiceQrData, buildEtaTlvQr } = await import('../src/receipt-components');
+      const encoded = buildEtaTlvQr({
+        sellerName: 'شركة أوركيفا',
+        taxNumber: '123456789',
+        timestamp: '2026-03-01T00:00:00.000Z',
+        total: 22800,
+        tax: 2800,
+      });
+      // The readable generator must yield the same TLV payload when a tax number exists.
+      const fromInvoice = generateInvoiceQrData({
+        sellerName: 'شركة أوركيفا',
+        taxNumber: '123456789',
+        invoiceNumber: 'INV-1',
+        invoiceDate: '2026-03-01',
+        total: 22800,
+        tax: 2800,
+      });
+      expect(fromInvoice).toBe(encoded);
+
+      const buf = Buffer.from(encoded, 'base64');
+      expect(buf[0]).toBe(1);
+      const sellerLen = buf[1];
+      expect(buf.subarray(2, 2 + sellerLen).toString('utf8')).toBe('شركة أوركيفا');
+    });
+  });
 });

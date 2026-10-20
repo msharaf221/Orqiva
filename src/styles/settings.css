@@ -137,3 +137,40 @@ fieldset {
   color: var(--indigo-950);
   font-weight: 700;
 }
+
+/* Phase 5.1 — table density picker */
+.density-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+.density-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 14px 16px;
+  min-height: 44px;
+  border: 1.5px solid var(--slate-200);
+  border-radius: var(--radius-md);
+  background: #ffffff;
+  text-align: right;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.density-option:hover {
+  border-color: var(--indigo-400);
+}
+.density-option.active {
+  border-color: var(--indigo-600);
+  background: var(--indigo-50);
+  box-shadow: var(--shadow-xs);
+}
+.density-option strong {
+  font-size: 15px;
+  color: var(--slate-900);
+}
+.density-option small {
+  font-size: 13px;
+  color: var(--slate-500);
+}

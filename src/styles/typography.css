@@ -1,16 +1,4 @@
 /* Readable typography across accounting screens - FinTech Theme */
-.field > span {
-  color: var(--slate-700);
-  font-weight: 600;
-  font-size: 15px;
-}
-.field input,
-.field select,
-.field textarea {
-  color: var(--slate-900);
-  font-size: 15.5px;
-}
-.field > small,
 .modal-heading p,
 .summary-hint {
   color: var(--slate-500);

@@ -44,12 +44,16 @@ export async function signIn(email: string) {
 export function resetBusinessData() {
   db.exec(`
     DELETE FROM user_permission_overrides;
+    UPDATE gl_settings SET closed_through=NULL, fiscal_year_start_month=1 WHERE id=1;
     DELETE FROM audit_logs; DELETE FROM distribution_payments; DELETE FROM distribution_lines;
     DELETE FROM distributions; DELETE FROM equity_entries; DELETE FROM cost_movements;
     DELETE FROM branch_cost; DELETE FROM stock_movements;
     DELETE FROM transfer_lines; DELETE FROM transfers; DELETE FROM payments;
-    DELETE FROM document_lines; DELETE FROM documents; DELETE FROM sequences;
-    DELETE FROM pos_cash_movements; DELETE FROM pos_shifts;
+    DELETE FROM e_invoice_submissions;
+    DELETE FROM journal_entries; DELETE FROM sequences;
+    DELETE FROM document_lines; DELETE FROM documents;
+    DELETE FROM pos_cash_movements; DELETE FROM pos_parked_sales; DELETE FROM pos_shifts;
+    DELETE FROM stocktake_lines; DELETE FROM stocktake_sessions;
     DELETE FROM branch_stock; DELETE FROM branch_products; DELETE FROM products;
     DELETE FROM expenses;
     DELETE FROM parties WHERE id<>'walk-in-customer';

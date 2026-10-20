@@ -42,7 +42,15 @@ import {
   Status,
 } from '../lib';
 import { useBranch, withBranch } from '../branch';
-import type { Product, Party, PartyType, Movement, Document, CostMovement } from '../types';
+import type {
+  Product,
+  Party,
+  PartyType,
+  Movement,
+  Document,
+  CostMovement,
+  ReorderSuggestion,
+} from '../types';
 import { can } from '../auth';
 export function Products() {
   const { user } = useSession();
@@ -284,11 +292,17 @@ export function Products() {
     </>
   );
 }
-function ProductForm({
+export function ProductForm({
   product,
   onClose,
   onSaved,
+  defaultCategory,
+  quick,
 }: {
+  /** Pre-fill the category (used by the POS quick-create flow). */
+  defaultCategory?: string;
+  /** Compact wording/layout for the till: emphasise name, SKU, price and opening stock. */
+  quick?: boolean;
   product?: Product;
   onClose: () => void;
   onSaved: () => void;
@@ -318,9 +332,14 @@ function ProductForm({
   };
   return (
     <Modal
-      title={product ? 'تعديل المنتج' : 'إضافة منتج جديد'}
-      description="أضف التفاصيل الأساسية. يمكنك تسوية المخزون لاحقاً من صفحة المخزون."
+      title={product ? 'تعديل المنتج' : quick ? 'تعريف منتج جديد (بيع سريع)' : 'إضافة منتج جديد'}
+      description={
+        quick
+          ? 'عرّف المنتج فوراً وأضفه للسلة دون مغادرة شاشة الكاشير.'
+          : 'أضف التفاصيل الأساسية. يمكنك تسوية المخزون لاحقاً من صفحة المخزون.'
+      }
       onClose={onClose}
+      sheet={quick}
     >
       <form onSubmit={submit}>
         <div className="modal-body form-grid">
@@ -349,7 +368,7 @@ function ProductForm({
                 name="category"
                 required
                 maxLength={80}
-                defaultValue={product?.category || 'عام'}
+                defaultValue={product?.category || defaultCategory || 'عام'}
                 list="categories"
               />
               <datalist id="categories">
@@ -444,6 +463,7 @@ export function Inventory() {
   const [adjustBranch, setAdjustBranch] = useState(defaultBranchId);
   const products = useData<Product[]>(withBranch('/products', activeId)),
     movements = useData<Movement[]>(withBranch('/movements', activeId)),
+    reorder = useData<ReorderSuggestion[]>(withBranch('/inventory/reorder', activeId)),
     costMovements = useData<CostMovement[]>(
       can(user, 'inventory:view') ? withBranch('/cost-movements', activeId) : null,
     );
@@ -565,6 +585,14 @@ export function Inventory() {
                 سجل حركات التكلفة (WAC)
               </button>
             )}
+            {can(user, 'inventory:view') && (
+              <button
+                className={tab === 'reorder' ? 'active' : ''}
+                onClick={() => setTab('reorder')}
+              >
+                اقتراحات إعادة الطلب
+              </button>
+            )}
           </div>
           <div className="table-filters">
             <SearchBox value={query} onChange={setQuery} placeholder="بحث في المخزون..." />
@@ -664,6 +692,57 @@ export function Inventory() {
                   </table>
                 </div>
                 <Pagination page={page} setPage={setPage} total={filtered.length} />
+              </>
+            )}
+          </>
+        ) : tab === 'reorder' ? (
+          <>
+            {!reorder.data?.length ? (
+              <Empty
+                title="لا توجد أصناف تحتاج إعادة طلب"
+                description="كل المنتجات أعلى من حد إعادة الطلب في هذا النطاق."
+              />
+            ) : (
+              <>
+                <div className="table-scroll">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>المنتج</th>
+                        {isGroup && <th>الفرع</th>}
+                        <th>المتاح</th>
+                        <th>حد الطلب</th>
+                        <th>الكمية المقترحة</th>
+                        <th>التكلفة التقديرية</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reorder.data.map((r) => (
+                        <tr key={r.branch_id + ':' + r.product_id}>
+                          <td>
+                            <strong>{r.name}</strong>
+                            <small className="cell-sub num">{r.sku}</small>
+                          </td>
+                          {isGroup && <td>{r.branch_name}</td>}
+                          <td className="num amount">
+                            {r.stock} <small>{r.unit}</small>
+                          </td>
+                          <td className="num muted">{r.min_stock}</td>
+                          <td className="num amount">
+                            <strong>{r.suggested_qty}</strong>
+                          </td>
+                          <td className="num amount">
+                            {money(r.estimated_cost)} <small>ج.م</small>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="table-bottom-note">
+                  الاقتراح يرفع المخزون إلى ضعف حد إعادة الطلب. التكلفة التقديرية بالمتوسط المرجح
+                  للفرع.
+                </p>
               </>
             )}
           </>

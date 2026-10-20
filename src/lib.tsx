@@ -47,6 +47,56 @@ export const formatDate = (date: string, short = false) =>
   }).format(new Date(date));
 export const toCents = (value: FormDataEntryValue | null) => Math.round(Number(value) * 100);
 export const methods = { CASH: 'نقداً', BANK: 'تحويل بنكي', CARD: 'بطاقة بنكية' };
+
+/**
+ * Debounces a rapidly-changing value (e.g. a search box) so downstream filtering/requests
+ * only run after the user pauses typing. Returns the settled value.
+ */
+export function useDebounced<T>(value: T, delay = 220): T {
+  const [settled, setSettled] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setSettled(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return settled;
+}
+
+/** Persists a small UI preference (density, auto-print, ...) under a namespaced key. */
+export function usePref<T>(key: string, initial: T) {
+  const storageKey = 'orqiva.pref.' + key;
+  const [value, setValue] = useState<T>(() => {
+    try {
+      const stored = localStorage.getItem(storageKey);
+      return stored === null ? initial : (JSON.parse(stored) as T);
+    } catch {
+      return initial;
+    }
+  });
+  const update = useCallback(
+    (next: T) => {
+      setValue(next);
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(next));
+      } catch {
+        /* Private browsing may refuse storage; the value still works for this visit. */
+      }
+    },
+    [storageKey],
+  );
+  return [value, update] as const;
+}
+
+export type Density = 'comfortable' | 'normal' | 'compact';
+
+/** Table density across admin screens, applied to <html> via a data attribute. */
+export function useDensity() {
+  const [density, setDensity] = usePref<Density>('table.density', 'normal');
+  useEffect(() => {
+    document.documentElement.dataset.density = density;
+  }, [density]);
+  return [density, setDensity] as const;
+}
+
 export function useData<T>(url: string | null) {
   const [data, setData] = useState<T | null>(null),
     [error, setError] = useState(''),
@@ -236,12 +286,15 @@ export function Modal({
   children,
   onClose,
   wide = false,
+  sheet = false,
 }: {
   title: string;
   description?: string;
   children: ReactNode;
   onClose: () => void;
   wide?: boolean;
+  /** On small/touch viewports, present as a bottom sheet (~85vh) instead of a centered dialog. */
+  sheet?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
@@ -291,7 +344,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={'modal ' + (wide ? 'modal-wide' : '')}
+        className={'modal ' + (wide ? 'modal-wide ' : '') + (sheet ? 'modal-sheet' : '')}
       >
         <div className="modal-heading">
           <div>
@@ -339,11 +392,36 @@ export function Confirm({
     </Modal>
   );
 }
-export function Loading() {
+export function Loading({
+  variant = 'rows',
+  rows = 6,
+}: { variant?: 'rows' | 'cards' | 'inline'; rows?: number } = {}) {
+  // Skeletons make the wait feel like the real screen arriving rather than a generic spinner.
+  if (variant === 'inline') {
+    return (
+      <div className="loading-state inline">
+        <LoaderCircle className="spin" size={22} />
+        <span>جاري تحميل بياناتك...</span>
+      </div>
+    );
+  }
   return (
-    <div className="loading-state">
-      <LoaderCircle className="spin" size={27} />
-      <span>جاري تحميل بياناتك...</span>
+    <div className={'skeleton-block ' + variant} aria-busy="true" aria-label="جاري تحميل بياناتك">
+      {variant === 'cards'
+        ? Array.from({ length: rows }, (_, i) => (
+            <div key={i} className="skeleton-card">
+              <div className="skeleton-line w-40" />
+              <div className="skeleton-line w-90 h-lg" />
+              <div className="skeleton-line w-60" />
+            </div>
+          ))
+        : Array.from({ length: rows }, (_, i) => (
+            <div key={i} className="skeleton-row">
+              <div className="skeleton-line w-30" />
+              <div className="skeleton-line w-50" />
+              <div className="skeleton-line w-20" />
+            </div>
+          ))}
     </div>
   );
 }

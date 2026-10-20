@@ -10,6 +10,9 @@ import {
   requireRow,
 } from './service';
 import { resolveDefaultAccountId } from './accounts';
+import { postPosCashMovementLedger } from './posting';
+import { businessToday } from './clock';
+import { validateReturnLines } from './returns';
 import { writableBranch, type Actor, type Scope, scopeSql } from './scope';
 import {
   posShiftOpenSchema,
@@ -18,12 +21,15 @@ import {
   posShiftApproveSchema,
   posShiftCloseSchema,
   posCheckoutSchema,
+  posParkedSaleSchema,
+  posReturnSchema,
 } from './validation';
 import type {
   PosShift,
   PosCashMovement,
   PosShiftSummary,
   PosShiftPaymentDetail,
+  PosParkedSale,
   Document,
   DocLine,
 } from '../src/types';
@@ -135,6 +141,20 @@ export function addCashMovement(shiftId: string, raw: unknown, actor: Actor): Po
       `${input.amount / 100} ج.م - ${input.reason}`,
     );
 
+    // Ledger: a drawer movement changes cash and its balancing account.
+    postPosCashMovementLedger(
+      {
+        id: movementId,
+        shiftNumber: shift.number,
+        type: input.type,
+        amount: input.amount,
+        date: now().slice(0, 10),
+        branchId: shift.branch_id,
+        reason: input.reason,
+      },
+      actor,
+    );
+
     return requireRow(
       one<PosCashMovement>(
         `SELECT m.*, u.name user_name
@@ -183,9 +203,17 @@ export function getShiftSummary(shiftId: string, actor: Actor): PosShiftSummary 
   // Total sales from documents
   const docTotals = one<{ total: number; count: number; paid: number }>(
     `SELECT COALESCE(SUM(total), 0) total, COUNT(id) count, COALESCE(SUM(paid), 0) paid
-     FROM documents WHERE pos_shift_id=? AND status='POSTED'`,
+     FROM documents WHERE pos_shift_id=? AND status='POSTED' AND type='SALE'`,
     shiftId,
   ) || { total: 0, count: 0, paid: 0 };
+
+  // Cash refunds issued from this shift (credit notes linked by pos_shift_id).
+  const refundRow = one<{ total: number; count: number }>(
+    `SELECT COALESCE(SUM(total), 0) total, COUNT(id) count
+     FROM documents WHERE pos_shift_id=? AND status='POSTED' AND type='SALE_RETURN'`,
+    shiftId,
+  ) || { total: 0, count: 0 };
+  const refundsTotal = refundRow.total;
 
   const creditSales = Math.max(0, docTotals.total - docTotals.paid);
 
@@ -199,7 +227,11 @@ export function getShiftSummary(shiftId: string, actor: Actor): PosShiftSummary 
   ) || { cash_in: 0, cash_out: 0 };
 
   const expectedCash =
-    shift.opening_cash + cashSales + movementsTotals.cash_in - movementsTotals.cash_out;
+    shift.opening_cash +
+    cashSales +
+    movementsTotals.cash_in -
+    movementsTotals.cash_out -
+    refundsTotal;
   const expectedCard = cardSales;
   const expectedBank = bankSales;
 
@@ -253,6 +285,8 @@ export function getShiftSummary(shiftId: string, actor: Actor): PosShiftSummary 
     credit_sales: creditSales,
     total_sales: docTotals.total,
     sales_count: docTotals.count,
+    refunds_total: refundsTotal,
+    refunds_count: refundRow.count,
     cash_in: movementsTotals.cash_in,
     cash_out: movementsTotals.cash_out,
     opening_cash: shift.opening_cash,
@@ -693,5 +727,196 @@ export function posCheckout(raw: unknown, actor: Actor) {
       shift_id: shiftId,
       payment: paymentResult,
     };
+  });
+}
+
+/**
+ * Cashier-initiated refund of a previous POS sale.
+ *
+ * Creates a SALE_RETURN (credit note) linked to the original invoice. `saveDocument`
+ * inherits the original's `pos_shift_id`, so the refund nets against the cashier's open
+ * shift (visible in the shift summary and the treasury reconciliation) without any extra
+ * plumbing. When the original was paid in cash, the refund is immediately paid out of the
+ * drawer; other methods refund to the original account's ledger.
+ */
+export function posReturn(raw: unknown, actor: Actor) {
+  const input = posReturnSchema.parse(raw);
+
+  return transaction(() => {
+    const original = requireRow(
+      one<Document>('SELECT * FROM documents WHERE id=?', input.document_id),
+    );
+    if (original.type !== 'SALE') throw new AppError(400, 'يمكن إرجاع فواتير البيع فقط');
+    if (original.status !== 'POSTED') throw new AppError(409, 'لا يمكن إرجاع فاتورة غير معتمدة');
+
+    // The refund must land on the cashier's currently open shift (or the shift that owns
+    // the original sale), so the drawer reconciliation stays balanced.
+    const branch = writableBranch(actor, original.branch_id);
+    const shift = original.pos_shift_id
+      ? one<PosShift>('SELECT * FROM pos_shifts WHERE id=?', original.pos_shift_id)
+      : null;
+    if (shift && shift.status !== 'OPEN') {
+      throw new AppError(409, 'الوردية المرتبطة بالفاتورة مغلقة؛ أرجع الفاتورة من شاشة المستندات');
+    }
+
+    const originalLines = all<DocLine>(
+      'SELECT * FROM document_lines WHERE document_id=?',
+      original.id,
+    );
+    const byProduct = new Map(originalLines.map((l) => [l.product_id, l]));
+
+    const returnLines = input.lines.map((l) => {
+      const line = byProduct.get(l.product_id);
+      if (!line) throw new AppError(400, 'المنتج غير موجود في الفاتورة الأصلية');
+      return { product_id: l.product_id, quantity: l.quantity, unit_price: line.unit_price };
+    });
+
+    // Reuse the shared return validators (partial-return ceilings, original must be POSTED).
+    validateReturnLines(original.id, returnLines, null);
+
+    const date = businessToday();
+    const created = saveDocument(
+      {
+        type: 'SALE_RETURN',
+        branch_id: branch.id,
+        party_id: original.party_id,
+        original_document_id: original.id,
+        date,
+        due_date: date,
+        discount: 0,
+        tax_rate: original.tax_rate,
+        notes: input.notes || `مرتجع من نقطة البيع عن الفاتورة ${original.number}`,
+        lines: returnLines,
+      },
+      actor,
+    );
+    const posted = postDocument(created.id, actor);
+
+    // Refund the customer out of the drawer (or their tender account) so cash nets out.
+    if (posted.total > 0) {
+      addPayment(
+        posted.id,
+        {
+          amount: posted.total,
+          method: input.method,
+          date,
+          reference: input.reference || `رد مرتجع ${posted.number}`,
+          account_id: resolveDefaultAccountId(input.method, branch.id),
+        },
+        actor,
+      );
+    }
+
+    audit(
+      actor,
+      'مرتجع مبيعات من نقطة البيع',
+      'DOCUMENT',
+      posted.id,
+      `${posted.number} عن ${original.number}`,
+    );
+
+    return {
+      document: posted,
+      refund_total: posted.total,
+      shift_id: posted.pos_shift_id,
+    };
+  });
+}
+
+/**
+ * Parks (holds) the current cart so the cashier can serve another customer and resume later.
+ * Parked sales are scoped to the branch and visible to every cashier on that branch.
+ */
+export function parkSale(raw: unknown, actor: Actor): PosParkedSale {
+  const input = posParkedSaleSchema.parse(raw);
+  const branch = writableBranch(actor, input.branch_id);
+
+  return transaction(() => {
+    const parkedId = id();
+    const total = input.cart.reduce((sum, l) => sum + l.quantity * l.unit_price, 0);
+    run(
+      `INSERT INTO pos_parked_sales(id, branch_id, shift_id, user_id, label, customer_id, label_discount, cart, total, created_at)
+       VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      parkedId,
+      branch.id,
+      input.shift_id ?? null,
+      actor.id,
+      input.label || '',
+      input.customer_id,
+      input.discount,
+      JSON.stringify(input.cart),
+      total,
+      now(),
+    );
+    audit(
+      actor,
+      'تعليق بيع في نقطة البيع',
+      'POS_PARKED',
+      parkedId,
+      input.label || `${total / 100} ج.م`,
+    );
+    return requireRow(
+      one<PosParkedSale>(
+        `SELECT p.*, u.name user_name, pt.name customer_name
+         FROM pos_parked_sales p
+         JOIN users u ON u.id=p.user_id
+         LEFT JOIN parties pt ON pt.id=p.customer_id
+         WHERE p.id=?`,
+        parkedId,
+      ),
+    );
+  });
+}
+
+/** Lists parked sales for a branch (optionally only the current user's own). */
+export function listParkedSales(
+  scope: Scope,
+  options: { branchId?: string; userId?: string } = {},
+): PosParkedSale[] {
+  const f = scopeSql('p.branch_id', scope);
+  const clauses = [f.sql];
+  const params: (string | number)[] = [...f.params];
+  if (options.branchId) {
+    clauses.push('p.branch_id=?');
+    params.push(options.branchId);
+  }
+  if (options.userId) {
+    clauses.push('p.user_id=?');
+    params.push(options.userId);
+  }
+  return all<PosParkedSale>(
+    `SELECT p.*, u.name user_name, pt.name customer_name
+     FROM pos_parked_sales p
+     JOIN users u ON u.id=p.user_id
+     LEFT JOIN parties pt ON pt.id=p.customer_id
+     WHERE ${clauses.join(' AND ')}
+     ORDER BY p.created_at DESC LIMIT 100`,
+    ...params,
+  );
+}
+
+/** Removes a parked sale once resumed (the cart is restored client-side). */
+export function resumeParkedSale(parkedId: string, actor: Actor): { id: string } {
+  return transaction(() => {
+    const parked = requireRow(
+      one<PosParkedSale>('SELECT * FROM pos_parked_sales WHERE id=?', parkedId),
+    );
+    writableBranch(actor, parked.branch_id);
+    run('DELETE FROM pos_parked_sales WHERE id=?', parkedId);
+    audit(actor, 'استئناف بيع معلّق', 'POS_PARKED', parkedId, parked.label || '');
+    return { id: parkedId };
+  });
+}
+
+/** Discards a parked sale without resuming it. */
+export function discardParkedSale(parkedId: string, actor: Actor): { id: string } {
+  return transaction(() => {
+    const parked = requireRow(
+      one<PosParkedSale>('SELECT * FROM pos_parked_sales WHERE id=?', parkedId),
+    );
+    writableBranch(actor, parked.branch_id);
+    run('DELETE FROM pos_parked_sales WHERE id=?', parkedId);
+    audit(actor, 'حذف بيع معلّق', 'POS_PARKED', parkedId, parked.label || '');
+    return { id: parkedId };
   });
 }

@@ -16,5 +16,7 @@ export { expenseScope, Expenses } from './finance/expenses';
 export { Payments } from './finance/payments';
 export { Reports } from './finance/reports';
 export { SettingsPage } from './finance/settings';
+export { EInvoicePanel } from './finance/e-invoice';
 export { ActivityPage } from './finance/activity';
 export { Accounts, CashAccountModal, TransferModal, StatementModal } from './finance/accounts';
+export { Ledger } from './finance/ledger';

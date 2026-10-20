@@ -280,6 +280,24 @@
   color: var(--slate-500);
 }
 
+/* Stocktake */
+.stocktake-lines {
+  max-height: 55vh;
+}
+.stocktake-input {
+  width: 110px;
+  padding: 7px 10px;
+  border: 1px solid var(--slate-300);
+  border-radius: var(--radius-sm);
+  text-align: center;
+  font-weight: 600;
+}
+.stocktake-input:focus {
+  border-color: var(--indigo-400);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--indigo-50);
+}
+
 /* Transfers */
 .transfer-lines {
   border: 1px solid var(--slate-200);
@@ -646,6 +664,31 @@
   font-weight: 700;
 }
 
+/* ── General Ledger (دفتر الأستاذ) ─────────────────────────────────────────────── */
+.ledger-group {
+  margin-bottom: 26px;
+}
+.ledger-group h3 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--slate-800);
+  margin: 0 0 12px;
+}
+.ledger-settings-card h3 {
+  margin: 0 0 8px;
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--slate-800);
+}
+.ledger-settings-card .muted {
+  margin: 0 0 18px;
+  max-width: 68ch;
+  line-height: 1.7;
+}
+
 /* RBAC & Role Management */
 .role-cards-grid {
   display: grid;
@@ -739,4 +782,172 @@
 .role-card-actions button {
   flex: 1;
   font-size: 14px;
+}
+
+/* ETA e-invoice submission panel */
+.eta-summary-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 24px 16px;
+}
+.eta-summary-row .category-tag {
+  text-transform: none;
+}
+.eta-payload {
+  border-top: 1px solid var(--slate-100);
+  padding: 20px 24px;
+}
+.eta-payload h3 {
+  margin: 0 0 12px;
+  font-size: 15px;
+}
+.eta-payload pre {
+  max-height: 360px;
+  overflow: auto;
+  background: var(--slate-50);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  direction: ltr;
+  text-align: left;
+}
+.eta-payload button {
+  margin-top: 12px;
+}
+.table-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 4px 4px;
+}
+.small {
+  font-size: 12px;
+}
+
+/* ==========================================================================
+   Phase 5.1 — Treasury shift review (extracted from inline styles)
+   ========================================================================== */
+.treasury-scroll {
+  max-height: 78vh;
+  overflow-y: auto;
+}
+.treasury-layout {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 16px;
+}
+.treasury-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-left: 1px solid var(--border);
+  padding-left: 12px;
+}
+.treasury-shift-btn {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #ffffff;
+  text-align: right;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: var(--shadow-xs);
+  transition: all 0.15s ease;
+}
+.treasury-shift-btn:hover {
+  border-color: var(--green, #059669);
+}
+.treasury-shift-btn.active {
+  border-color: var(--green, #059669);
+  background: #f0f7f4;
+}
+.treasury-shift-number {
+  font-size: 13px;
+}
+.treasury-envelope-chip {
+  font-size: 10.5px;
+  background: #ede9fe;
+  color: #5b21b6;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+}
+.treasury-shift-meta {
+  font-size: 11px;
+  color: var(--slate-500);
+}
+.treasury-declared {
+  font-size: 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 2px;
+}
+.treasury-chip-meta {
+  font-size: 11.5px;
+  color: var(--slate-600);
+}
+@media (max-width: 900px) {
+  .treasury-layout {
+    grid-template-columns: 1fr;
+  }
+  .treasury-sidebar {
+    border-left: 0;
+    padding-left: 0;
+  }
+}
+
+.text-muted-sm {
+  font-size: 12px;
+  color: var(--slate-500);
+}
+.treasury-verify-input {
+  width: 100%;
+  padding: 5px 8px;
+  font-size: 13px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+}
+.treasury-audit-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: var(--indigo-600);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 4px 0;
+}
+.treasury-method-chip {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.treasury-method-chip.method-cash {
+  background: #fef3c7;
+  color: #92400e;
+}
+.treasury-method-chip.method-card {
+  background: #dbeafe;
+  color: #1e40af;
+}
+.treasury-method-chip.method-bank {
+  background: #dcfce7;
+  color: #15803d;
+}
+.treasury-method-chip.method-credit {
+  background: #ede9fe;
+  color: #6b21a8;
+}
+.shortage-note {
+  margin: 2px 0 0;
+  font-size: 12px;
 }

@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   Package,
   Boxes,
+  ClipboardList,
   Users,
   Truck,
   ReceiptText,
@@ -33,6 +34,7 @@ import {
   TrendingUp,
   Activity,
   Building2,
+  BookOpen,
 } from 'lucide-react';
 import { BranchProvider, BranchSwitcher, useBranch, withBranch } from './branch';
 import {
@@ -50,6 +52,7 @@ import {
   money,
   today,
   dayOffset,
+  useDensity,
 } from './lib';
 import type { User, Company, Product, Party, Document, Dashboard as DashboardData } from './types';
 import { ApiError } from './api';
@@ -58,6 +61,9 @@ const Dashboard = lazy(() => import('./pages/Dashboard').then((m) => ({ default:
 const POS = lazy(() => import('./pages/POS').then((m) => ({ default: m.POS })));
 const Products = lazy(() => import('./pages/Catalog').then((m) => ({ default: m.Products })));
 const Inventory = lazy(() => import('./pages/Catalog').then((m) => ({ default: m.Inventory })));
+const Stocktake = lazy(() =>
+  import('./pages/Stocktake').then((m) => ({ default: m.StocktakePage })),
+);
 const Parties = lazy(() => import('./pages/Catalog').then((m) => ({ default: m.Parties })));
 const Documents = lazy(() => import('./pages/Documents').then((m) => ({ default: m.Documents })));
 const DocumentEditor = lazy(() =>
@@ -69,6 +75,7 @@ const DocumentDetail = lazy(() =>
 const Expenses = lazy(() => import('./pages/Finance').then((m) => ({ default: m.Expenses })));
 const Accounts = lazy(() => import('./pages/Finance').then((m) => ({ default: m.Accounts })));
 const Payments = lazy(() => import('./pages/Finance').then((m) => ({ default: m.Payments })));
+const Ledger = lazy(() => import('./pages/Finance').then((m) => ({ default: m.Ledger })));
 const Reports = lazy(() => import('./pages/Finance').then((m) => ({ default: m.Reports })));
 const SettingsPage = lazy(() =>
   import('./pages/Finance').then((m) => ({ default: m.SettingsPage })),
@@ -325,6 +332,7 @@ export function App() {
 }
 function Authenticated({ user, onLogout }: { user: User; onLogout: () => void }) {
   const company = useData<Company>('/company');
+  useDensity();
   return (
     <SessionContext.Provider
       value={{
@@ -384,6 +392,12 @@ const navigation: { label: string; items: NavItem[] }[] = [
       { to: '/products', label: 'المنتجات', icon: Package, permission: 'catalog:manage' },
       { to: '/inventory', label: 'المخزون', icon: Boxes, permission: 'inventory:view' },
       {
+        to: '/stocktake',
+        label: 'الجرد الدوري',
+        icon: ClipboardList,
+        permission: 'inventory:view',
+      },
+      {
         to: '/transfers',
         label: 'التحويلات بين الفروع',
         icon: ArrowRightLeft,
@@ -398,6 +412,7 @@ const navigation: { label: string; items: NavItem[] }[] = [
     label: 'الإدارة المالية',
     items: [
       { to: '/accounts', label: 'الخزائن والبنوك', icon: Building2, permission: 'finance:view' },
+      { to: '/ledger', label: 'دفتر الأستاذ', icon: BookOpen, permission: 'gl:view' },
       { to: '/expenses', label: 'المصروفات', icon: Wallet, permission: 'finance:expenses' },
       { to: '/payments', label: 'المدفوعات', icon: ArrowLeftRight, permission: 'finance:payments' },
       {
@@ -584,6 +599,7 @@ function Layout() {
               <Route path="/pos" element={<POS />} />
               <Route path="/products" element={<Products />} />
               <Route path="/inventory" element={<Inventory />} />
+              <Route path="/stocktake" element={<Stocktake />} />
               <Route path="/customers" element={<Parties type="CUSTOMER" key="customers" />} />
               <Route path="/suppliers" element={<Parties type="SUPPLIER" key="suppliers" />} />
               <Route path="/sales" element={<Documents type="SALE" key="sales" />} />
@@ -609,6 +625,7 @@ function Layout() {
               <Route path="/accounts" element={<Accounts />} />
               <Route path="/expenses" element={<Expenses />} />
               <Route path="/payments" element={<Payments />} />
+              <Route path="/ledger" element={<Ledger />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route

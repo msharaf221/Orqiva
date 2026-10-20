@@ -4,7 +4,8 @@ import { AppError, audit, requireRow } from '../service';
 import { expenseSchema } from '../validation';
 import { requirePermission } from '../rbac';
 import { scopeFor, scopeSql } from '../scope';
-import { resolveDefaultAccountId, assertAccountFunds } from '../accounts';
+import { resolveDefaultAccountId, assertAccountFunds, glAccountForCashAccount } from '../accounts';
+import { postExpenseLedger } from '../posting';
 import type { Branch, Expense } from '../../src/types';
 
 export const expensesRouter = Router();
@@ -47,6 +48,18 @@ expensesRouter.post('/', requirePermission('finance:expenses'), (req, res) => {
       p.branch_id ?? null,
       p.allocation,
       accountId,
+    );
+    postExpenseLedger(
+      {
+        id: expenseId,
+        title: p.title,
+        category: p.category,
+        amount: p.amount,
+        date: p.date,
+        branchId: p.branch_id ?? null,
+        glAccountId: glAccountForCashAccount(accountId),
+      },
+      req.user,
     );
     audit(req.user, 'تسجيل مصروف', 'EXPENSE', expenseId, p.title);
   });

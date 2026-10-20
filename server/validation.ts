@@ -57,6 +57,78 @@ export const adjustSchema = z
     reason: z.string().trim().min(3).max(300),
   })
   .strict();
+
+export const stocktakeSubmitSchema = z
+  .object({
+    branch_id: id(),
+    notes: optionalText(500),
+  })
+  .strict();
+
+export const stocktakeCountsSchema = z
+  .object({
+    notes: optionalText(500),
+    counts: z
+      .array(
+        z.object({
+          line_id: id(),
+          counted_qty: z.number().int().min(0).max(1_000_000).nullable(),
+        }),
+      )
+      .min(1, 'لا توجد بنود جرد للتحديث'),
+  })
+  .strict();
+
+// ── General Ledger ───────────────────────────────────────────────────────────────────────
+
+const glAccountType = z.enum(['ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'EXPENSE']);
+export const chartAccountSchema = z
+  .object({
+    code: z
+      .string()
+      .trim()
+      .regex(/^\d{3,10}$/, 'كود الحساب أرقام فقط (٣ خانات على الأقل)'),
+    name: text(120),
+    type: glAccountType,
+    normal_side: z.enum(['DEBIT', 'CREDIT']),
+    parent_id: id().nullable().optional(),
+    active: z.boolean().default(true),
+    notes: optionalText(500),
+  })
+  .strict();
+
+const journalLineSchema = z
+  .object({
+    account_id: id(),
+    debit: money.default(0),
+    credit: money.default(0),
+    memo: optionalText(200),
+  })
+  .strict()
+  .refine((l) => l.debit > 0 !== l.credit > 0, {
+    message: 'كل بند يجب أن يكون مديناً أو دائناً بمبلغ واحد فقط',
+  });
+
+export const journalEntrySchema = z
+  .object({
+    date,
+    memo: optionalText(300),
+    branch_id: id().nullable().optional(),
+    lines: z.array(journalLineSchema).min(2, 'القيد يحتاج بندين على الأقل').max(200),
+  })
+  .strict()
+  .refine(
+    (e) => e.lines.reduce((s, l) => s + l.debit, 0) === e.lines.reduce((s, l) => s + l.credit, 0),
+    { message: 'القيد غير متوازن: إجمالي المدين يجب أن يساوي إجمالي الدائن' },
+  );
+
+export const glSettingsSchema = z
+  .object({
+    fiscal_year_start_month: z.number().int().min(1).max(12),
+    closed_through: date.nullable().optional(),
+  })
+  .strict();
+
 export const documentSchema = z
   .object({
     type: z.enum(['SALE', 'PURCHASE', 'SALE_RETURN', 'PURCHASE_RETURN']),
@@ -139,8 +211,11 @@ export const companySchema = z
     phone: optionalText(40),
     address: optionalText(),
     tax_number: optionalText(50),
+    tax_registration_number: optionalText(50),
+    activity_code: optionalText(50),
     tax_rate: z.number().int().min(0).max(10000),
     invoice_note: optionalText(1000),
+    eta_environment: z.enum(['stub', 'preprod', 'production']).default('stub').optional(),
   })
   .strict();
 export const userSchema = z
@@ -481,5 +556,45 @@ export const posCheckoutSchema = z
         }),
       )
       .optional(),
+  })
+  .strict();
+
+export const posParkedSaleSchema = z
+  .object({
+    branch_id: id(),
+    shift_id: id().optional(),
+    label: optionalText(80),
+    customer_id: id().default('walk-in-customer'),
+    discount: money.default(0),
+    cart: z
+      .array(
+        z.object({
+          product_id: id(),
+          name: text(),
+          sku: optionalText(60),
+          quantity: z.number().int().min(1).max(10000),
+          unit_price: money.refine((n) => n >= 0),
+        }),
+      )
+      .min(1, 'لا يمكن تعليق سلة فارغة'),
+  })
+  .strict();
+
+/** Cashier-initiated refund of a prior POS sale, tied to the same shift. */
+export const posReturnSchema = z
+  .object({
+    document_id: id(),
+    // Defaults to cash; the cashier can only refund to the drawer for now.
+    method: z.enum(['CASH', 'CARD', 'BANK']).default('CASH'),
+    reference: optionalText(100),
+    notes: optionalText(500),
+    lines: z
+      .array(
+        z.object({
+          product_id: id(),
+          quantity: z.number().int().min(1).max(10000),
+        }),
+      )
+      .min(1, 'يجب تحديد صنف واحد على الأقل للإرجاع'),
   })
   .strict();

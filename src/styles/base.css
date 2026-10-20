@@ -253,6 +253,68 @@ textarea {
 .no-wrap {
   white-space: nowrap;
 }
+/* Small layout utilities (Phase 5.1) — replace one-off inline styles. */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.stack-sm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.stack-xs {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.row-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.row-between-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.row-gap-6 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.text-center {
+  text-align: center;
+}
+.info-tile {
+  padding: 12px 14px;
+  background: var(--slate-50);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-sm, 8px);
+}
+.panel-note {
+  padding: 36px 12px;
+  text-align: center;
+  color: var(--slate-500);
+}
+.panel-note svg {
+  color: var(--green, #059669);
+  margin-bottom: 10px;
+}
+.section-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--slate-500);
+}
 .spin {
   animation: spin 0.9s linear infinite;
 }
@@ -1219,6 +1281,27 @@ textarea {
   overflow-x: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--slate-300) transparent;
+}
+/* Table density preference (Phase 5.1) — compact fits more rows on admin screens. */
+html[data-density='compact'] th {
+  padding: 9px 14px;
+  font-size: 13.5px;
+}
+html[data-density='compact'] td {
+  padding: 9px 14px;
+  font-size: 14.5px;
+}
+html[data-density='compact'] td strong {
+  font-size: 15px;
+}
+html[data-density='compact'] td.amount {
+  font-size: 15.5px;
+}
+html[data-density='comfortable'] th {
+  padding: 20px 24px;
+}
+html[data-density='comfortable'] td {
+  padding: 20px 24px;
 }
 table {
   width: 100%;

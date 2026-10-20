@@ -18,10 +18,13 @@ import {
   Coins,
   Store,
   RefreshCw,
+  Flame,
+  Undo2,
+  Calculator,
 } from 'lucide-react';
-import { api, Button, Loading, money, useSession, useToast } from '../../lib';
+import { api, Button, Modal, money, useSession, useToast, useDebounced, usePref } from '../../lib';
 import { useBranch } from '../../branch';
-import type { PosShift, PosShiftSummary, Party } from '../../types';
+import type { PosShift, PosShiftSummary, Party, PosParkedSale, ParkedCartLine } from '../../types';
 import {
   playSound,
   DEFAULT_WALK_IN_CUSTOMER,
@@ -34,6 +37,9 @@ import { TreasuryReviewModal, ShiftHandoverSlipModal } from './treasury-review';
 import { CustomerPickerModal, DiscountModal, CheckoutModal } from './checkout';
 import { ThermalReceiptModal } from './receipt';
 import { HotkeysModal } from './hotkeys';
+import { PosReturnModal } from './return';
+import { can } from '../../auth';
+import { ProductForm } from '../Catalog';
 
 export function POS() {
   const { user, company } = useSession();
@@ -47,18 +53,26 @@ export function POS() {
   // Shift & Products Data
   const [shift, setShift] = useState<PosShift | null>(null);
   const [products, setProducts] = useState<PosProduct[]>([]);
+  const [fastProducts, setFastProducts] = useState<PosProduct[]>([]);
   const [customers, setCustomers] = useState<Party[]>([]);
   const [loading, setLoading] = useState(true);
+  // A silent refresh keeps the catalogue on screen after a sale instead of a full-screen spinner.
+  const [refreshing, setRefreshing] = useState(false);
 
   // Cart & Sale State
   const [cart, setCart] = useState<CartItem[]>([]);
   const [customer, setCustomer] = useState<Party>(DEFAULT_WALK_IN_CUSTOMER);
   const [discountCents, setDiscountCents] = useState(0);
 
-  // Search & Filters
-  const [searchQuery, setSearchQuery] = useState('');
+  // Search & Filters (rawInput drives the box; searchQuery is debounced for filtering)
+  const [rawSearch, setRawSearch] = useState('');
+  const searchQuery = useDebounced(rawSearch, 220);
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Cashier preferences
+  const [autoPrint, setAutoPrint] = usePref('pos.autoPrint', false);
+  const [showNumpad, setShowNumpad] = usePref('pos.numpad', false);
 
   // Modals
   const [openShiftModal, setOpenShiftModal] = useState(false);
@@ -75,20 +89,27 @@ export function POS() {
   const [hotkeysModal, setHotkeysModal] = useState(false);
   const [receiptResult, setReceiptResult] = useState<CheckoutResult | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
+  const [parkedModal, setParkedModal] = useState(false);
+  const [parkedSales, setParkedSales] = useState<PosParkedSale[]>([]);
+  const [returnModal, setReturnModal] = useState(false);
+  const [quickProductModal, setQuickProductModal] = useState(false);
 
   // Load Data
-  const reloadData = async () => {
+  const reloadData = async (silent = false) => {
     if (!activeBranch) return;
-    setLoading(true);
+    if (silent) setRefreshing(true);
+    else setLoading(true);
     try {
-      const [shiftData, productsData, customersData] = await Promise.all([
+      const [shiftData, productsData, customersData, fastData] = await Promise.all([
         api<PosShift | null>(`/pos/shifts/current?branch_id=${activeBranch.id}`),
         api<PosProduct[]>(`/pos/products?branch_id=${activeBranch.id}`),
         api<Party[]>('/parties?type=CUSTOMER'),
+        api<PosProduct[]>(`/pos/products?branch_id=${activeBranch.id}&top=8`),
       ]);
       setShift(shiftData);
       setProducts(productsData);
       setCustomers(customersData);
+      setFastProducts(fastData.filter((p) => p.active && p.stock > 0));
 
       if (isAccountantOrAdmin) {
         api<PosShift[]>(`/pos/shifts/pending-review?branch_id=${activeBranch.id}`)
@@ -96,15 +117,35 @@ export function POS() {
           .catch(() => setPendingCount(0));
       }
     } catch (err: any) {
-      toast(err.message || 'تعذر تحميل بيانات نقطة البيع');
+      if (!silent) toast(err.message || 'تعذر تحميل بيانات نقطة البيع');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
   useEffect(() => {
     void reloadData();
   }, [activeBranch?.id]);
+
+  /** Applies a sold cart's quantities to the local catalogue so the grid never flickers. */
+  const applySoldStock = (sold: CartItem[]) => {
+    const soldBy = new Map(sold.map((c) => [c.product.id, c.quantity]));
+    setProducts((prev) =>
+      prev.map((p) => {
+        const qty = soldBy.get(p.id);
+        return qty ? { ...p, stock: Math.max(0, p.stock - qty) } : p;
+      }),
+    );
+    setFastProducts((prev) =>
+      prev
+        .map((p) => {
+          const qty = soldBy.get(p.id);
+          return qty ? { ...p, stock: Math.max(0, p.stock - qty) } : p;
+        })
+        .filter((p) => p.stock > 0),
+    );
+  };
 
   const fetchAndShowHandoverSlip = async (shiftId: string) => {
     try {
@@ -298,6 +339,86 @@ export function POS() {
     setCustomer(DEFAULT_WALK_IN_CUSTOMER);
   };
 
+  // Parked (held) sales — suspend the current cart and resume it later.
+  const refreshParkedSales = async () => {
+    if (!activeBranch) return;
+    try {
+      setParkedSales(await api<PosParkedSale[]>(`/pos/parked?branch_id=${activeBranch.id}`));
+    } catch {
+      setParkedSales([]);
+    }
+  };
+
+  const holdCart = async () => {
+    if (cart.length === 0 || !activeBranch) return;
+    try {
+      await api('/pos/parked', 'POST', {
+        branch_id: activeBranch.id,
+        shift_id: shift?.id,
+        label: customer.id === 'walk-in-customer' ? '' : customer.name,
+        customer_id: customer.id,
+        discount: discountCents,
+        cart: cart.map((c) => ({
+          product_id: c.product.id,
+          name: c.product.name,
+          sku: c.product.sku,
+          quantity: c.quantity,
+          unit_price: c.unit_price,
+        })),
+      });
+      clearCart();
+      playSound(true);
+      toast('تم تعليق السلة. يمكنك استئنافها في أي وقت.');
+      void refreshParkedSales();
+    } catch (err: any) {
+      toast(err.message || 'تعذر تعليق السلة');
+    }
+  };
+
+  const resumeCart = async (parked: PosParkedSale) => {
+    try {
+      const lines = JSON.parse(parked.cart || '[]') as ParkedCartLine[];
+      const restored: CartItem[] = lines.map((line) => {
+        const product = products.find((p) => p.id === line.product_id) || {
+          id: line.product_id,
+          sku: line.sku || '',
+          name: line.name,
+          category: '',
+          unit: '',
+          sale_price: line.unit_price,
+          cost_price: 0,
+          min_stock: 0,
+          active: 1,
+          created_at: '',
+          stock: line.quantity,
+        };
+        return { product, quantity: line.quantity, unit_price: line.unit_price };
+      });
+      await api(`/pos/parked/${parked.id}/resume`, 'POST', {});
+      const customerMatch = [DEFAULT_WALK_IN_CUSTOMER, ...customers].find(
+        (c) => c.id === parked.customer_id,
+      );
+      setCart(restored);
+      setDiscountCents(parked.label_discount || 0);
+      setCustomer(customerMatch || DEFAULT_WALK_IN_CUSTOMER);
+      setParkedModal(false);
+      toast('تم استئناف السلة المعلّقة.');
+      void refreshParkedSales();
+    } catch (err: any) {
+      toast(err.message || 'تعذر استئناف السلة');
+    }
+  };
+
+  const discardParked = async (parked: PosParkedSale) => {
+    try {
+      await api(`/pos/parked/${parked.id}`, 'DELETE');
+      toast('تم حذف السلة المعلّقة.');
+      void refreshParkedSales();
+    } catch (err: any) {
+      toast(err.message || 'تعذر حذف السلة');
+    }
+  };
+
   // Calculations
   const taxRate = company?.tax_rate ?? 1400; // 14% = 1400 bps
   const subtotalCents = useMemo(
@@ -409,11 +530,31 @@ export function POS() {
           )}
           <button
             className="icon-btn"
-            onClick={reloadData}
+            onClick={() => void reloadData(true)}
             title="تحديث البيانات"
             aria-label="تحديث البيانات"
           >
-            <RefreshCw size={17} />
+            <RefreshCw size={17} className={refreshing ? 'spin' : ''} />
+          </button>
+          <button
+            className={'icon-btn ' + (autoPrint ? 'active' : '')}
+            onClick={() => setAutoPrint(!autoPrint)}
+            title={autoPrint ? 'الطباعة التلقائية: مفعّلة' : 'الطباعة التلقائية: متوقفة'}
+            aria-label="تبديل الطباعة التلقائية بعد الدفع"
+            aria-pressed={autoPrint}
+          >
+            <Printer size={17} />
+          </button>
+          <button
+            className={'icon-btn ' + (showNumpad ? 'active' : '')}
+            onClick={() => setShowNumpad(!showNumpad)}
+            title={
+              showNumpad ? 'لوحة الأرقام على الشاشة: مفعّلة' : 'لوحة الأرقام على الشاشة: متوقفة'
+            }
+            aria-label="تبديل لوحة الأرقام على الشاشة"
+            aria-pressed={showNumpad}
+          >
+            <Calculator size={17} />
           </button>
           <button
             className="icon-btn"
@@ -563,11 +704,49 @@ export function POS() {
             <div className="pos-cart-actions">
               <Button
                 variant="secondary"
+                onClick={holdCart}
+                disabled={cart.length === 0}
+                className="pos-clear-btn"
+              >
+                <Clock size={16} /> تعليق
+              </Button>
+
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  void refreshParkedSales();
+                  setParkedModal(true);
+                }}
+                className="pos-clear-btn"
+              >
+                <ShoppingCart size={16} /> المعلّقة
+                {parkedSales.length > 0 && (
+                  <span className="parked-count-chip">{parkedSales.length}</span>
+                )}
+              </Button>
+
+              <Button
+                variant="secondary"
                 onClick={clearCart}
                 disabled={cart.length === 0}
                 className="pos-clear-btn"
               >
                 <Trash2 size={16} /> مسح السلة
+              </Button>
+
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  if (!shift) {
+                    toast('يرجى افتتاح وردية أولاً لتسجيل المرتجعات');
+                    return;
+                  }
+                  setReturnModal(true);
+                }}
+                className="pos-clear-btn"
+                title="إرجاع فاتورة بيع سابقة (مرتجع)"
+              >
+                <Undo2 size={16} /> إرجاع
               </Button>
 
               <Button
@@ -603,15 +782,11 @@ export function POS() {
                 ref={searchInputRef}
                 type="text"
                 placeholder="ابحث بالاسم أو امسح الباركود مباشرة (F3)..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                value={rawSearch}
+                onChange={(e) => setRawSearch(e.target.value)}
               />
-              {searchQuery && (
-                <button
-                  type="button"
-                  className="pos-clear-search"
-                  onClick={() => setSearchQuery('')}
-                >
+              {rawSearch && (
+                <button type="button" className="pos-clear-search" onClick={() => setRawSearch('')}>
                   <X size={15} />
                 </button>
               )}
@@ -621,7 +796,44 @@ export function POS() {
               <Barcode size={18} />
               <span>ماسح الباركود متصل</span>
             </div>
+
+            {can(user, 'catalog:manage') && (
+              <button
+                type="button"
+                className="pos-quick-add"
+                title="تعريف منتج جديد من شاشة الكاشير"
+                onClick={() => setQuickProductModal(true)}
+              >
+                <Plus size={16} />
+                <span>منتج جديد</span>
+              </button>
+            )}
           </div>
+
+          {/* Fast movers: top sellers for this branch (one tap away) */}
+          {fastProducts.length > 0 && (
+            <div className="pos-fast-row">
+              <span className="pos-fast-label">
+                <Flame size={15} /> الأكثر مبيعاً
+              </span>
+              {fastProducts.map((p) => {
+                const inCart = cart.find((i) => i.product.id === p.id);
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className={'pos-fast-chip ' + (inCart ? 'in-cart' : '')}
+                    onClick={() => addToCart(p)}
+                    title={`${p.name} — متاح ${p.stock}`}
+                  >
+                    <span className="pos-fast-name">{p.name}</span>
+                    <span className="pos-fast-price">{money(p.sale_price)}</span>
+                    {inCart && <span className="pos-cart-badge">{inCart.quantity}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
           {/* Category Tabs */}
           <div className="pos-category-tabs">
@@ -644,16 +856,21 @@ export function POS() {
             ))}
           </div>
 
-          {/* Products Grid */}
-          <div className="pos-products-grid">
-            {loading ? (
-              <Loading />
-            ) : filteredProducts.length === 0 ? (
+          {/* Products Grid — shows a skeleton on first load, never blanks out after a sale */}
+          {loading ? (
+            <div className="pos-products-grid">
+              <ProductGridSkeleton />
+            </div>
+          ) : filteredProducts.length === 0 ? (
+            <div className="pos-products-grid">
               <div className="pos-no-products">لا توجد منتجات مطابقة في هذا الفرع</div>
-            ) : (
-              filteredProducts.map((p) => {
+            </div>
+          ) : (
+            <div className={'pos-products-grid ' + (refreshing ? 'refreshing' : '')}>
+              {filteredProducts.map((p) => {
                 const inCart = cart.find((i) => i.product.id === p.id);
                 const isOutOfStock = p.stock <= 0;
+                const isLow = !isOutOfStock && p.min_stock > 0 && p.stock <= p.min_stock;
                 return (
                   <button
                     key={p.id}
@@ -667,6 +884,11 @@ export function POS() {
                     disabled={isOutOfStock}
                   >
                     {inCart && <span className="pos-cart-badge">{inCart.quantity}</span>}
+                    {isLow && (
+                      <span className="pos-low-badge" title="المخزون وصل الحد الأدنى">
+                        <AlertCircle size={12} /> منخفض
+                      </span>
+                    )}
                     <div className="pos-prod-info">
                       <span className="pos-prod-name">{p.name}</span>
                       <span className="pos-prod-sku">{p.sku}</span>
@@ -674,15 +896,17 @@ export function POS() {
 
                     <div className="pos-prod-footer">
                       <strong className="pos-prod-price">{money(p.sale_price)} ج.م</strong>
-                      <span className={'pos-prod-stock ' + (isOutOfStock ? 'zero' : '')}>
+                      <span
+                        className={'pos-prod-stock ' + (isOutOfStock ? 'zero' : isLow ? 'low' : '')}
+                      >
                         {isOutOfStock ? 'نفد المخزون' : `متاح: ${p.stock}`}
                       </span>
                     </div>
                   </button>
                 );
-              })
-            )}
-          </div>
+              })}
+            </div>
+          )}
         </div>
       </div>
 
@@ -791,13 +1015,42 @@ export function POS() {
           cart={cart}
           discountCents={effectiveDiscountCents}
           totalCents={totalCents}
+          numpad={showNumpad}
           onSuccess={(res) => {
+            applySoldStock(cart);
             setReceiptResult(res);
             setCheckoutModal(false);
             clearCart();
-            void reloadData();
+            // A silent refresh reconciles stock/shift in the background without blanking the grid.
+            void reloadData(true);
           }}
           onClose={() => setCheckoutModal(false)}
+        />
+      )}
+
+      {/* MODAL: Cashier refund of a previous sale */}
+      {returnModal && shift && (
+        <PosReturnModal
+          branchId={activeBranch.id}
+          onClose={() => setReturnModal(false)}
+          onDone={() => {
+            setReturnModal(false);
+            void reloadData(true);
+          }}
+        />
+      )}
+
+      {/* MODAL: Quick product creation without leaving the till */}
+      {quickProductModal && (
+        <ProductForm
+          quick
+          defaultCategory={selectedCategory !== 'ALL' ? selectedCategory : undefined}
+          onClose={() => setQuickProductModal(false)}
+          onSaved={() => {
+            setQuickProductModal(false);
+            toast('تم تعريف المنتج وأضيف للكتالوج.');
+            void reloadData(true);
+          }}
         />
       )}
 
@@ -810,12 +1063,48 @@ export function POS() {
           branchName={activeBranch.name}
           cashierName={user.name}
           customerName={customer.name}
+          autoPrint={autoPrint}
           onClose={() => setReceiptResult(null)}
         />
       )}
 
       {/* MODAL 8: Hotkeys Guide Modal */}
       {hotkeysModal && <HotkeysModal onClose={() => setHotkeysModal(false)} />}
+
+      {/* MODAL 9: Parked (held) sales */}
+      {parkedModal && (
+        <Modal title="السلات المعلّقة" onClose={() => setParkedModal(false)}>
+          <div className="modal-body">
+            {parkedSales.length === 0 ? (
+              <p className="muted">لا توجد سلات معلّقة حالياً.</p>
+            ) : (
+              <div className="parked-list">
+                {parkedSales.map((p) => (
+                  <div className="parked-item" key={p.id}>
+                    <div className="parked-item-info">
+                      <strong>{p.label || 'بدون وصف'}</strong>
+                      <small className="muted">
+                        {p.user_name} · {new Date(p.created_at).toLocaleTimeString('ar-EG')}
+                      </small>
+                    </div>
+                    <div className="parked-item-meta">
+                      <span>{money(p.total)} ج.م</span>
+                      <div className="row-actions">
+                        <Button variant="secondary" onClick={() => resumeCart(p)}>
+                          استئناف
+                        </Button>
+                        <Button variant="danger" onClick={() => discardParked(p)}>
+                          حذف
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -823,3 +1112,21 @@ export function POS() {
 // ==========================================
 // Sub-components & Dedicated Modals
 // ==========================================
+
+/** Lightweight skeleton of the product grid shown only on the very first load. */
+function ProductGridSkeleton() {
+  return (
+    <>
+      {Array.from({ length: 12 }, (_, i) => (
+        <div key={i} className="pos-product-card pos-skeleton-card" aria-hidden="true">
+          <div className="pos-skeleton-line w-70" />
+          <div className="pos-skeleton-line w-40" />
+          <div className="pos-skeleton-footer">
+            <div className="pos-skeleton-line w-30" />
+            <div className="pos-skeleton-line w-30" />
+          </div>
+        </div>
+      ))}
+    </>
+  );
+}

@@ -29,6 +29,7 @@ export type PermissionKey =
   | 'documents:cancel'
   | 'inventory:view'
   | 'inventory:adjust'
+  | 'inventory:stocktake_approve'
   | 'catalog:manage'
   | 'transfers:manage'
   | 'parties:view'
@@ -37,8 +38,12 @@ export type PermissionKey =
   | 'finance:payments'
   | 'finance:expenses'
   | 'finance:accounts'
+  | 'gl:view'
+  | 'gl:manage'
   | 'reports:view'
   | 'reports:group_overview'
+  | 'eta:view'
+  | 'eta:manage'
   | 'distribution:manage'
   | 'branches:manage'
   | 'users:manage'
@@ -95,6 +100,179 @@ export interface PosCashMovement {
   user_name?: string;
 }
 
+export interface ParkedCartLine {
+  product_id: string;
+  name: string;
+  sku?: string;
+  quantity: number;
+  unit_price: number;
+}
+
+export interface PosParkedSale {
+  id: string;
+  branch_id: string;
+  shift_id: string | null;
+  user_id: string;
+  label: string;
+  customer_id: string;
+  label_discount: number;
+  cart: string;
+  total: number;
+  created_at: string;
+  user_name?: string;
+  customer_name?: string;
+}
+
+/** A POSTED POS sale with its cumulative returned quantity, used for cashier refunds. */
+export interface PosLookupSale extends Document {
+  returned_qty?: number;
+}
+
+export type StocktakeStatus = 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'CANCELLED';
+
+export interface StocktakeSession {
+  id: string;
+  number: string;
+  branch_id: string;
+  status: StocktakeStatus;
+  notes: string;
+  counted_by: string;
+  approved_by: string | null;
+  created_at: string;
+  submitted_at: string | null;
+  approved_at: string | null;
+  branch_name?: string;
+  counted_by_name?: string;
+  approved_by_name?: string | null;
+  lines_count?: number;
+  variance_lines?: number;
+  variance_value?: number;
+}
+
+export interface StocktakeLine {
+  id: string;
+  session_id: string;
+  product_id: string;
+  product_name: string;
+  sku: string;
+  unit: string;
+  expected_qty: number;
+  counted_qty: number | null;
+  unit_cost: number;
+  counted_at: string | null;
+}
+
+export interface ReorderSuggestion {
+  product_id: string;
+  sku: string;
+  name: string;
+  unit: string;
+  branch_id: string;
+  branch_name: string;
+  stock: number;
+  min_stock: number;
+  suggested_qty: number;
+  cost_price: number;
+  avg_cost: number;
+  estimated_cost: number;
+  below_threshold: boolean;
+}
+
+// ── General Ledger ───────────────────────────────────────────────────────────────────────
+
+export type GlAccountType = 'ASSET' | 'LIABILITY' | 'EQUITY' | 'REVENUE' | 'EXPENSE';
+export type JournalSourceType =
+  | 'SALE'
+  | 'PURCHASE'
+  | 'SALE_RETURN'
+  | 'PURCHASE_RETURN'
+  | 'PAYMENT'
+  | 'EXPENSE'
+  | 'ACCOUNT_TRANSFER'
+  | 'POS_CASH'
+  | 'POS_SHIFT'
+  | 'TRANSFER'
+  | 'STOCKTAKE'
+  | 'DISTRIBUTION'
+  | 'EQUITY'
+  | 'MANUAL'
+  | 'REVERSAL'
+  | 'OPENING';
+
+export interface ChartAccount {
+  id: string;
+  code: string;
+  name: string;
+  type: GlAccountType;
+  normal_side: 'DEBIT' | 'CREDIT';
+  parent_id: string | null;
+  is_system: number;
+  system_key: string | null;
+  active: number;
+  notes: string;
+  created_at: string;
+  lines_count?: number;
+}
+
+export interface JournalEntry {
+  id: string;
+  number: string;
+  date: string;
+  memo: string;
+  source_type: JournalSourceType;
+  source_id: string | null;
+  branch_id: string | null;
+  status: 'DRAFT' | 'POSTED' | 'REVERSED';
+  reversal_of: string | null;
+  created_by: string;
+  created_at: string;
+  branch_name?: string | null;
+  created_by_name?: string;
+  total?: number;
+}
+
+export interface JournalLine {
+  id: string;
+  entry_id: string;
+  account_id: string;
+  debit: number;
+  credit: number;
+  branch_id: string | null;
+  memo: string;
+  account_code?: string;
+  account_name?: string;
+  account_type?: GlAccountType;
+  entry_number?: string;
+  date?: string;
+  source_type?: JournalSourceType;
+  source_id?: string | null;
+  running_balance?: number;
+}
+
+export interface TrialBalanceRow {
+  account_id: string;
+  code: string;
+  name: string;
+  type: GlAccountType;
+  normal_side: 'DEBIT' | 'CREDIT';
+  debit: number;
+  credit: number;
+  balance: number;
+  opening: number;
+}
+
+export interface LedgerAccountStatement {
+  account: ChartAccount;
+  opening: number;
+  lines: JournalLine[];
+}
+
+export interface GlSettings {
+  fiscal_year_start_month: number;
+  closed_through: string | null;
+  updated_at: string | null;
+}
+
 export interface PosShiftPaymentDetail {
   id: string;
   document_id: string;
@@ -115,6 +293,8 @@ export interface PosShiftSummary {
   credit_sales: number;
   total_sales: number;
   sales_count: number;
+  refunds_total: number;
+  refunds_count: number;
   cash_in: number;
   cash_out: number;
   opening_cash: number;
@@ -210,6 +390,37 @@ export interface Company {
   currency: string;
   tax_rate: number;
   invoice_note: string;
+  /** ETA (Egyptian Tax Authority) taxpayer registration number. */
+  tax_registration_number: string;
+  /** ETA activity code describing the business activity. */
+  activity_code: string;
+  /** ETA submission environment: stub (offline), preprod or production. */
+  eta_environment: 'stub' | 'preprod' | 'production';
+}
+
+export type EtaDocumentStatus =
+  'NOT_SUBMITTED' | 'PENDING' | 'VALID' | 'INVALID' | 'FAILED' | 'CANCELLED';
+
+export interface EInvoiceSubmission {
+  id: string;
+  document_id: string;
+  uuid: string;
+  document_type: 'INVOICE' | 'CREDIT_NOTE' | 'DEBIT_NOTE';
+  status: 'PENDING' | 'SUBMITTED' | 'VALID' | 'INVALID' | 'FAILED' | 'CANCELLED';
+  attempt: number;
+  max_attempts: number;
+  next_attempt_at: string;
+  submitted_at: string | null;
+  completed_at: string | null;
+  eta_long_id: string;
+  eta_response: string;
+  last_error: string;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  document_number?: string;
+  document_total?: number;
+  party_name?: string;
 }
 export interface Branch {
   id: string;
@@ -317,6 +528,14 @@ export interface Document {
   original_document_id?: string | null;
   original_document_number?: string | null;
   pos_shift_id?: string | null;
+  /** UBL 2.1 document UUID (mandatory for Egyptian e-invoice). */
+  internal_code: string;
+  /** ETA submission status (stub pipeline until real credentials are set). */
+  eta_status: EtaDocumentStatus;
+  /** ETA long submission id once accepted. */
+  eta_long_id: string;
+  /** UUID of the referenced invoice (Credit/Debit notes). */
+  reference_uuid?: string | null;
   date: string;
   due_date: string;
   subtotal: number;
@@ -570,7 +789,6 @@ export interface StockMatrix {
 }
 
 export type AccountType = 'CASH' | 'BANK' | 'WALLET';
-
 export interface CashAccount {
   id: string;
   name: string;

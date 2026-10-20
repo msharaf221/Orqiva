@@ -2,7 +2,15 @@ import { useState, useMemo, type FormEvent } from 'react';
 import { Search, CreditCard, Building, Clock, Coins } from 'lucide-react';
 import { api, Button, Field, Modal, money, useAction, useToast } from '../../lib';
 import type { Party } from '../../types';
-import { playSound, DEFAULT_WALK_IN_CUSTOMER, type CheckoutResult, type CartItem } from './helpers';
+import {
+  playSound,
+  DEFAULT_WALK_IN_CUSTOMER,
+  findStockShortages,
+  type CheckoutResult,
+  type CartItem,
+  type PosProduct,
+} from './helpers';
+import { NumberPad } from './numpad';
 
 export function CustomerPickerModal({
   customers,
@@ -162,6 +170,7 @@ export function CheckoutModal({
   cart,
   discountCents,
   totalCents,
+  numpad = false,
   onSuccess,
   onClose,
 }: {
@@ -171,6 +180,8 @@ export function CheckoutModal({
   cart: CartItem[];
   discountCents: number;
   totalCents: number;
+  /** Show the on-screen numeric keypad for the tendered amount (touch tills). */
+  numpad?: boolean;
   onSuccess: (res: CheckoutResult) => void;
   onClose: () => void;
 }) {
@@ -210,6 +221,36 @@ export function CheckoutModal({
     { label: '1000 ج.م', val: 100000 },
   ];
 
+  /**
+   * Refetches live branch availability and aborts when a cart line can no longer be
+   * fulfilled (e.g. a parallel till sold the last unit while this cart was open).
+   */
+  const revalidateStock = async (): Promise<boolean> => {
+    try {
+      const fresh = await api<PosProduct[]>(`/pos/products?branch_id=${branchId}`);
+      const shortages = findStockShortages(
+        cart.map((c) => ({
+          product_id: c.product.id,
+          name: c.product.name,
+          quantity: c.quantity,
+        })),
+        fresh.map((p) => ({ id: p.id, stock: p.stock, name: p.name })),
+      );
+      if (shortages.length > 0) {
+        const first = shortages[0];
+        playSound(false);
+        toast(
+          `تغيّرت الكميات المتاحة: «${first.name}» المتاح الآن (${first.available}) والمطلوب (${first.requested}). راجع السلة.`,
+        );
+        return false;
+      }
+      return true;
+    } catch {
+      // If the availability check itself fails, fall back to the server-side guard.
+      return true;
+    }
+  };
+
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
 
@@ -241,6 +282,7 @@ export function CheckoutModal({
       const nonCreditSum = splitCashCents + splitCardCents + splitBankCents;
 
       void act(async () => {
+        if (!(await revalidateStock())) return;
         const res = await api<CheckoutResult>('/pos/checkout', 'POST', {
           branch_id: branchId,
           shift_id: shiftId,
@@ -289,6 +331,7 @@ export function CheckoutModal({
     }
 
     void act(async () => {
+      if (!(await revalidateStock())) return;
       const res = await api<CheckoutResult>('/pos/checkout', 'POST', {
         branch_id: branchId,
         shift_id: shiftId,
@@ -335,9 +378,10 @@ export function CheckoutModal({
       title="إتمام عملية الدفع وإنهاء الطلب (F2)"
       description={`المبلغ المطلوب سداده: ${money(totalCents)} ج.م`}
       onClose={onClose}
+      sheet
     >
       <form onSubmit={handleSubmit}>
-        <div className="modal-body form-grid" style={{ maxHeight: '74vh', overflowY: 'auto' }}>
+        <div className="modal-body form-grid pos-checkout-body">
           {/* Total Display Banner */}
           <div className="pos-checkout-amount-banner">
             <div>
@@ -348,19 +392,7 @@ export function CheckoutModal({
             <button
               type="button"
               onClick={() => setSplitMode(!splitMode)}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '8px 14px',
-                background: splitMode ? '#4f46e5' : '#ffffff',
-                color: splitMode ? '#ffffff' : '#4f46e5',
-                border: '1px solid #4f46e5',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontWeight: 700,
-                fontSize: '13px',
-              }}
+              className={'pos-split-toggle ' + (splitMode ? 'active' : '')}
             >
               {splitMode ? '✓ إلغاء الدفع المجزأ' : '⚡ دفع مجزأ (أكثر من وسيلة)'}
             </button>
@@ -369,21 +401,12 @@ export function CheckoutModal({
           {/* SPLIT PAYMENT MODE */}
           {splitMode ? (
             <div className="pos-split-mode-box">
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                }}
-              >
-                <strong style={{ fontSize: '13.5px', color: 'var(--slate-800)' }}>
-                  توزيع مبلغ الفاتورة على وسائل الدفع:
-                </strong>
+              <div className="row-between">
+                <strong className="pos-split-heading">توزيع مبلغ الفاتورة على وسائل الدفع:</strong>
                 <span
                   className={
                     'pos-split-status-bar ' + (splitRemainingCents === 0 ? 'matched' : 'unmatched')
                   }
-                  style={{ padding: '4px 10px', fontSize: '12.5px' }}
                 >
                   {splitRemainingCents === 0 ? (
                     <span>✓ المبلغ موزع بالكامل</span>
@@ -397,7 +420,7 @@ export function CheckoutModal({
 
               {/* Cash Split Row */}
               <div className="pos-split-row">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
+                <div className="pos-split-label">
                   <Coins size={16} style={{ color: '#d97706' }} />
                   <span>نقداً (كاش):</span>
                 </div>
@@ -408,14 +431,14 @@ export function CheckoutModal({
                   value={splitCash}
                   onChange={(e) => setSplitCash(e.target.value)}
                   placeholder="المبلغ كاش"
-                  style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                  className="pos-split-input"
                 />
-                <span style={{ fontSize: '12px', color: 'var(--slate-500)' }}>من الدرج</span>
+                <span className="pos-split-hint">من الدرج</span>
               </div>
 
               {/* Card Split Row */}
               <div className="pos-split-row">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
+                <div className="pos-split-label">
                   <CreditCard size={16} style={{ color: '#2563eb' }} />
                   <span>بطاقة / فيزا:</span>
                 </div>
@@ -426,20 +449,20 @@ export function CheckoutModal({
                   value={splitCard}
                   onChange={(e) => setSplitCard(e.target.value)}
                   placeholder="المبلغ بالفيزا"
-                  style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                  className="pos-split-input"
                 />
                 <input
                   type="text"
                   placeholder="رقم إيصال الماكينة (اختياري)"
                   value={splitCardRef}
                   onChange={(e) => setSplitCardRef(e.target.value)}
-                  style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                  className="pos-split-input"
                 />
               </div>
 
               {/* InstaPay Split Row */}
               <div className="pos-split-row">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
+                <div className="pos-split-label">
                   <Building size={16} style={{ color: '#059669' }} />
                   <span>إنستاباي / محفظة:</span>
                 </div>
@@ -450,20 +473,20 @@ export function CheckoutModal({
                   value={splitBank}
                   onChange={(e) => setSplitBank(e.target.value)}
                   placeholder="المبلغ عبر إنستاباي"
-                  style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                  className="pos-split-input"
                 />
                 <input
                   type="text"
                   placeholder="رقم العملية المرجعي / IPN"
                   value={splitBankRef}
                   onChange={(e) => setSplitBankRef(e.target.value)}
-                  style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                  className="pos-split-input"
                 />
               </div>
 
               {/* Credit Split Row */}
               <div className="pos-split-row">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
+                <div className="pos-split-label">
                   <Clock size={16} style={{ color: '#7c3aed' }} />
                   <span>آجل (على الحساب):</span>
                 </div>
@@ -475,9 +498,9 @@ export function CheckoutModal({
                   value={splitCredit}
                   onChange={(e) => setSplitCredit(e.target.value)}
                   placeholder="المبلغ الآجل"
-                  style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                  className="pos-split-input"
                 />
-                <span style={{ fontSize: '12px', color: 'var(--slate-500)' }}>
+                <span className="pos-split-hint">
                   {customer.id === 'walk-in-customer'
                     ? 'يتطلب اختيار عميل مسجل'
                     : `على حساب: ${customer.name}`}
@@ -546,11 +569,22 @@ export function CheckoutModal({
                       step="any"
                       min={totalCents / 100}
                       required
-                      autoFocus
+                      autoFocus={!numpad}
+                      inputMode={numpad ? 'none' : 'decimal'}
                       value={amountTendered}
                       onChange={(e) => setAmountTendered(e.target.value)}
                     />
                   </Field>
+
+                  {numpad && (
+                    <NumberPad
+                      value={amountTendered}
+                      onChange={setAmountTendered}
+                      title="المبلغ المستلم"
+                      hint={`المطلوب: ${money(totalCents)} ج.م`}
+                      onClose={() => setAmountTendered((totalCents / 100).toFixed(2))}
+                    />
+                  )}
 
                   <div className="pos-quick-cash-chips">
                     {quickCashOptions.map((opt) => (

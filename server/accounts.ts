@@ -1,6 +1,7 @@
 import { all, one, run, transaction, id, now, type SQLInputValue } from './db';
 import { cashAccountSchema, updateCashAccountSchema, accountTransferSchema } from './validation';
 import { AppError, audit, nextNumber, requireRow, type Actor } from './service';
+import { postAccountTransferLedger } from './posting';
 import type { CashAccount, AccountTransfer, AccountStatementEntry } from '../src/types';
 
 const ACCOUNT_BALANCE_EXPR = `
@@ -101,6 +102,21 @@ export function resolveDefaultAccountId(method: string, branchId?: string | null
   if (defaultCash) return defaultCash.id;
   const anyAcc = one<{ id: string }>('SELECT id FROM cash_accounts WHERE active = 1 LIMIT 1');
   return anyAcc ? anyAcc.id : 'acc_def_cash';
+}
+
+/**
+ * The ledger account a cash/bank account posts against. Treasury accounts mirror a GL
+ * account directly; if the mapping is somehow missing we fall back to the system cash/bank
+ * accounts so a posting is never silently dropped.
+ */
+export function glAccountForCashAccount(accountId: string): string {
+  const row = one<{ gl_account_id: string | null; type: string }>(
+    'SELECT gl_account_id, type FROM cash_accounts WHERE id=?',
+    accountId,
+  );
+  if (row?.gl_account_id) return row.gl_account_id;
+  const key = row?.type === 'CASH' ? 'CASH' : 'BANK';
+  return one<{ id: string }>('SELECT id FROM chart_of_accounts WHERE system_key=?', key)?.id ?? '';
 }
 
 export function assertAccountFunds(
@@ -239,6 +255,21 @@ export function createAccountTransfer(raw: unknown, actor: Actor): AccountTransf
       'ACCOUNT_TRANSFER',
       transferId,
       `${transferNumber}: من ${fromAcc.name} إلى ${toAcc.name}`,
+    );
+
+    // Ledger: debit the destination GL account, credit the source.
+    postAccountTransferLedger(
+      {
+        id: transferId,
+        number: transferNumber,
+        amount: input.amount,
+        date: input.date,
+        fromGlAccountId: glAccountForCashAccount(input.from_account_id),
+        toGlAccountId: glAccountForCashAccount(input.to_account_id),
+        fromName: fromAcc.name,
+        toName: toAcc.name,
+      },
+      actor,
     );
 
     return {

@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Printer } from 'lucide-react';
 import { Button, Modal, money } from '../../lib';
 import {
@@ -15,6 +16,7 @@ export function ThermalReceiptModal({
   branchName,
   cashierName,
   customerName,
+  autoPrint = false,
   onClose,
 }: {
   result: CheckoutResult;
@@ -23,6 +25,8 @@ export function ThermalReceiptModal({
   branchName: string;
   cashierName: string;
   customerName: string;
+  /** When the cashier enabled "print immediately after payment", fire the print dialog once. */
+  autoPrint?: boolean;
   onClose: () => void;
 }) {
   const invoiceDateStr = result.document.date || new Date().toLocaleDateString('ar-EG');
@@ -31,6 +35,13 @@ export function ThermalReceiptModal({
     minute: '2-digit',
   });
 
+  useEffect(() => {
+    if (!autoPrint) return;
+    // Wait for the receipt DOM (QR/barcode SVGs) to paint before opening the print dialog.
+    const t = setTimeout(() => triggerThermalPrint(), 350);
+    return () => clearTimeout(t);
+  }, [autoPrint]);
+
   const qrData = generateInvoiceQrData({
     sellerName: companyName,
     taxNumber,
@@ -38,6 +49,8 @@ export function ThermalReceiptModal({
     invoiceDate: `${invoiceDateStr} ${invoiceTimeStr}`,
     total: result.document.total,
     tax: result.document.tax,
+    uuid: result.document.internal_code,
+    timestamp: result.document.date,
   });
 
   const paymentMethodLabel =
