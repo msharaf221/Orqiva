@@ -123,6 +123,11 @@ export interface PosParkedSale {
   customer_name?: string;
 }
 
+/** A POSTED POS sale with its cumulative returned quantity, used for cashier refunds. */
+export interface PosLookupSale extends Document {
+  returned_qty?: number;
+}
+
 export type StocktakeStatus = 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'CANCELLED';
 
 export interface StocktakeSession {

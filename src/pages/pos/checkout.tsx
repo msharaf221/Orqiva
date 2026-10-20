@@ -10,6 +10,7 @@ import {
   type CartItem,
   type PosProduct,
 } from './helpers';
+import { NumberPad } from './numpad';
 
 export function CustomerPickerModal({
   customers,
@@ -169,6 +170,7 @@ export function CheckoutModal({
   cart,
   discountCents,
   totalCents,
+  numpad = false,
   onSuccess,
   onClose,
 }: {
@@ -178,6 +180,8 @@ export function CheckoutModal({
   cart: CartItem[];
   discountCents: number;
   totalCents: number;
+  /** Show the on-screen numeric keypad for the tendered amount (touch tills). */
+  numpad?: boolean;
   onSuccess: (res: CheckoutResult) => void;
   onClose: () => void;
 }) {
@@ -585,11 +589,22 @@ export function CheckoutModal({
                       step="any"
                       min={totalCents / 100}
                       required
-                      autoFocus
+                      autoFocus={!numpad}
+                      inputMode={numpad ? 'none' : 'decimal'}
                       value={amountTendered}
                       onChange={(e) => setAmountTendered(e.target.value)}
                     />
                   </Field>
+
+                  {numpad && (
+                    <NumberPad
+                      value={amountTendered}
+                      onChange={setAmountTendered}
+                      title="المبلغ المستلم"
+                      hint={`المطلوب: ${money(totalCents)} ج.م`}
+                      onClose={() => setAmountTendered((totalCents / 100).toFixed(2))}
+                    />
+                  )}
 
                   <div className="pos-quick-cash-chips">
                     {quickCashOptions.map((opt) => (

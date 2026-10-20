@@ -11,6 +11,8 @@ import {
 } from './service';
 import { resolveDefaultAccountId } from './accounts';
 import { postPosCashMovementLedger } from './posting';
+import { businessToday } from './clock';
+import { validateReturnLines } from './returns';
 import { writableBranch, type Actor, type Scope, scopeSql } from './scope';
 import {
   posShiftOpenSchema,
@@ -20,6 +22,7 @@ import {
   posShiftCloseSchema,
   posCheckoutSchema,
   posParkedSaleSchema,
+  posReturnSchema,
 } from './validation';
 import type {
   PosShift,
@@ -723,6 +726,99 @@ export function posCheckout(raw: unknown, actor: Actor) {
       lines,
       shift_id: shiftId,
       payment: paymentResult,
+    };
+  });
+}
+
+/**
+ * Cashier-initiated refund of a previous POS sale.
+ *
+ * Creates a SALE_RETURN (credit note) linked to the original invoice. `saveDocument`
+ * inherits the original's `pos_shift_id`, so the refund nets against the cashier's open
+ * shift (visible in the shift summary and the treasury reconciliation) without any extra
+ * plumbing. When the original was paid in cash, the refund is immediately paid out of the
+ * drawer; other methods refund to the original account's ledger.
+ */
+export function posReturn(raw: unknown, actor: Actor) {
+  const input = posReturnSchema.parse(raw);
+
+  return transaction(() => {
+    const original = requireRow(
+      one<Document>('SELECT * FROM documents WHERE id=?', input.document_id),
+    );
+    if (original.type !== 'SALE') throw new AppError(400, 'يمكن إرجاع فواتير البيع فقط');
+    if (original.status !== 'POSTED') throw new AppError(409, 'لا يمكن إرجاع فاتورة غير معتمدة');
+
+    // The refund must land on the cashier's currently open shift (or the shift that owns
+    // the original sale), so the drawer reconciliation stays balanced.
+    const branch = writableBranch(actor, original.branch_id);
+    const shift = original.pos_shift_id
+      ? one<PosShift>('SELECT * FROM pos_shifts WHERE id=?', original.pos_shift_id)
+      : null;
+    if (shift && shift.status !== 'OPEN') {
+      throw new AppError(409, 'الوردية المرتبطة بالفاتورة مغلقة؛ أرجع الفاتورة من شاشة المستندات');
+    }
+
+    const originalLines = all<DocLine>(
+      'SELECT * FROM document_lines WHERE document_id=?',
+      original.id,
+    );
+    const byProduct = new Map(originalLines.map((l) => [l.product_id, l]));
+
+    const returnLines = input.lines.map((l) => {
+      const line = byProduct.get(l.product_id);
+      if (!line) throw new AppError(400, 'المنتج غير موجود في الفاتورة الأصلية');
+      return { product_id: l.product_id, quantity: l.quantity, unit_price: line.unit_price };
+    });
+
+    // Reuse the shared return validators (partial-return ceilings, original must be POSTED).
+    validateReturnLines(original.id, returnLines, null);
+
+    const date = businessToday();
+    const created = saveDocument(
+      {
+        type: 'SALE_RETURN',
+        branch_id: branch.id,
+        party_id: original.party_id,
+        original_document_id: original.id,
+        date,
+        due_date: date,
+        discount: 0,
+        tax_rate: original.tax_rate,
+        notes: input.notes || `مرتجع من نقطة البيع عن الفاتورة ${original.number}`,
+        lines: returnLines,
+      },
+      actor,
+    );
+    const posted = postDocument(created.id, actor);
+
+    // Refund the customer out of the drawer (or their tender account) so cash nets out.
+    if (posted.total > 0) {
+      addPayment(
+        posted.id,
+        {
+          amount: posted.total,
+          method: input.method,
+          date,
+          reference: input.reference || `رد مرتجع ${posted.number}`,
+          account_id: resolveDefaultAccountId(input.method, branch.id),
+        },
+        actor,
+      );
+    }
+
+    audit(
+      actor,
+      'مرتجع مبيعات من نقطة البيع',
+      'DOCUMENT',
+      posted.id,
+      `${posted.number} عن ${original.number}`,
+    );
+
+    return {
+      document: posted,
+      refund_total: posted.total,
+      shift_id: posted.pos_shift_id,
     };
   });
 }

@@ -212,6 +212,105 @@ describe('Phase 4.4 — POS edge cases', () => {
     expect(summary.body.expected_cash).toBe(10000 + 11400 - ret.body.total);
   });
 
+  it('refunds a POS sale through the cashier endpoint and nets it against the shift', async () => {
+    // Sell 5 units.
+    const sale = await cashier
+      .post('/api/pos/checkout')
+      .set(header)
+      .send({
+        branch_id: 'main',
+        shift_id: shiftId,
+        party_id: 'walk-in-customer',
+        date: '2026-03-02',
+        discount: 0,
+        lines: [{ product_id: 'edge-p2', quantity: 5, unit_price: 4000 }],
+        payment: { method: 'CASH', amount_tendered: 22800, amount_paid: 22800 },
+      })
+      .expect(201);
+
+    // Look up the sale by its invoice number, exactly as the till does.
+    const lookup = await cashier
+      .get(`/api/pos/sales/lookup?branch_id=main&q=${sale.body.document.number}`)
+      .set(header)
+      .expect(200);
+    expect(lookup.body).toHaveLength(1);
+    expect(lookup.body[0].id).toBe(sale.body.document.id);
+
+    // The returnable endpoint reports the full quantity as still returnable.
+    const returnable = await cashier
+      .get(`/api/pos/sales/${sale.body.document.id}/returnable`)
+      .set(header)
+      .expect(200);
+    expect(returnable.body[0].returnable).toBe(5);
+
+    // Refund 2 units from the till.
+    const refund = await cashier
+      .post('/api/pos/return')
+      .set(header)
+      .send({
+        document_id: sale.body.document.id,
+        method: 'CASH',
+        lines: [{ product_id: 'edge-p2', quantity: 2 }],
+      })
+      .expect(201);
+    expect(refund.body.refund_total).toBeGreaterThan(0);
+    expect(refund.body.shift_id).toBe(shiftId);
+
+    // Stock was restored (10 + 2 returned − 5 sold + ... = net -3 from the sale).
+    expect(
+      one<{ quantity: number }>(
+        "SELECT quantity FROM branch_stock WHERE branch_id='main' AND product_id='edge-p2'",
+      )?.quantity,
+    ).toBe(7);
+
+    // Refunding more than remains is rejected.
+    const over = await cashier
+      .post('/api/pos/return')
+      .set(header)
+      .send({
+        document_id: sale.body.document.id,
+        method: 'CASH',
+        lines: [{ product_id: 'edge-p2', quantity: 5 }],
+      });
+    expect(over.status).toBe(400);
+
+    // The shift summary nets the refund against expected cash.
+    const summary = await cashier.get(`/api/pos/shifts/${shiftId}/summary`).set(header).expect(200);
+    expect(summary.body.refunds_count).toBe(1);
+    expect(summary.body.refunds_total).toBe(refund.body.refund_total);
+  });
+
+  it('orders POS products by top sellers when asked', async () => {
+    const recent = new Date().toISOString().slice(0, 10);
+    // Sell 6 sugar and 1 coffee so their popularity differs.
+    await cashier
+      .post('/api/pos/checkout')
+      .set(header)
+      .send({
+        branch_id: 'main',
+        shift_id: shiftId,
+        party_id: 'walk-in-customer',
+        date: recent,
+        discount: 0,
+        lines: [
+          { product_id: 'edge-p3', quantity: 6, unit_price: 1500 },
+          { product_id: 'edge-p2', quantity: 1, unit_price: 4000 },
+        ],
+        payment: { method: 'CASH', amount_tendered: 15000, amount_paid: 15000 },
+      })
+      .expect(201);
+
+    const top = await cashier.get('/api/pos/products?branch_id=main&top=3').set(header).expect(200);
+    expect(top.body[0].sku).toBe('EDGE-3');
+    expect(top.body[0].units_sold).toBe(6);
+    expect(top.body[1].sku).toBe('EDGE-2');
+
+    // Every product still carries the units_sold column, even the unsold one.
+    const all = await cashier.get('/api/pos/products?branch_id=main').set(header).expect(200);
+    const tea = all.body.find((p: { sku: string }) => p.sku === 'EDGE-1');
+    expect(tea.units_sold).toBe(0);
+  });
+
   it('invalidates the session of a user who is deactivated mid-session', async () => {
     await cashier.get('/api/pos/shifts/current?branch_id=main').set(header).expect(200);
     run("UPDATE users SET active=0 WHERE id='cashier-1'");

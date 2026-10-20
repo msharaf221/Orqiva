@@ -579,3 +579,22 @@ export const posParkedSaleSchema = z
       .min(1, 'لا يمكن تعليق سلة فارغة'),
   })
   .strict();
+
+/** Cashier-initiated refund of a prior POS sale, tied to the same shift. */
+export const posReturnSchema = z
+  .object({
+    document_id: id(),
+    // Defaults to cash; the cashier can only refund to the drawer for now.
+    method: z.enum(['CASH', 'CARD', 'BANK']).default('CASH'),
+    reference: optionalText(100),
+    notes: optionalText(500),
+    lines: z
+      .array(
+        z.object({
+          product_id: id(),
+          quantity: z.number().int().min(1).max(10000),
+        }),
+      )
+      .min(1, 'يجب تحديد صنف واحد على الأقل للإرجاع'),
+  })
+  .strict();

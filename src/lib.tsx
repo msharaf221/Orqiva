@@ -47,6 +47,45 @@ export const formatDate = (date: string, short = false) =>
   }).format(new Date(date));
 export const toCents = (value: FormDataEntryValue | null) => Math.round(Number(value) * 100);
 export const methods = { CASH: 'نقداً', BANK: 'تحويل بنكي', CARD: 'بطاقة بنكية' };
+
+/**
+ * Debounces a rapidly-changing value (e.g. a search box) so downstream filtering/requests
+ * only run after the user pauses typing. Returns the settled value.
+ */
+export function useDebounced<T>(value: T, delay = 220): T {
+  const [settled, setSettled] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setSettled(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return settled;
+}
+
+/** Persists a small UI preference (density, auto-print, ...) under a namespaced key. */
+export function usePref<T>(key: string, initial: T) {
+  const storageKey = 'orqiva.pref.' + key;
+  const [value, setValue] = useState<T>(() => {
+    try {
+      const stored = localStorage.getItem(storageKey);
+      return stored === null ? initial : (JSON.parse(stored) as T);
+    } catch {
+      return initial;
+    }
+  });
+  const update = useCallback(
+    (next: T) => {
+      setValue(next);
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(next));
+      } catch {
+        /* Private browsing may refuse storage; the value still works for this visit. */
+      }
+    },
+    [storageKey],
+  );
+  return [value, update] as const;
+}
+
 export function useData<T>(url: string | null) {
   const [data, setData] = useState<T | null>(null),
     [error, setError] = useState(''),

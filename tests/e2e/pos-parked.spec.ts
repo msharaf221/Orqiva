@@ -125,6 +125,91 @@ test('runs a periodic stocktake end to end from the UI', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
+test('refunds a POS sale end to end from the till', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+
+  const sku = 'PREFUND-' + Date.now();
+  const product = await page.request.post('/api/products', {
+    headers: { 'X-Orqiva-Request': '1' },
+    data: {
+      name: 'منتج إرجاع نقدي',
+      sku,
+      category: 'عام',
+      unit: 'قطعة',
+      sale_price: 3000,
+      cost_price: 1500,
+      stock: 20,
+      min_stock: 1,
+      branch_id: 'main',
+    },
+  });
+  expect(product.status()).toBe(201);
+  const productId = (await product.json()).id;
+
+  // Ensure a shift is open.
+  const current = await page.request.get('/api/pos/shifts/current?branch_id=main', {
+    headers: { 'X-Orqiva-Request': '1' },
+  });
+  let shift = await current.json();
+  if (!shift) {
+    const opened = await page.request.post('/api/pos/shifts/open', {
+      headers: { 'X-Orqiva-Request': '1' },
+      data: { branch_id: 'main', opening_cash: 50000 },
+    });
+    shift = await opened.json();
+  }
+
+  // Ring up a 2-unit cash sale straight through the API.
+  const checkout = await page.request.post('/api/pos/checkout', {
+    headers: { 'X-Orqiva-Request': '1' },
+    data: {
+      branch_id: 'main',
+      shift_id: shift.id,
+      party_id: 'walk-in-customer',
+      date: new Date().toISOString().slice(0, 10),
+      discount: 0,
+      lines: [{ product_id: productId, quantity: 2, unit_price: 3000 }],
+      payment: { method: 'CASH', amount_tendered: 6840, amount_paid: 6840 },
+    },
+  });
+  expect(checkout.status()).toBe(201);
+  const invoiceNumber = (await checkout.json()).document.number;
+
+  await page.goto('/pos');
+  await expect(page.getByPlaceholder(/ابحث بالاسم أو امسح الباركود/)).toBeVisible();
+
+  // Open the refund dialog, search the invoice, and refund one unit.
+  await page.getByRole('button', { name: 'إرجاع', exact: true }).click();
+  const dialog = page.getByRole('dialog').filter({ hasText: 'إرجاع فاتورة بيع' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByPlaceholder(/رقم الفاتورة/).fill(invoiceNumber);
+  await dialog
+    .getByRole('button', { name: new RegExp(invoiceNumber) })
+    .first()
+    .click();
+
+  const refundDialog = page.getByRole('dialog').filter({ hasText: /إرجاع عن الفاتورة/ });
+  await expect(refundDialog).toBeVisible();
+  await refundDialog.getByRole('spinbutton').first().fill('1');
+  await refundDialog.getByRole('button', { name: /تأكيد الإرجاع/ }).click();
+  await expect(page.getByText(/تم تسجيل المرتجع/)).toBeVisible();
+
+  // Clean up so the shared e2e database keeps the absolute report totals used elsewhere:
+  // refund the remaining unit too, leaving this product's net profit at zero.
+  const cleanup = await page.request.post('/api/pos/return', {
+    headers: { 'X-Orqiva-Request': '1' },
+    data: {
+      document_id: (await checkout.json()).document.id,
+      method: 'CASH',
+      lines: [{ product_id: productId, quantity: 1 }],
+    },
+  });
+  expect(cleanup.status()).toBe(201);
+
+  expect(errors).toEqual([]);
+});
+
 test('lists reorder suggestions in the inventory page', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
