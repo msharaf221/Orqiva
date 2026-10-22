@@ -2492,10 +2492,6 @@
 }
 
 /* Phase 5.1 — POS checkout split payment (extracted from inline styles) */
-.pos-checkout-body {
-  max-height: 74vh;
-  overflow-y: auto;
-}
 .pos-split-toggle {
   display: inline-flex;
   align-items: center;

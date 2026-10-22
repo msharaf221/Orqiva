@@ -6,6 +6,7 @@ import { admin } from '../middleware';
 import { requirePermission } from '../rbac';
 import { scopeFor, scopeSql } from '../scope';
 import { listProducts, createProduct, updateProduct, adjustStock } from '../catalog';
+import { getStockValuation, getProductCostHistory } from '../cost';
 import { stockMatrix } from '../reports';
 import {
   startStocktake,
@@ -72,6 +73,26 @@ catalogRouter.get('/inventory/reorder', requirePermission('inventory:view'), (re
   );
 });
 
+// Pack 2.1: Stock Valuation (تقرير تقييم المخزون المتقدم والمطابقة مع الأستاذ العام)
+catalogRouter.get('/inventory/valuation', requirePermission('inventory:view'), (req, res) => {
+  const scope = scopeFor(req.user, req.query.branch_id);
+  const branchId = req.query.branch_id ? String(req.query.branch_id) : undefined;
+  const category = req.query.category ? String(req.query.category) : undefined;
+  const stockFilter = req.query.stock_filter ? String(req.query.stock_filter) : undefined;
+  res.json(getStockValuation(scope, branchId, category, stockFilter));
+});
+
+// Pack 2.1: Product WAC Cost History (سجل تطور تكلفة الصنف)
+catalogRouter.get(
+  '/inventory/cost-history/:productId',
+  requirePermission('inventory:view'),
+  (req, res) => {
+    const scope = scopeFor(req.user, req.query.branch_id);
+    const branchId = req.query.branch_id ? String(req.query.branch_id) : undefined;
+    res.json(getProductCostHistory(String(req.params.productId), branchId, scope));
+  },
+);
+
 // Periodic Stocktake (جرد دوري)
 catalogRouter.get('/stocktakes', requirePermission('inventory:view'), (req, res) => {
   res.json(
@@ -124,8 +145,8 @@ catalogRouter.get('/movements', (req, res) => {
   );
 });
 
-// Cost Movements History (Admin only)
-catalogRouter.get('/cost-movements', admin, (req, res) => {
+// Cost Movements History
+catalogRouter.get('/cost-movements', requirePermission('inventory:view'), (req, res) => {
   const scope = scopeFor(req.user, req.query.branch_id);
   const f = scopeSql('cm.branch_id', scope);
   res.json(

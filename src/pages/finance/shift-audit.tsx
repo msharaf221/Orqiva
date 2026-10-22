@@ -97,7 +97,7 @@ export function ShiftTreasuryAuditModal({
         closing_card: verifiedCardCents,
         closing_bank: verifiedBankCents,
         review_notes: reviewNotes.trim() || undefined,
-        verification_checklist: checklist,
+        verification_checklist: JSON.stringify(checklist),
       });
       toast('تم اعتماد إغلاق الوردية والمطابقة متعددة القنوات وترحيل القيود بنجاح');
       onApproved();
@@ -109,12 +109,14 @@ export function ShiftTreasuryAuditModal({
       title="مراجعة واعتماد وردية نقطة البيع بالخزنة"
       description="مطابقة إيرادات الوردية، فحص أشرطة تسوية الماكينات وإيصالات الفيزا وإنستاباي وترحيل قيود الفروقات."
       onClose={onClose}
+      xwide
+      tall
     >
       {loading ? (
         <Loading />
       ) : summary ? (
         <form onSubmit={handleApprove}>
-          <div className="modal-body form-grid treasury-scroll">
+          <div className="modal-body form-grid">
             {/* Shift Header Bar */}
             <div className="info-tile row-between-wrap">
               <div>

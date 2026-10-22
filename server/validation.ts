@@ -129,6 +129,58 @@ export const glSettingsSchema = z
   })
   .strict();
 
+export const openingBalancesSchema = z
+  .object({
+    date,
+    memo: optionalText(300),
+    balancing_account: z.enum(['OPENING_EQUITY', 'CAPITAL']).default('OPENING_EQUITY'),
+    cash_accounts: z
+      .array(
+        z.object({
+          cash_account_id: id(),
+          amount: money.default(0),
+        }),
+      )
+      .optional(),
+    customers: z
+      .array(
+        z.object({
+          party_id: id(),
+          amount: money.default(0),
+        }),
+      )
+      .optional(),
+    suppliers: z
+      .array(
+        z.object({
+          party_id: id(),
+          amount: money.default(0),
+        }),
+      )
+      .optional(),
+    inventory_items: z
+      .array(
+        z.object({
+          product_id: id(),
+          branch_id: id(),
+          quantity: z.number().int().min(1),
+          unit_cost: money.default(0),
+        }),
+      )
+      .optional(),
+    other_accounts: z
+      .array(
+        z.object({
+          account_id: id(),
+          debit: money.default(0),
+          credit: money.default(0),
+          memo: optionalText(200),
+        }),
+      )
+      .optional(),
+  })
+  .strict();
+
 export const documentSchema = z
   .object({
     type: z.enum(['SALE', 'PURCHASE', 'SALE_RETURN', 'PURCHASE_RETURN']),

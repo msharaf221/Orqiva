@@ -830,14 +830,11 @@
 /* ==========================================================================
    Phase 5.1 — Treasury shift review (extracted from inline styles)
    ========================================================================== */
-.treasury-scroll {
-  max-height: 78vh;
-  overflow-y: auto;
-}
 .treasury-layout {
   display: grid;
-  grid-template-columns: 260px 1fr;
-  gap: 16px;
+  grid-template-columns: 280px 1fr;
+  gap: 20px;
+  align-items: start;
 }
 .treasury-sidebar {
   display: flex;
@@ -950,4 +947,487 @@
 .shortage-note {
   margin: 2px 0 0;
   font-size: 12px;
+}
+
+/* ── Financial Statements (P&L & Balance Sheet) ─────────────────────────────────── */
+.financial-statement-card {
+  background: #ffffff;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-md);
+  margin-bottom: 24px;
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+}
+.financial-statement-header {
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--slate-200);
+  background: var(--slate-50);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.financial-statement-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--slate-800);
+}
+.statement-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.statement-table th,
+.statement-table td {
+  padding: 10px 18px;
+  font-size: 14px;
+}
+.statement-section-hdr td {
+  background: var(--slate-100);
+  font-weight: 800;
+  color: var(--slate-800);
+  font-size: 14px;
+  padding: 10px 18px;
+  border-top: 1px solid var(--slate-200);
+  border-bottom: 1px solid var(--slate-200);
+}
+.statement-row td {
+  border-bottom: 1px solid var(--slate-100);
+}
+.statement-row:hover td {
+  background: var(--slate-50);
+}
+.statement-sub-account td.account-name-cell {
+  padding-inline-start: 36px;
+}
+.statement-summary-row td {
+  background: #f8fafc;
+  font-weight: 700;
+  color: var(--slate-900);
+  border-top: 1px solid var(--slate-300);
+  border-bottom: 1px solid var(--slate-300);
+}
+.statement-grand-row td {
+  background: #f1f5f9;
+  font-weight: 800;
+  font-size: 15px;
+  color: var(--slate-900);
+  border-top: 2px solid var(--slate-400);
+  border-bottom: 2px solid var(--slate-400);
+}
+.statement-grand-row.profit td {
+  background: #ecfdf5;
+  color: #065f46;
+  border-color: #a7f3d0;
+}
+.statement-grand-row.loss td {
+  background: #fff1f2;
+  color: #9f1239;
+  border-color: #fecdd3;
+}
+.pct-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 7px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 700;
+  direction: ltr;
+}
+.pct-pill.up {
+  background: #dcfce7;
+  color: #166534;
+}
+.pct-pill.down {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.balance-check-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-radius: var(--radius-md);
+  margin-bottom: 20px;
+  border: 1px solid transparent;
+}
+.balance-check-banner.balanced {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #166534;
+}
+.balance-check-banner.unbalanced {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #991b1b;
+}
+.balance-check-banner .indicator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+  font-size: 15px;
+}
+
+/* ── Interactive Chart of Accounts Tree (شجرة الحسابات التفاعلية) ── */
+.coa-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.coa-filter-pills {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.coa-pill {
+  padding: 5px 12px;
+  border-radius: 9999px;
+  border: 1px solid var(--slate-200);
+  background: #ffffff;
+  color: var(--slate-700);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.coa-pill:hover {
+  border-color: var(--indigo-300);
+  background: var(--slate-50);
+}
+.coa-pill.active {
+  background: var(--indigo-600);
+  border-color: var(--indigo-600);
+  color: #ffffff;
+}
+.coa-tree-wrapper {
+  background: #ffffff;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+.coa-tree-header {
+  display: grid;
+  grid-template-columns: minmax(320px, 1.8fr) 110px 150px 100px 180px;
+  padding: 12px 18px;
+  background: var(--slate-50);
+  border-bottom: 1px solid var(--slate-200);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--slate-600);
+}
+.coa-tree-row {
+  display: grid;
+  grid-template-columns: minmax(320px, 1.8fr) 110px 150px 100px 180px;
+  padding: 10px 18px;
+  align-items: center;
+  border-bottom: 1px solid var(--slate-100);
+  transition: background 0.12s ease;
+}
+.coa-tree-row:last-child {
+  border-bottom: none;
+}
+.coa-tree-row:hover {
+  background: #f8fafc;
+}
+.coa-tree-row.archived {
+  opacity: 0.65;
+  background: #fcfcfc;
+}
+.coa-cell-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.coa-expander {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--slate-500);
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+.coa-expander:hover {
+  background: var(--slate-200);
+  color: var(--slate-800);
+}
+.coa-expander-placeholder {
+  width: 22px;
+  height: 22px;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.coa-code-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 800;
+  font-family: monospace;
+  background: var(--slate-100);
+  color: var(--slate-800);
+  border: 1px solid var(--slate-200);
+  flex-shrink: 0;
+}
+.coa-name-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--slate-900);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.coa-level-chip {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--slate-100);
+  color: var(--slate-600);
+  flex-shrink: 0;
+}
+.coa-balance-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.coa-balance-val {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--slate-900);
+  direction: ltr;
+  text-align: right;
+}
+.coa-balance-sub {
+  font-size: 11px;
+  color: var(--slate-500);
+}
+.coa-actions-cell {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.view-switch-group {
+  display: flex;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: #ffffff;
+}
+.view-switch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--slate-600);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.view-switch-btn.active {
+  background: var(--indigo-50);
+  color: var(--indigo-700);
+}
+.view-switch-btn:hover:not(.active) {
+  background: var(--slate-50);
+}
+
+/* Egyptian VAT Model 10 & Tax Registers */
+.vat-model-card {
+  background: var(--card-bg, #fff);
+  border: 1px solid var(--slate-200);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+.vat-model-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 2px solid var(--slate-200);
+  padding-bottom: 16px;
+  margin-bottom: 20px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.vat-model-header h2 {
+  font-size: 20px;
+  font-weight: 800;
+  margin: 0 0 6px 0;
+  color: var(--slate-900);
+}
+.vat-model-header .vat-subheading {
+  font-size: 13.5px;
+  color: var(--slate-600);
+}
+.vat-table-section {
+  margin-bottom: 28px;
+}
+.vat-table-section h3 {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  color: var(--slate-800);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.vat-total-row {
+  background: var(--slate-50);
+  font-weight: 700;
+}
+.vat-settlement-card {
+  border: 2px solid var(--slate-200);
+  border-radius: 12px;
+  padding: 20px;
+  margin-top: 20px;
+  background: var(--slate-50);
+}
+.vat-settlement-card.vat-settlement-due {
+  background: #fef2f2;
+  border-color: #fca5a5;
+  color: #991b1b;
+}
+.vat-settlement-card.vat-settlement-credit {
+  background: #ecfdf5;
+  border-color: #6ee7b7;
+  color: #065f46;
+}
+.eta-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.eta-pill.valid {
+  background: #dcfce7;
+  color: #166534;
+}
+.eta-pill.submitted {
+  background: #dbeafe;
+  color: #1e40af;
+}
+.eta-pill.pending {
+  background: #fef3c7;
+  color: #92400e;
+}
+.eta-pill.invalid,
+.eta-pill.failed {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.eta-pill.unsubmitted {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+/* ── Pack 2.1: Stock Valuation & GL Reconciliation ───────────────────────── */
+.stock-valuation-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.gl-reconciliation-card {
+  padding: 16px 20px;
+  border-radius: var(--radius-md);
+  margin-bottom: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  border: 1px solid var(--slate-200);
+}
+.gl-reconciliation-card.reconciled {
+  background: #f0fdf4;
+  border-color: #86efac;
+  color: #166534;
+}
+.gl-reconciliation-card.variance {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #92400e;
+}
+.gl-reconciliation-card .rec-details {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.gl-reconciliation-card .rec-item {
+  display: flex;
+  flex-direction: column;
+}
+.gl-reconciliation-card .rec-item span {
+  font-size: 12px;
+  opacity: 0.85;
+}
+.gl-reconciliation-card .rec-item strong {
+  font-size: 16px;
+  font-family: 'Manrope Variable', sans-serif;
+}
+.margin-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: 'Manrope Variable', sans-serif;
+}
+.margin-pill.high {
+  background: #dcfce7;
+  color: #15803d;
+}
+.margin-pill.normal {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+.margin-pill.low {
+  background: #fef3c7;
+  color: #b45309;
+}
+.margin-pill.loss {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+.cost-evolution-btn {
+  background: none;
+  border: 1px solid var(--slate-200);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--slate-700);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.cost-evolution-btn:hover {
+  background: var(--slate-100);
+  border-color: var(--indigo-300);
+  color: var(--indigo-700);
 }

@@ -212,6 +212,10 @@ export interface ChartAccount {
   notes: string;
   created_at: string;
   lines_count?: number;
+  children_count?: number;
+  balance?: number;
+  parent_code?: string | null;
+  parent_name?: string | null;
 }
 
 export interface JournalEntry {
@@ -271,6 +275,76 @@ export interface GlSettings {
   fiscal_year_start_month: number;
   closed_through: string | null;
   updated_at: string | null;
+}
+
+export interface FinancialReportRow {
+  account_id?: string;
+  code?: string;
+  name: string;
+  amount: number;
+  previous_amount?: number;
+  change_percent?: number | null;
+  is_deduction?: boolean;
+}
+
+export interface FinancialReportSection {
+  title: string;
+  rows: FinancialReportRow[];
+  total: number;
+  previous_total?: number;
+  change_percent?: number | null;
+}
+
+export interface ProfitAndLossReport {
+  period: { from: string; to: string };
+  comparison_period?: { from: string; to: string };
+  gross_sales: FinancialReportSection;
+  sales_deductions: FinancialReportSection;
+  net_revenue: number;
+  cogs: FinancialReportSection;
+  total_cogs: number;
+  gross_profit: number;
+  operating_expenses: FinancialReportSection;
+  total_operating_expenses: number;
+  net_profit: number;
+  previous_net_revenue?: number;
+  previous_total_cogs?: number;
+  previous_gross_profit?: number;
+  previous_total_operating_expenses?: number;
+  previous_net_profit?: number;
+  change_net_revenue?: number | null;
+  change_gross_profit?: number | null;
+  change_net_profit?: number | null;
+}
+
+export interface BalanceSheetReport {
+  as_of: string;
+  comparison_as_of?: string;
+  assets: {
+    current_assets: FinancialReportSection;
+    non_current_assets: FinancialReportSection;
+    total_assets: number;
+    previous_total_assets?: number;
+  };
+  total_assets: number;
+  liabilities: {
+    current_liabilities: FinancialReportSection;
+    non_current_liabilities: FinancialReportSection;
+    total_liabilities: number;
+    previous_total_liabilities?: number;
+  };
+  total_liabilities: number;
+  equity: {
+    items: FinancialReportSection;
+    prior_period_earnings: number;
+    current_period_earnings: number;
+    total_equity: number;
+    previous_total_equity?: number;
+  };
+  total_equity: number;
+  total_liabilities_and_equity: number;
+  previous_total_liabilities_and_equity?: number;
+  is_balanced: boolean;
 }
 
 export interface PosShiftPaymentDetail {
@@ -843,4 +917,164 @@ export interface AccountStatementEntry {
   out_amount: number;
   balance: number;
   created_at: string;
+}
+
+export interface OpeningBalanceCashLine {
+  cash_account_id: string;
+  amount: number;
+}
+
+export interface OpeningBalancePartyLine {
+  party_id: string;
+  amount: number;
+}
+
+export interface OpeningBalanceStockLine {
+  product_id: string;
+  branch_id: string;
+  quantity: number;
+  unit_cost: number;
+}
+
+export interface OpeningBalanceAccountLine {
+  account_id: string;
+  debit: number;
+  credit: number;
+  memo?: string;
+}
+
+export interface OpeningBalancesPayload {
+  date: string;
+  memo?: string;
+  balancing_account: 'OPENING_EQUITY' | 'CAPITAL';
+  cash_accounts?: OpeningBalanceCashLine[];
+  customers?: OpeningBalancePartyLine[];
+  suppliers?: OpeningBalancePartyLine[];
+  inventory_items?: OpeningBalanceStockLine[];
+  other_accounts?: OpeningBalanceAccountLine[];
+}
+
+export interface OpeningBalancesStatus {
+  has_opening_entry: boolean;
+  opening_entry?: JournalEntry;
+  opening_lines?: JournalLine[];
+  can_post: boolean;
+  earliest_transaction_date?: string | null;
+  reason?: string;
+}
+
+export interface VatReturnSection {
+  taxable_base: number;
+  tax_amount: number;
+  documents_count: number;
+}
+
+export interface VatReturnReport {
+  from: string;
+  to: string;
+  branch_id?: string | null;
+  branch_name?: string | null;
+  sales: {
+    standard_rated_14: VatReturnSection;
+    returns: VatReturnSection;
+    net_taxable_sales: number;
+    net_output_tax: number;
+  };
+  purchases: {
+    standard_rated_14: VatReturnSection;
+    returns: VatReturnSection;
+    net_taxable_purchases: number;
+    net_deductible_input_tax: number;
+  };
+  summary: {
+    total_output_tax: number;
+    total_input_tax: number;
+    net_tax_due: number;
+    credit_balance: number;
+    gl_output_tax_balance: number;
+    gl_input_tax_balance: number;
+    gl_reconciled: boolean;
+  };
+}
+
+export interface TaxRegisterRow {
+  id: string;
+  number: string;
+  date: string;
+  type: 'SALE' | 'SALE_RETURN' | 'PURCHASE' | 'PURCHASE_RETURN';
+  type_label: string;
+  party_id: string;
+  party_name: string;
+  party_tax_number?: string;
+  branch_id: string;
+  branch_name: string;
+  taxable_base: number;
+  tax_rate: number;
+  tax_amount: number;
+  total_amount: number;
+  eta_status?:
+    'PENDING' | 'SUBMITTED' | 'VALID' | 'INVALID' | 'FAILED' | 'CANCELLED' | 'UNSUBMITTED' | null;
+  eta_uuid?: string | null;
+  eta_long_id?: string | null;
+}
+
+export interface TaxRegisterResponse {
+  from: string;
+  to: string;
+  branch_id?: string | null;
+  register_type: 'SALES' | 'PURCHASES';
+  rows: TaxRegisterRow[];
+  totals: {
+    taxable_base: number;
+    tax_amount: number;
+    total_amount: number;
+    count: number;
+  };
+}
+
+export interface ProductValuationRow {
+  product_id: string;
+  sku: string;
+  name: string;
+  category: string;
+  unit: string;
+  branch_id?: string | null;
+  branch_name?: string | null;
+  branch_code?: string | null;
+  quantity: number;
+  unit_cost: number; // in piasters (WAC or reference cost)
+  total_cost: number; // in piasters = quantity * unit_cost
+  sale_price: number; // in piasters
+  total_retail: number; // in piasters = quantity * sale_price
+  potential_profit: number; // total_retail - total_cost
+  margin_percent: number; // ((total_retail - total_cost) / total_retail) * 100
+  last_cost_update?: string | null;
+}
+
+export interface StockValuationSummary {
+  total_products: number;
+  total_quantity: number;
+  total_inventory_cost: number; // in piasters
+  total_inventory_retail: number; // in piasters
+  total_potential_profit: number; // in piasters
+  overall_margin_percent: number;
+}
+
+export interface GlInventoryCheck {
+  gl_inventory_balance: number; // in piasters
+  stock_valuation_total: number; // in piasters
+  variance: number; // in piasters
+  reconciled: boolean;
+  account_code: string;
+  account_name: string;
+}
+
+export interface StockValuationResponse {
+  branch_id: string | null;
+  branch_name: string | null;
+  as_of: string;
+  rows: ProductValuationRow[];
+  summary: StockValuationSummary;
+  gl_check: GlInventoryCheck;
+  categories: string[];
 }

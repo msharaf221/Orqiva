@@ -132,7 +132,7 @@ export function TreasuryReviewModal({
         closing_card: verifiedCardCents,
         closing_bank: verifiedBankCents,
         review_notes: reviewNotes.trim() || undefined,
-        verification_checklist: checklist,
+        verification_checklist: JSON.stringify(checklist),
       });
       toast('تم اعتماد إغلاق الوردية والمطابقة متعددة القنوات وترحيل القيود بنجاح');
       onApproved();
@@ -145,8 +145,10 @@ export function TreasuryReviewModal({
       title="اعتماد ورديات الخزنة والمطابقة المالية الشاملة"
       description="مراجعة ورديات الكاشير، فحص أشرطة تسوية الماكينات وإيصالات الفيزا وإنستاباي، والتحقق من المستندات الثبوتية وترحيل قيود الفروقات."
       onClose={onClose}
+      xwide
+      tall
     >
-      <div className="modal-body form-grid treasury-scroll">
+      <div className="modal-body form-grid">
         {loading ? (
           <Loading />
         ) : pendingList.length === 0 ? (
@@ -718,7 +720,7 @@ export function ShiftHandoverSlipModal({
   });
 
   return (
-    <Modal title="سند تسليم وردية كاشير للخزنة (Z-Report)" onClose={onClose}>
+    <Modal title="سند تسليم وردية كاشير للخزنة (Z-Report)" onClose={onClose} tall>
       <div className="modal-body pos-receipt-wrapper">
         <div className="thermal-receipt" id="printable-pos-receipt">
           {/* Receipt Top Brand Header */}
