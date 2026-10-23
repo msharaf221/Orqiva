@@ -147,7 +147,7 @@ describe('Real database migrations and security', () => {
 
   it('applies the SQL migration once and creates persistent relational tables', () => {
     migrate();
-    expect(all('SELECT * FROM schema_migrations')).toHaveLength(14);
+    expect(all('SELECT * FROM schema_migrations')).toHaveLength(15);
     expect(one<{ foreign_keys: number }>('PRAGMA foreign_keys')?.foreign_keys).toBe(1);
     expect(all("SELECT name FROM sqlite_master WHERE type='table'").length).toBeGreaterThanOrEqual(
       13,

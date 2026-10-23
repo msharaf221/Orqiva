@@ -422,7 +422,15 @@ function EditLoader({ type, id }: { type: DocType; id: string }) {
     );
   return <Editor key={id} type={type} existing={data.data} />;
 }
-type EditorLine = { key: string; product_id: string; quantity: string; price: string };
+type EditorLine = {
+  key: string;
+  product_id: string;
+  quantity: string;
+  price: string;
+  batch_id?: string;
+  batch_number?: string;
+  expiry_date?: string;
+};
 function Editor({ type, existing }: { type: DocType; existing?: Document }) {
   const sale = type === 'SALE';
   const path = sale ? '/sales' : '/purchases';
@@ -442,7 +450,19 @@ function Editor({ type, existing }: { type: DocType; existing?: Document }) {
       product_id: l.product_id,
       quantity: String(l.quantity),
       price: String(l.unit_price / 100),
-    })) || [{ key: crypto.randomUUID(), product_id: '', quantity: '1', price: '0' }],
+      batch_id: l.batch_id || '',
+      batch_number: l.batch_number || '',
+      expiry_date: l.expiry_date || '',
+    })) || [
+      {
+        key: crypto.randomUUID(),
+        product_id: '',
+        quantity: '1',
+        price: '0',
+        batch_number: '',
+        expiry_date: '',
+      },
+    ],
   );
   const [taxRate, setTaxRate] = useState(
       String((existing?.tax_rate ?? company?.tax_rate ?? 1400) / 100),
@@ -464,7 +484,16 @@ function Editor({ type, existing }: { type: DocType; existing?: Document }) {
     setBranchId(next);
     // Lines were priced and stocked for the previous branch; start them again for the new one.
     if (!existing)
-      setLines([{ key: crypto.randomUUID(), product_id: '', quantity: '1', price: '0' }]);
+      setLines([
+        {
+          key: crypto.randomUUID(),
+          product_id: '',
+          quantity: '1',
+          price: '0',
+          batch_number: '',
+          expiry_date: '',
+        },
+      ]);
   };
   const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -487,6 +516,9 @@ function Editor({ type, existing }: { type: DocType; existing?: Document }) {
             product_id: l.product_id,
             quantity: Number(l.quantity),
             unit_price: Math.round(Number(l.price) * 100),
+            batch_id: l.batch_id || undefined,
+            batch_number: l.batch_number ? l.batch_number.trim() : undefined,
+            expiry_date: l.expiry_date ? l.expiry_date.trim() : undefined,
           })),
         },
       );
@@ -688,6 +720,41 @@ function Editor({ type, existing }: { type: DocType; existing?: Document }) {
                             >
                               المتاح: {product.stock} {product.unit} · {product.sku}
                             </small>
+                          )}
+                          {product && Boolean(product.track_batches) && !sale && (
+                            <div style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
+                              <input
+                                placeholder="رقم التشغيلة (Batch #) *"
+                                required
+                                dir="ltr"
+                                style={{ fontSize: '12px', padding: '3px 6px', flex: 1 }}
+                                value={line.batch_number || ''}
+                                onChange={(e) =>
+                                  changeLine(line.key, { batch_number: e.target.value })
+                                }
+                              />
+                              <input
+                                type="date"
+                                required
+                                aria-label="تاريخ الصلاحية"
+                                title="تاريخ انتهاء الصلاحية"
+                                style={{ fontSize: '12px', padding: '3px 6px', width: '130px' }}
+                                value={line.expiry_date || ''}
+                                onChange={(e) =>
+                                  changeLine(line.key, { expiry_date: e.target.value })
+                                }
+                              />
+                            </div>
+                          )}
+                          {product && Boolean(product.track_batches) && sale && (
+                            <div style={{ marginTop: '4px' }}>
+                              <span
+                                className="batch-fefo-hint"
+                                title="سيتم صرف الأقرب انتهاءً أولاً تلقائياً"
+                              >
+                                ⚡ صرف ذكي FEFO (الأقرب انتهاءً)
+                              </span>
+                            </div>
                           )}
                         </td>
                         <td>

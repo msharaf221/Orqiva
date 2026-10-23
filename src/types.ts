@@ -537,6 +537,7 @@ export interface Product {
   stock: number;
   min_stock: number;
   active: number;
+  track_batches?: number;
   created_at: string;
   /** Effective Weighted Average Cost (WAC) — defaults to cost_price if not yet computed */
   avg_cost?: number;
@@ -569,6 +570,9 @@ export interface DocLine {
   unit_price: number;
   cost_price: number;
   total: number;
+  batch_id?: string | null;
+  batch_number?: string | null;
+  expiry_date?: string | null;
 }
 export interface Payment {
   id: string;
@@ -1076,5 +1080,53 @@ export interface StockValuationResponse {
   rows: ProductValuationRow[];
   summary: StockValuationSummary;
   gl_check: GlInventoryCheck;
+  categories: string[];
+}
+
+export type BatchExpiryStatus = 'EXPIRED' | 'CRITICAL' | 'WARNING' | 'HEALTHY';
+
+export interface StockBatch {
+  id: string;
+  product_id: string;
+  product_name?: string;
+  sku?: string;
+  category?: string;
+  unit?: string;
+  branch_id: string;
+  branch_name?: string;
+  branch_code?: string;
+  batch_number: string;
+  production_date?: string | null;
+  expiry_date: string;
+  quantity: number;
+  cost_price: number; // in piasters
+  sale_price?: number; // in piasters
+  created_at: string;
+  days_to_expiry?: number;
+  status?: BatchExpiryStatus;
+}
+
+export interface ExpiryAlertSummary {
+  total_batches: number;
+  total_quantity: number;
+  total_value: number; // in piasters
+  expired_count: number;
+  expired_quantity: number;
+  expired_value: number;
+  critical_count: number; // < 30 days
+  critical_quantity: number;
+  critical_value: number;
+  warning_count: number; // 30 - 90 days
+  warning_quantity: number;
+  warning_value: number;
+  healthy_count: number;
+}
+
+export interface ExpiryAlertResponse {
+  branch_id: string | null;
+  branch_name: string | null;
+  as_of: string;
+  summary: ExpiryAlertSummary;
+  batches: StockBatch[];
   categories: string[];
 }

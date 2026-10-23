@@ -31,6 +31,10 @@ const productFields = {
   sale_price: money,
   cost_price: money,
   min_stock: z.number().int().min(0).max(1_000_000),
+  track_batches: z
+    .union([z.boolean(), z.number()])
+    .optional()
+    .transform((v) => (v ? 1 : 0)),
 };
 /** Stock is never edited directly; it changes through documents, transfers and adjustments. */
 export const productUpdateSchema = z.object(productFields).strict();
@@ -199,6 +203,10 @@ export const documentSchema = z
             product_id: id(),
             quantity: quantity,
             unit_price: money,
+            batch_id: id().optional().nullable(),
+            batch_number: z.string().trim().max(100).optional().nullable(),
+            production_date: z.string().trim().optional().nullable(),
+            expiry_date: z.string().trim().optional().nullable(),
           })
           .strict(),
       )
@@ -582,6 +590,7 @@ export const posCheckoutSchema = z
           product_id: id(),
           quantity: z.number().int().min(1).max(10000),
           unit_price: money.refine((n) => n >= 0),
+          batch_id: id().optional().nullable(),
         }),
       )
       .min(1, 'يجب إضافة صنف واحد على الأقل في السلة'),

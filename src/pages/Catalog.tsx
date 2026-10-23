@@ -17,12 +17,11 @@ import {
   Boxes,
   Wallet,
   ShieldCheck,
-  CheckCircle2,
   TrendingUp,
   History,
-  FileSpreadsheet,
   Calculator,
   ShoppingBag,
+  Calendar,
 } from 'lucide-react';
 import {
   api,
@@ -58,7 +57,7 @@ import type {
   CostMovement,
   ReorderSuggestion,
   StockValuationResponse,
-  ProductValuationRow,
+  ExpiryAlertResponse,
 } from '../types';
 import { can } from '../auth';
 export function Products() {
@@ -329,6 +328,7 @@ export function ProductForm({
       sale_price: toCents(f.get('sale_price')),
       cost_price: toCents(f.get('cost_price')),
       min_stock: Number(f.get('min_stock')),
+      track_batches: f.get('track_batches') === 'on' ? 1 : 0,
       ...(!product ? { stock: Number(f.get('stock')), branch_id: String(f.get('branch_id')) } : {}),
     };
     void act(
@@ -448,6 +448,35 @@ export function ProductForm({
               </Field>
             </>
           )}
+          <div className="form-field" style={{ margin: '12px 0 6px 0' }}>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                cursor: 'pointer',
+                fontWeight: 600,
+              }}
+            >
+              <input
+                type="checkbox"
+                name="track_batches"
+                defaultChecked={Boolean(product?.track_batches)}
+                style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+              />
+              <span>تتبع أرقام التشغيلات وتواريخ الصلاحية (FEFO)</span>
+            </label>
+            <span
+              style={{
+                fontSize: '12px',
+                color: 'var(--slate-500)',
+                display: 'block',
+                marginTop: '4px',
+              }}
+            >
+              يلزم إدخال رقم التشغيلة والصلاحية عند الشراء، ويطبّق الصرف الآلي للأقرب انتهاءً أولاً.
+            </span>
+          </div>
           <div className="info-banner">
             <Package size={18} />
             <span>التكلفة المرجعية تستخدم في تقدير الربح، ولا تتغير تلقائياً مع المشتريات.</span>
@@ -475,7 +504,7 @@ function CostHistoryModal({
   branchId?: string | null;
   onClose: () => void;
 }) {
-  const url = withBranch(`/inventory/cost-history/${product.id}`, branchId);
+  const url = withBranch(`/inventory/cost-history/${product.id}`, branchId || 'all');
   const data = useData<CostMovement[]>(url);
   const rows = data.data || [];
 
@@ -590,7 +619,7 @@ function StockValuationView({
           value={money(report.summary.total_inventory_cost)}
           icon={<Boxes size={22} />}
           tone="indigo"
-          foot={count(report.summary.total_products, 'صنف مسجل')}
+          foot={`${count(report.summary.total_products)} صنف مسجل`}
         />
         <Stat
           label="القيمة البيعية المتوقعة"
@@ -611,7 +640,7 @@ function StockValuationView({
           value={`${report.summary.overall_margin_percent}%`}
           icon={<Calculator size={22} />}
           tone="amber"
-          foot={count(report.summary.total_quantity, 'قطعة بالمخازن')}
+          foot={`${count(report.summary.total_quantity)} قطعة بالمخازن`}
         />
       </div>
 
@@ -799,7 +828,241 @@ function StockValuationView({
               </tbody>
             </table>
           </div>
-          <Pagination page={page} setPage={setPage} total={filteredRows.length} pageSize={10} />
+          <Pagination page={page} setPage={setPage} total={filteredRows.length} size={10} />
+        </>
+      )}
+    </>
+  );
+}
+
+function BatchesExpiryView({
+  activeId,
+  isGroup,
+  query,
+}: {
+  activeId: string;
+  isGroup: boolean;
+  query: string;
+}) {
+  const alertsData = useData<ExpiryAlertResponse>(withBranch('/inventory/expiry-alerts', activeId));
+  const [statusFilter, setStatusFilter] = useState<
+    'all' | 'expired' | 'critical' | 'warning' | 'healthy'
+  >('all');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [page, setPage] = useState(1);
+
+  if (alertsData.loading) return <Loading />;
+  if (alertsData.error) return <ErrorState message={alertsData.error} retry={alertsData.reload} />;
+
+  const data = alertsData.data;
+  if (!data) return <Empty title="لا توجد بيانات صلاحية وتشغيلات متاحة" />;
+
+  const summary = data.summary;
+  const filtered = data.batches.filter((b) => {
+    const matchesQuery = (b.product_name + ' ' + b.sku + ' ' + b.batch_number)
+      .toLowerCase()
+      .includes(query.toLowerCase());
+    const matchesCategory = categoryFilter === 'all' || b.category === categoryFilter;
+    const matchesStatus = statusFilter === 'all' || b.status?.toLowerCase() === statusFilter;
+    return matchesQuery && matchesCategory && matchesStatus;
+  });
+
+  const exportBatches = () => {
+    downloadCSV(
+      'تشغيلات-المخزون-والصلاحيات',
+      [
+        'الكود',
+        'المنتج',
+        'الفئة',
+        'الفرع',
+        'رقم التشغيلة',
+        'تاريخ الإنتاج',
+        'تاريخ الصلاحية',
+        'الأيام المتبقية',
+        'الكمية',
+        'التكلفة (ج.م)',
+        'الحالة',
+      ],
+      filtered.map((b) => [
+        b.sku || '',
+        b.product_name || '',
+        b.category || '',
+        b.branch_name || '',
+        b.batch_number,
+        b.production_date || '—',
+        b.expiry_date,
+        b.days_to_expiry !== undefined ? b.days_to_expiry : '',
+        b.quantity,
+        b.cost_price / 100,
+        b.status === 'EXPIRED'
+          ? 'منتهية الصلاحية'
+          : b.status === 'CRITICAL'
+            ? 'حرجة (< 30 يوم)'
+            : b.status === 'WARNING'
+              ? 'تحذيرية (< 90 يوم)'
+              : 'صالحة',
+      ]),
+    );
+  };
+
+  return (
+    <>
+      <div className="batches-stats">
+        <Stat
+          label="إجمالي التشغيلات النشطة"
+          value={count(summary.total_batches)}
+          icon={<Boxes size={22} />}
+          tone="indigo"
+          foot={`${summary.total_quantity} قطعة بالمخازن · ${money(summary.total_value)}`}
+        />
+        <Stat
+          label="منتهية الصلاحية (معزولة)"
+          value={count(summary.expired_count)}
+          icon={<AlertTriangle size={22} color="#dc2626" />}
+          tone="red"
+          foot={`${summary.expired_quantity} قطعة · ${money(summary.expired_value)}`}
+        />
+        <Stat
+          label="حرجة (أقل من 30 يوماً)"
+          value={count(summary.critical_count)}
+          icon={<AlertTriangle size={22} color="#ea580c" />}
+          tone="amber"
+          foot={`${summary.critical_quantity} قطعة · ${money(summary.critical_value)}`}
+        />
+        <Stat
+          label="تحذيرية (30 إلى 90 يوماً)"
+          value={count(summary.warning_count)}
+          icon={<Calendar size={22} color="#ca8a04" />}
+          tone="purple"
+          foot={`${summary.warning_quantity} قطعة · ${money(summary.warning_value)}`}
+        />
+      </div>
+
+      <div className="table-toolbar" style={{ margin: '12px 0' }}>
+        <div className="filter-group" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <select
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value as any);
+              setPage(1);
+            }}
+          >
+            <option value="all">كل الحالات ({data.batches.length})</option>
+            <option value="expired">منتهية الصلاحية ({summary.expired_count})</option>
+            <option value="critical">حرجة &lt; 30 يوم ({summary.critical_count})</option>
+            <option value="warning">تحذيرية 30-90 يوم ({summary.warning_count})</option>
+            <option value="healthy">صالحة ومستقرة ({summary.healthy_count})</option>
+          </select>
+
+          {data.categories.length > 0 && (
+            <select
+              value={categoryFilter}
+              onChange={(e) => {
+                setCategoryFilter(e.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="all">كل التصنيفات</option>
+              {data.categories.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          )}
+
+          <Button variant="secondary" onClick={exportBatches}>
+            <Download size={15} /> تصدير تشغيلات المخزون
+          </Button>
+        </div>
+      </div>
+
+      {filtered.length === 0 ? (
+        <Empty
+          title="لا توجد تشغيلات تطابق معايير البحث"
+          description="لم يتم العثور على دفعات مسجلة بهذه الفلاتر."
+        />
+      ) : (
+        <>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>الصنف والكود</th>
+                  {isGroup && <th>الفرع</th>}
+                  <th>رقم التشغيلة</th>
+                  <th>تاريخ الإنتاج</th>
+                  <th>تاريخ الانتهاء</th>
+                  <th>الأيام المتبقية</th>
+                  <th>الكمية المتاحة</th>
+                  <th>تكلفة الشراء</th>
+                  <th>الحالة والسياسة</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.slice((page - 1) * 15, page * 15).map((b) => (
+                  <tr key={b.id}>
+                    <td>
+                      <strong>{b.product_name}</strong>
+                      <small className="cell-sub muted">
+                        {b.sku} · {b.category}
+                      </small>
+                    </td>
+                    {isGroup && <td>{b.branch_name || b.branch_code}</td>}
+                    <td>
+                      <span className="batch-number-tag">{b.batch_number}</span>
+                    </td>
+                    <td className="muted">
+                      {b.production_date ? formatDate(b.production_date) : '—'}
+                    </td>
+                    <td>
+                      <strong className="num">{formatDate(b.expiry_date)}</strong>
+                    </td>
+                    <td>
+                      {b.days_to_expiry !== undefined && (
+                        <span
+                          className={`num ${
+                            b.days_to_expiry < 0
+                              ? 'negative'
+                              : b.days_to_expiry <= 30
+                                ? 'warning'
+                                : 'muted'
+                          }`}
+                        >
+                          {b.days_to_expiry < 0
+                            ? `منتهية منذ ${Math.abs(b.days_to_expiry)} يوم`
+                            : `${b.days_to_expiry} يوم`}
+                        </span>
+                      )}
+                    </td>
+                    <td className="num amount">
+                      <strong>{b.quantity}</strong> <small>{b.unit}</small>
+                    </td>
+                    <td className="num">{money(b.cost_price)}</td>
+                    <td>
+                      {b.status === 'EXPIRED' && (
+                        <span className="batch-status-pill expired">منتهية (معزولة)</span>
+                      )}
+                      {b.status === 'CRITICAL' && (
+                        <span className="batch-status-pill critical">حرجة (&lt; 30 يوم)</span>
+                      )}
+                      {b.status === 'WARNING' && (
+                        <span className="batch-status-pill warning">تحذيرية (&lt; 90 يوم)</span>
+                      )}
+                      {b.status === 'HEALTHY' && (
+                        <span className="batch-status-pill healthy">صالحة (FEFO)</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <Pagination page={page} setPage={setPage} total={filtered.length} size={15} />
+          <p className="table-bottom-note">
+            تطبق سياسة الصرف الذكية (FEFO: الأقرب انتهاءً يخرج أولاً) تلقائياً عند البيع، وتعزل
+            التشغيلات المنتهية وتمنع من الصرف.
+          </p>
         </>
       )}
     </>
@@ -971,6 +1234,9 @@ export function Inventory() {
                 تقييم المخزون (WAC والمطابقة)
               </button>
             )}
+            <button className={tab === 'batches' ? 'active' : ''} onClick={() => setTab('batches')}>
+              التشغيلات والصلاحيات (FEFO)
+            </button>
             <button
               className={tab === 'movements' ? 'active' : ''}
               onClick={() => setTab('movements')}
@@ -1028,6 +1294,8 @@ export function Inventory() {
             setPage={setPage}
             onInspectCost={setCostHistoryProduct}
           />
+        ) : tab === 'batches' ? (
+          <BatchesExpiryView activeId={activeId} isGroup={isGroup} query={query} />
         ) : tab === 'levels' ? (
           <>
             {!filtered.length ? (

@@ -7,6 +7,7 @@ import { requirePermission } from '../rbac';
 import { scopeFor, scopeSql } from '../scope';
 import { listProducts, createProduct, updateProduct, adjustStock } from '../catalog';
 import { getStockValuation, getProductCostHistory } from '../cost';
+import { getProductBatches, getExpiryAlerts } from '../batches';
 import { stockMatrix } from '../reports';
 import {
   startStocktake,
@@ -92,6 +93,21 @@ catalogRouter.get(
     res.json(getProductCostHistory(String(req.params.productId), branchId, scope));
   },
 );
+
+// Pack 2.2: Product Batches for a specific branch
+catalogRouter.get('/products/:id/batches', (req, res) => {
+  const branchId = req.query.branch_id ? String(req.query.branch_id) : 'main';
+  res.json(getProductBatches(String(req.params.id), branchId));
+});
+
+// Pack 2.2: Batch & Expiry Alerts Report
+catalogRouter.get('/inventory/expiry-alerts', requirePermission('inventory:view'), (req, res) => {
+  const scope = scopeFor(req.user, req.query.branch_id);
+  const branchId = req.query.branch_id ? String(req.query.branch_id) : undefined;
+  const category = req.query.category ? String(req.query.category) : undefined;
+  const status = req.query.status ? String(req.query.status) : undefined;
+  res.json(getExpiryAlerts(scope, branchId, category, status));
+});
 
 // Periodic Stocktake (جرد دوري)
 catalogRouter.get('/stocktakes', requirePermission('inventory:view'), (req, res) => {
