@@ -35,6 +35,8 @@ import {
   Activity,
   Building2,
   BookOpen,
+  Kanban,
+  Briefcase,
 } from 'lucide-react';
 import { BranchProvider, BranchSwitcher, useBranch, withBranch } from './branch';
 import {
@@ -88,6 +90,8 @@ const Transfers = lazy(() => import('./pages/Transfers').then((m) => ({ default:
 const Distributions = lazy(() =>
   import('./pages/Distributions').then((m) => ({ default: m.Distributions })),
 );
+const CRM = lazy(() => import('./pages/CRM').then((m) => ({ default: m.CRM })));
+const HR = lazy(() => import('./pages/HR').then((m) => ({ default: m.HR })));
 export function Brand({ light = false }: { light?: boolean }) {
   return (
     <div className={'brand ' + (light ? 'brand-light' : '')} dir="ltr">
@@ -403,6 +407,8 @@ const navigation: { label: string; items: NavItem[] }[] = [
         icon: ArrowRightLeft,
         permission: 'transfers:manage',
       },
+      { to: '/crm', label: 'مسار الصفقات (CRM)', icon: Kanban, permission: 'crm:view' },
+      { to: '/hr', label: 'الموارد البشرية (HR)', icon: Briefcase, permission: 'hr:view' },
       { to: '/customers', label: 'العملاء', icon: Users, permission: 'parties:view' },
       { to: '/suppliers', label: 'الموردون', icon: Truck, permission: 'documents:create_purchase' },
       { to: '/branches', label: 'الفروع', icon: Store, permission: 'branches:manage' },
@@ -628,6 +634,8 @@ function Layout() {
               <Route path="/ledger" element={<Ledger />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/crm" element={can(user, 'crm:view') ? <CRM /> : <Navigate to="/" />} />
+              <Route path="/hr" element={can(user, 'hr:view') ? <HR /> : <Navigate to="/" />} />
               <Route
                 path="/activity"
                 element={can(user, 'users:manage') ? <ActivityPage /> : <Navigate to="/" />}

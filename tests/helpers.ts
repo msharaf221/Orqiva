@@ -51,7 +51,9 @@ export function resetBusinessData() {
     DELETE FROM transfer_lines; DELETE FROM transfers; DELETE FROM payments;
     DELETE FROM e_invoice_submissions;
     DELETE FROM payroll_slips; DELETE FROM payroll_runs;
+    DELETE FROM employee_attendance; DELETE FROM employee_leaves;
     DELETE FROM employee_advances; DELETE FROM employees;
+    DELETE FROM crm_activities; DELETE FROM crm_deals; DELETE FROM sales_targets;
     DELETE FROM bank_statement_lines; DELETE FROM bank_statements;
     DELETE FROM cheques;
     DELETE FROM journal_line_cost_centers; DELETE FROM cost_centers;

@@ -1491,3 +1491,266 @@
   border-radius: 4px;
   border: 1px solid var(--indigo-100);
 }
+
+/* ---------------------------------------------------------------------------
+ * CRM Module: Kanban Board, Deal Cards, Sales Targets, Activities
+ * ------------------------------------------------------------------------- */
+.crm-board-container {
+  overflow-x: auto;
+  padding-bottom: 16px;
+  margin-top: 16px;
+}
+
+.crm-board {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  min-width: fit-content;
+}
+
+.crm-column {
+  background: var(--slate-50);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-lg);
+  width: 320px;
+  min-width: 300px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 270px);
+}
+
+.crm-column-header {
+  padding: 14px 16px;
+  background: #ffffff;
+  border-bottom: 1px solid var(--slate-200);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.crm-column-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.crm-column-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--slate-900);
+}
+
+.crm-column-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.crm-column-badge {
+  font-family: 'Manrope Variable', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--slate-100);
+  color: var(--slate-700);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+}
+
+.crm-column-summary {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--slate-500);
+}
+
+.crm-column-cards {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.crm-deal-card {
+  background: #ffffff;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: all 0.15s ease;
+}
+
+.crm-deal-card:hover {
+  border-color: var(--indigo-400);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1);
+  transform: translateY(-2px);
+}
+
+.crm-deal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.crm-deal-code {
+  font-family: 'Manrope Variable', monospace;
+  font-size: 11.5px;
+  color: var(--slate-500);
+  font-weight: 600;
+}
+
+.crm-deal-title {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--slate-900);
+  line-height: 1.3;
+}
+
+.crm-deal-amount {
+  font-family: 'Manrope Variable', sans-serif;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--indigo-600);
+}
+
+.crm-deal-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--slate-600);
+}
+
+.crm-deal-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.crm-deal-actions {
+  display: flex;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--slate-100);
+  flex-wrap: wrap;
+}
+
+.crm-deal-actions button {
+  font-size: 11.5px;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+/* Sales Targets */
+.target-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.target-card {
+  background: #ffffff;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-lg);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.target-progress-bar {
+  height: 8px;
+  background: var(--slate-100);
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+.target-progress-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+/* ---------------------------------------------------------------------------
+ * HR Module: Attendance, Contracts, Leave Balances
+ * ------------------------------------------------------------------------- */
+.leave-balance-card {
+  background: #ffffff;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.contract-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+
+.contract-badge.permanent {
+  background: #f0fdf4;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.contract-badge.fixed {
+  background: #eff6ff;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+}
+
+.contract-badge.probation {
+  background: #fefce8;
+  color: #854d0e;
+  border: 1px solid #fef08a;
+}
+
+.att-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
+.att-status-badge.present {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.att-status-badge.absent {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.att-status-badge.late {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.att-status-badge.leave {
+  background: #e0e7ff;
+  color: #4338ca;
+}
