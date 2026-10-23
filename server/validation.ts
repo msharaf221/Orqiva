@@ -637,6 +637,7 @@ export const posCheckoutSchema = z
         method: 'CASH',
         amount_tendered: 0,
         amount_paid: 0,
+        reference: '',
       }),
     split_payments: z
       .array(
