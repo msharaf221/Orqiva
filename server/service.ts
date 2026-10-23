@@ -8,6 +8,7 @@ import { validateReturnLines } from './returns';
 import { resolveDefaultAccountId, assertAccountFunds, glAccountForCashAccount } from './accounts';
 import { enqueueEtaSubmission, isEtaEligible } from './eta';
 import { postDocumentLedger, reverseDocumentLedger, postPaymentLedger } from './posting';
+import { recordBatchStock } from './batches';
 import type { Document, DocLine, Party, Payment, Branch } from '../src/types';
 
 export { AppError } from './errors';
@@ -90,6 +91,10 @@ export function moveStock(input: {
   unitCost?: number;
   /** When true, skip WAC update (used by cancel reversal to avoid double-counting). */
   skipCost?: boolean;
+  batchId?: string | null;
+  batchNumber?: string | null;
+  productionDate?: string | null;
+  expiryDate?: string | null;
 }) {
   const product = requireRow(
     one<{ name: string }>('SELECT name FROM products WHERE id=?', input.productId),
@@ -106,6 +111,21 @@ export function moveStock(input: {
     );
   }
   if (next > 1_000_000) throw new AppError(400, 'تجاوز الحد الأقصى للمخزون');
+
+  // Record batch stock (creates/updates on inflow, enforces FEFO on outflow)
+  const batchRes = recordBatchStock({
+    branchId: input.branchId,
+    productId: input.productId,
+    delta: input.delta,
+    reason: input.reason,
+    unitCost: input.unitCost,
+    batchId: input.batchId,
+    batchNumber: input.batchNumber,
+    productionDate: input.productionDate,
+    expiryDate: input.expiryDate,
+  });
+  const effectiveBatchId = input.batchId || batchRes.batchId || null;
+
   run(
     'INSERT INTO branch_stock(branch_id,product_id,quantity) VALUES(?,?,?) ON CONFLICT(branch_id,product_id) DO UPDATE SET quantity=excluded.quantity',
     input.branchId,
@@ -113,7 +133,7 @@ export function moveStock(input: {
     next,
   );
   run(
-    'INSERT INTO stock_movements(id,product_id,document_id,transfer_id,branch_id,quantity,reason,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?)',
+    'INSERT INTO stock_movements(id,product_id,document_id,transfer_id,branch_id,quantity,reason,created_by,created_at,batch_id) VALUES(?,?,?,?,?,?,?,?,?,?)',
     id(),
     input.productId,
     input.documentId ?? null,
@@ -123,6 +143,7 @@ export function moveStock(input: {
     input.reason,
     input.actor.id,
     now(),
+    effectiveBatchId,
   );
   // Update WAC unless caller explicitly skips it
   if (!input.skipCost) {
@@ -154,6 +175,8 @@ export function moveStock(input: {
       });
     }
   }
+
+  return { batchId: effectiveBatchId };
 }
 
 /** A product can be sold or bought in a branch only when that branch's assortment lists it. */
@@ -247,6 +270,10 @@ function prepareDocument(
       sku: product.sku,
       cost_price: costPrice,
       total: line.quantity * line.unit_price,
+      batch_id: line.batch_id ?? null,
+      batch_number: line.batch_number ?? null,
+      production_date: line.production_date ?? null,
+      expiry_date: line.expiry_date ?? null,
     };
   });
   const subtotal = lines.reduce((s, l) => s + l.total, 0);
@@ -333,7 +360,7 @@ export function saveDocument(raw: unknown, actor: Actor, existingId?: string) {
     }
     for (const line of computed.lines)
       run(
-        'INSERT INTO document_lines(id,document_id,product_id,name,sku,quantity,unit_price,cost_price,total) VALUES(?,?,?,?,?,?,?,?,?)',
+        'INSERT INTO document_lines(id,document_id,product_id,name,sku,quantity,unit_price,cost_price,total,batch_id,batch_number,expiry_date) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
         id(),
         documentId,
         line.product_id,
@@ -343,6 +370,9 @@ export function saveDocument(raw: unknown, actor: Actor, existingId?: string) {
         line.unit_price,
         line.cost_price,
         line.total,
+        line.batch_id ?? null,
+        line.batch_number ?? null,
+        line.expiry_date ?? null,
       );
     audit(actor, existingId ? 'تعديل مسودة' : 'إنشاء فاتورة', input.type, documentId, branch.name);
     return documentDetail(documentId);
@@ -372,17 +402,21 @@ export function postDocument(documentId: string, actor: Actor) {
         // Snapshot WAC as COGS before reducing stock
         const wac = effectiveCost(doc.branch_id, product.id);
         run('UPDATE document_lines SET cost_price=? WHERE id=?', wac, line.id);
-        moveStock({
+        const moveRes = moveStock({
           branchId: doc.branch_id,
           productId: product.id,
           delta: -line.quantity,
           reason: 'بيع ' + doc.number,
           actor,
           documentId,
+          batchId: line.batch_id,
         });
+        if (moveRes?.batchId && !line.batch_id) {
+          run('UPDATE document_lines SET batch_id=? WHERE id=?', moveRes.batchId, line.id);
+        }
       } else if (doc.type === 'PURCHASE') {
         // PURCHASE: inflow — use the line's unit_price as purchase cost
-        moveStock({
+        const moveRes = moveStock({
           branchId: doc.branch_id,
           productId: product.id,
           delta: line.quantity,
@@ -390,7 +424,13 @@ export function postDocument(documentId: string, actor: Actor) {
           actor,
           documentId,
           unitCost: line.unit_price,
+          batchId: line.batch_id,
+          batchNumber: line.batch_number,
+          expiryDate: line.expiry_date,
         });
+        if (moveRes?.batchId && !line.batch_id) {
+          run('UPDATE document_lines SET batch_id=? WHERE id=?', moveRes.batchId, line.id);
+        }
       } else if (doc.type === 'SALE_RETURN') {
         // Customer returns goods to branch: stock increases
         // WAC restored at line's snapshotted COGS from original sale
@@ -402,6 +442,7 @@ export function postDocument(documentId: string, actor: Actor) {
           actor,
           documentId,
           unitCost: line.cost_price,
+          batchId: line.batch_id,
         });
       } else if (doc.type === 'PURCHASE_RETURN') {
         // Goods leave branch back to supplier: stock decreases
@@ -419,6 +460,7 @@ export function postDocument(documentId: string, actor: Actor) {
           reason: 'مرتجع شراء ' + doc.number,
           actor,
           documentId,
+          batchId: line.batch_id,
         });
       }
     }
@@ -479,6 +521,7 @@ export function cancelDocument(documentId: string, actor: Actor) {
             actor,
             documentId: doc.id,
             unitCost: line.cost_price,
+            batchId: line.batch_id,
           });
         } else if (doc.type === 'PURCHASE') {
           // Reversal of a purchase: items leave branch (-delta)
@@ -491,6 +534,7 @@ export function cancelDocument(documentId: string, actor: Actor) {
             reason: 'إلغاء ' + doc.number,
             actor,
             documentId: doc.id,
+            batchId: line.batch_id,
           });
         } else if (doc.type === 'SALE_RETURN') {
           // Reversal of a sale return: items leave branch again (-delta)
@@ -503,6 +547,7 @@ export function cancelDocument(documentId: string, actor: Actor) {
             reason: 'إلغاء ' + doc.number,
             actor,
             documentId: doc.id,
+            batchId: line.batch_id,
           });
         } else if (doc.type === 'PURCHASE_RETURN') {
           // Reversal of a purchase return: items return to branch (+delta)
@@ -514,6 +559,7 @@ export function cancelDocument(documentId: string, actor: Actor) {
             actor,
             documentId: doc.id,
             unitCost: line.cost_price,
+            batchId: line.batch_id,
           });
         }
       }

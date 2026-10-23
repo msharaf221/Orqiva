@@ -373,3 +373,139 @@ describe('WAC — Dashboard stock value', () => {
     expect(dashRes.body.stockValue).toBe(90000);
   });
 });
+
+describe('Pack 2.1 — Stock Valuation Report & GL Reconciliation', () => {
+  it('computes stock valuation based on WAC and reconciles 100% with acc_inventory', async () => {
+    const admin = await getAdmin();
+    const supplierRes = await admin.post('/api/parties').set(header).send({
+      type: 'SUPPLIER',
+      name: 'مورد تقييم مخزون',
+      phone: '',
+      email: '',
+      address: '',
+      tax_number: '',
+      notes: '',
+    });
+    const supplierId = supplierRes.body.id;
+
+    // Create Product A
+    const pARes = await admin.post('/api/products').set(header).send({
+      sku: 'VAL-A-001',
+      name: 'منتج أ تقييم',
+      category: 'إلكترونيات',
+      unit: 'قطعة',
+      sale_price: 15000, // 150 EGP
+      cost_price: 10000,
+      min_stock: 2,
+    });
+    const pAId = pARes.body.id;
+
+    // Create Product B
+    const pBRes = await admin.post('/api/products').set(header).send({
+      sku: 'VAL-B-002',
+      name: 'منتج ب تقييم',
+      category: 'قطع غيار',
+      unit: 'قطعة',
+      sale_price: 30000, // 300 EGP
+      cost_price: 20000,
+      min_stock: 1,
+    });
+    const pBId = pBRes.body.id;
+
+    // Purchase 10 of A at 120.00 EGP (12000 piasters) => Total cost: 120,000 piasters
+    await postPurchase(admin, supplierId, pAId, 10, 12000);
+
+    // Purchase 5 of B at 220.00 EGP (22000 piasters) => Total cost: 110,000 piasters
+    await postPurchase(admin, supplierId, pBId, 5, 22000);
+
+    // Total expected inventory cost = 120,000 + 110,000 = 230,000 piasters (2,300.00 EGP)
+    // Total retail = (10 * 15000) + (5 * 30000) = 150,000 + 150,000 = 300,000 piasters (3,000.00 EGP)
+    // Potential profit = 300,000 - 230,000 = 70,000 piasters (700.00 EGP)
+    const valRes = await admin.get('/api/inventory/valuation');
+    expect(valRes.status).toBe(200);
+    expect(valRes.body.summary).toBeDefined();
+    expect(valRes.body.summary.total_inventory_cost).toBe(230000);
+    expect(valRes.body.summary.total_inventory_retail).toBe(300000);
+    expect(valRes.body.summary.total_potential_profit).toBe(70000);
+    expect(valRes.body.summary.total_quantity).toBe(15);
+
+    // GL Reconciliation check
+    expect(valRes.body.gl_check).toBeDefined();
+    expect(valRes.body.gl_check.gl_inventory_balance).toBe(230000);
+    expect(valRes.body.gl_check.stock_valuation_total).toBe(230000);
+    expect(valRes.body.gl_check.variance).toBe(0);
+    expect(valRes.body.gl_check.reconciled).toBe(true);
+
+    // Now sell 2 units of A at 150.00 EGP
+    const custRes = await admin.post('/api/parties').set(header).send({
+      type: 'CUSTOMER',
+      name: 'عميل تقييم',
+      phone: '',
+      email: '',
+      address: '',
+      tax_number: '',
+      notes: '',
+    });
+    const customerId = custRes.body.id;
+
+    // Post sale of 2 units of A
+    await postSale(admin, customerId, pAId, 2, 15000);
+
+    // Remaining of A: 8 units @ 12000 = 96,000
+    // Remaining of B: 5 units @ 22000 = 110,000
+    // New total inventory: 206,000 piasters
+    const valAfterSale = await admin.get('/api/inventory/valuation');
+    expect(valAfterSale.status).toBe(200);
+    expect(valAfterSale.body.summary.total_inventory_cost).toBe(206000);
+    expect(valAfterSale.body.gl_check.gl_inventory_balance).toBe(206000);
+    expect(valAfterSale.body.gl_check.stock_valuation_total).toBe(206000);
+    expect(valAfterSale.body.gl_check.variance).toBe(0);
+    expect(valAfterSale.body.gl_check.reconciled).toBe(true);
+  });
+
+  it('filters valuation report by branch, category, and stock status', async () => {
+    const admin = await getAdmin();
+    const { supplierId, productId } = await setupProduct(admin, { costPrice: 7000 });
+    await postPurchase(admin, supplierId, productId, 6, 7000);
+
+    // Filter by branch main
+    const branchRes = await admin.get('/api/inventory/valuation?branch_id=main');
+    expect(branchRes.status).toBe(200);
+    const foundMain = branchRes.body.rows.find((r: any) => r.product_id === productId);
+    expect(foundMain).toBeDefined();
+    expect(foundMain.quantity).toBe(6);
+    expect(foundMain.total_cost).toBe(42000);
+
+    // Filter by category
+    const catRes = await admin.get('/api/inventory/valuation?category=اختبار');
+    expect(catRes.status).toBe(200);
+    expect(catRes.body.rows.every((r: any) => r.category === 'اختبار')).toBe(true);
+
+    // Filter by stock: in_stock vs out_of_stock
+    const inStockRes = await admin.get('/api/inventory/valuation?stock=in_stock');
+    expect(inStockRes.status).toBe(200);
+    expect(inStockRes.body.rows.every((r: any) => r.quantity > 0)).toBe(true);
+  });
+
+  it('provides chronological WAC cost history per product', async () => {
+    const admin = await getAdmin();
+    const { supplierId, productId } = await setupProduct(admin, { costPrice: 10000 });
+
+    // Purchase 1: 5 units @ 10000
+    await postPurchase(admin, supplierId, productId, 5, 10000);
+    // Purchase 2: 5 units @ 14000
+    await postPurchase(admin, supplierId, productId, 5, 14000);
+
+    const historyRes = await admin.get(`/api/inventory/cost-history/${productId}`);
+    expect(historyRes.status).toBe(200);
+    expect(Array.isArray(historyRes.body)).toBe(true);
+    expect(historyRes.body.length).toBeGreaterThanOrEqual(2);
+
+    const latest = historyRes.body[0];
+    expect(latest.product_id).toBe(productId);
+    expect(latest.delta_qty).toBe(5);
+    expect(latest.unit_cost).toBe(14000);
+    expect(latest.avg_after).toBe(12000); // (5*10000 + 5*14000) / 10 = 12000
+    expect(latest.branch_name).toBeDefined();
+  });
+});

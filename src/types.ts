@@ -212,6 +212,10 @@ export interface ChartAccount {
   notes: string;
   created_at: string;
   lines_count?: number;
+  children_count?: number;
+  balance?: number;
+  parent_code?: string | null;
+  parent_name?: string | null;
 }
 
 export interface JournalEntry {
@@ -271,6 +275,76 @@ export interface GlSettings {
   fiscal_year_start_month: number;
   closed_through: string | null;
   updated_at: string | null;
+}
+
+export interface FinancialReportRow {
+  account_id?: string;
+  code?: string;
+  name: string;
+  amount: number;
+  previous_amount?: number;
+  change_percent?: number | null;
+  is_deduction?: boolean;
+}
+
+export interface FinancialReportSection {
+  title: string;
+  rows: FinancialReportRow[];
+  total: number;
+  previous_total?: number;
+  change_percent?: number | null;
+}
+
+export interface ProfitAndLossReport {
+  period: { from: string; to: string };
+  comparison_period?: { from: string; to: string };
+  gross_sales: FinancialReportSection;
+  sales_deductions: FinancialReportSection;
+  net_revenue: number;
+  cogs: FinancialReportSection;
+  total_cogs: number;
+  gross_profit: number;
+  operating_expenses: FinancialReportSection;
+  total_operating_expenses: number;
+  net_profit: number;
+  previous_net_revenue?: number;
+  previous_total_cogs?: number;
+  previous_gross_profit?: number;
+  previous_total_operating_expenses?: number;
+  previous_net_profit?: number;
+  change_net_revenue?: number | null;
+  change_gross_profit?: number | null;
+  change_net_profit?: number | null;
+}
+
+export interface BalanceSheetReport {
+  as_of: string;
+  comparison_as_of?: string;
+  assets: {
+    current_assets: FinancialReportSection;
+    non_current_assets: FinancialReportSection;
+    total_assets: number;
+    previous_total_assets?: number;
+  };
+  total_assets: number;
+  liabilities: {
+    current_liabilities: FinancialReportSection;
+    non_current_liabilities: FinancialReportSection;
+    total_liabilities: number;
+    previous_total_liabilities?: number;
+  };
+  total_liabilities: number;
+  equity: {
+    items: FinancialReportSection;
+    prior_period_earnings: number;
+    current_period_earnings: number;
+    total_equity: number;
+    previous_total_equity?: number;
+  };
+  total_equity: number;
+  total_liabilities_and_equity: number;
+  previous_total_liabilities_and_equity?: number;
+  is_balanced: boolean;
 }
 
 export interface PosShiftPaymentDetail {
@@ -463,6 +537,7 @@ export interface Product {
   stock: number;
   min_stock: number;
   active: number;
+  track_batches?: number;
   created_at: string;
   /** Effective Weighted Average Cost (WAC) — defaults to cost_price if not yet computed */
   avg_cost?: number;
@@ -495,6 +570,9 @@ export interface DocLine {
   unit_price: number;
   cost_price: number;
   total: number;
+  batch_id?: string | null;
+  batch_number?: string | null;
+  expiry_date?: string | null;
 }
 export interface Payment {
   id: string;
@@ -843,4 +921,490 @@ export interface AccountStatementEntry {
   out_amount: number;
   balance: number;
   created_at: string;
+}
+
+export interface OpeningBalanceCashLine {
+  cash_account_id: string;
+  amount: number;
+}
+
+export interface OpeningBalancePartyLine {
+  party_id: string;
+  amount: number;
+}
+
+export interface OpeningBalanceStockLine {
+  product_id: string;
+  branch_id: string;
+  quantity: number;
+  unit_cost: number;
+}
+
+export interface OpeningBalanceAccountLine {
+  account_id: string;
+  debit: number;
+  credit: number;
+  memo?: string;
+}
+
+export interface OpeningBalancesPayload {
+  date: string;
+  memo?: string;
+  balancing_account: 'OPENING_EQUITY' | 'CAPITAL';
+  cash_accounts?: OpeningBalanceCashLine[];
+  customers?: OpeningBalancePartyLine[];
+  suppliers?: OpeningBalancePartyLine[];
+  inventory_items?: OpeningBalanceStockLine[];
+  other_accounts?: OpeningBalanceAccountLine[];
+}
+
+export interface OpeningBalancesStatus {
+  has_opening_entry: boolean;
+  opening_entry?: JournalEntry;
+  opening_lines?: JournalLine[];
+  can_post: boolean;
+  earliest_transaction_date?: string | null;
+  reason?: string;
+}
+
+export interface VatReturnSection {
+  taxable_base: number;
+  tax_amount: number;
+  documents_count: number;
+}
+
+export interface VatReturnReport {
+  from: string;
+  to: string;
+  branch_id?: string | null;
+  branch_name?: string | null;
+  sales: {
+    standard_rated_14: VatReturnSection;
+    returns: VatReturnSection;
+    net_taxable_sales: number;
+    net_output_tax: number;
+  };
+  purchases: {
+    standard_rated_14: VatReturnSection;
+    returns: VatReturnSection;
+    net_taxable_purchases: number;
+    net_deductible_input_tax: number;
+  };
+  summary: {
+    total_output_tax: number;
+    total_input_tax: number;
+    net_tax_due: number;
+    credit_balance: number;
+    gl_output_tax_balance: number;
+    gl_input_tax_balance: number;
+    gl_reconciled: boolean;
+  };
+}
+
+export interface TaxRegisterRow {
+  id: string;
+  number: string;
+  date: string;
+  type: 'SALE' | 'SALE_RETURN' | 'PURCHASE' | 'PURCHASE_RETURN';
+  type_label: string;
+  party_id: string;
+  party_name: string;
+  party_tax_number?: string;
+  branch_id: string;
+  branch_name: string;
+  taxable_base: number;
+  tax_rate: number;
+  tax_amount: number;
+  total_amount: number;
+  eta_status?:
+    'PENDING' | 'SUBMITTED' | 'VALID' | 'INVALID' | 'FAILED' | 'CANCELLED' | 'UNSUBMITTED' | null;
+  eta_uuid?: string | null;
+  eta_long_id?: string | null;
+}
+
+export interface TaxRegisterResponse {
+  from: string;
+  to: string;
+  branch_id?: string | null;
+  register_type: 'SALES' | 'PURCHASES';
+  rows: TaxRegisterRow[];
+  totals: {
+    taxable_base: number;
+    tax_amount: number;
+    total_amount: number;
+    count: number;
+  };
+}
+
+export interface ProductValuationRow {
+  product_id: string;
+  sku: string;
+  name: string;
+  category: string;
+  unit: string;
+  branch_id?: string | null;
+  branch_name?: string | null;
+  branch_code?: string | null;
+  quantity: number;
+  unit_cost: number; // in piasters (WAC or reference cost)
+  total_cost: number; // in piasters = quantity * unit_cost
+  sale_price: number; // in piasters
+  total_retail: number; // in piasters = quantity * sale_price
+  potential_profit: number; // total_retail - total_cost
+  margin_percent: number; // ((total_retail - total_cost) / total_retail) * 100
+  last_cost_update?: string | null;
+}
+
+export interface StockValuationSummary {
+  total_products: number;
+  total_quantity: number;
+  total_inventory_cost: number; // in piasters
+  total_inventory_retail: number; // in piasters
+  total_potential_profit: number; // in piasters
+  overall_margin_percent: number;
+}
+
+export interface GlInventoryCheck {
+  gl_inventory_balance: number; // in piasters
+  stock_valuation_total: number; // in piasters
+  variance: number; // in piasters
+  reconciled: boolean;
+  account_code: string;
+  account_name: string;
+}
+
+export interface StockValuationResponse {
+  branch_id: string | null;
+  branch_name: string | null;
+  as_of: string;
+  rows: ProductValuationRow[];
+  summary: StockValuationSummary;
+  gl_check: GlInventoryCheck;
+  categories: string[];
+}
+
+export type BatchExpiryStatus = 'EXPIRED' | 'CRITICAL' | 'WARNING' | 'HEALTHY';
+
+export interface StockBatch {
+  id: string;
+  product_id: string;
+  product_name?: string;
+  sku?: string;
+  category?: string;
+  unit?: string;
+  branch_id: string;
+  branch_name?: string;
+  branch_code?: string;
+  batch_number: string;
+  production_date?: string | null;
+  expiry_date: string;
+  quantity: number;
+  cost_price: number; // in piasters
+  sale_price?: number; // in piasters
+  created_at: string;
+  days_to_expiry?: number;
+  status?: BatchExpiryStatus;
+}
+
+export interface ExpiryAlertSummary {
+  total_batches: number;
+  total_quantity: number;
+  total_value: number; // in piasters
+  expired_count: number;
+  expired_quantity: number;
+  expired_value: number;
+  critical_count: number; // < 30 days
+  critical_quantity: number;
+  critical_value: number;
+  warning_count: number; // 30 - 90 days
+  warning_quantity: number;
+  warning_value: number;
+  healthy_count: number;
+}
+
+export interface ExpiryAlertResponse {
+  branch_id: string | null;
+  branch_name: string | null;
+  as_of: string;
+  summary: ExpiryAlertSummary;
+  batches: StockBatch[];
+  categories: string[];
+}
+
+export interface WarehouseLocation {
+  id: string;
+  branch_id: string;
+  branch_name?: string;
+  code: string;
+  name: string;
+  aisle: string;
+  rack: string;
+  shelf: string;
+  bin: string;
+  notes: string;
+  active: number;
+  created_at: string;
+  products_count?: number;
+}
+
+export interface ProductLocation {
+  product_id: string;
+  product_name?: string;
+  sku?: string;
+  location_id: string;
+  location_code?: string;
+  location_name?: string;
+  branch_id?: string;
+  is_primary: number;
+  created_at: string;
+}
+
+export interface StocktakeScanResponse {
+  session_id: string;
+  line_id: string;
+  product_id: string;
+  product_name: string;
+  sku: string;
+  expected_qty: number;
+  counted_qty: number;
+  variance_qty: number;
+  incremented_by: number;
+  location_code?: string | null;
+}
+
+export type PurchaseOrderStatus =
+  'DRAFT' | 'CONFIRMED' | 'PARTIALLY_RECEIVED' | 'RECEIVED' | 'CANCELLED';
+
+export interface PurchaseOrderLine {
+  id: string;
+  order_id: string;
+  product_id: string;
+  product_name?: string;
+  sku?: string;
+  unit?: string;
+  quantity: number;
+  received_quantity: number;
+  unit_price: number;
+  tax_rate: number;
+  line_total: number;
+}
+
+export interface PurchaseOrder {
+  id: string;
+  number: string;
+  branch_id: string;
+  branch_name?: string;
+  branch_code?: string;
+  party_id: string;
+  party_name?: string;
+  party_phone?: string;
+  status: PurchaseOrderStatus;
+  date: string;
+  expected_delivery_date: string | null;
+  subtotal: number;
+  tax_rate: number;
+  tax: number;
+  total: number;
+  notes: string | null;
+  created_by?: string;
+  created_by_name?: string;
+  created_at: string;
+  lines?: PurchaseOrderLine[];
+}
+
+export type LandedCostType = 'SHIPPING' | 'CUSTOMS' | 'CLEARANCE' | 'HANDLING' | 'OTHER';
+export type LandedCostAllocationMethod = 'BY_VALUE' | 'BY_QUANTITY';
+
+export interface LandedCostAllocation {
+  id: string;
+  landed_cost_id: string;
+  document_line_id: string;
+  product_id: string;
+  product_name?: string;
+  sku?: string;
+  allocated_amount: number;
+  additional_unit_cost: number;
+}
+
+export interface LandedCost {
+  id: string;
+  document_id: string;
+  document_number?: string;
+  cost_type: LandedCostType;
+  cost_name: string;
+  amount: number;
+  allocation_method: LandedCostAllocationMethod;
+  notes: string | null;
+  created_by?: string;
+  created_by_name?: string;
+  created_at: string;
+  allocations?: LandedCostAllocation[];
+}
+
+// Phase 3: Price Lists & Quotations
+export interface PriceList {
+  id: string;
+  name: string;
+  code: string;
+  discount_basis_pts: number;
+  is_active: number;
+  is_default: number;
+  notes?: string | null;
+  created_at: string;
+  items_count?: number;
+}
+
+export interface PriceListItem {
+  id: string;
+  price_list_id: string;
+  product_id: string;
+  product_name?: string;
+  sku?: string;
+  min_quantity: number;
+  price: number;
+  created_at: string;
+}
+
+export type QuotationType = 'QUOTATION' | 'PROFORMA';
+export type QuotationStatus = 'DRAFT' | 'CONFIRMED' | 'CONVERTED' | 'REJECTED' | 'EXPIRED';
+
+export interface QuotationLine {
+  id: string;
+  quotation_id: string;
+  product_id: string;
+  product_name?: string;
+  sku?: string;
+  quantity: number;
+  unit_price: number;
+  total: number;
+  notes?: string | null;
+}
+
+export interface Quotation {
+  id: string;
+  number: string;
+  type: QuotationType;
+  branch_id: string;
+  branch_name?: string;
+  party_id: string;
+  party_name?: string;
+  party_phone?: string;
+  date: string;
+  valid_until?: string | null;
+  status: QuotationStatus;
+  subtotal: number;
+  discount: number;
+  tax_rate: number;
+  tax: number;
+  total: number;
+  converted_document_id?: string | null;
+  converted_document_number?: string | null;
+  notes?: string | null;
+  created_by?: string;
+  created_by_name?: string;
+  created_at: string;
+  updated_at: string;
+  lines?: QuotationLine[];
+}
+
+// Phase 4: Cheques, Bank Reconciliation & Cost Centers
+export type ChequeType = 'RECEIVABLE' | 'PAYABLE';
+export type ChequeStatus =
+  'PORTFOLIO' | 'COLLECTED' | 'DEPOSITED' | 'BOUNCED' | 'CANCELLED' | 'PAID';
+
+export interface Cheque {
+  id: string;
+  number: string;
+  type: ChequeType;
+  party_id: string;
+  party_name?: string;
+  bank_name: string;
+  branch_name?: string | null;
+  amount: number;
+  issue_date: string;
+  due_date: string;
+  status: ChequeStatus;
+  cash_account_id?: string | null;
+  cash_account_name?: string | null;
+  journal_entry_id?: string | null;
+  notes?: string | null;
+  created_by?: string;
+  created_by_name?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CostCenter {
+  id: string;
+  code: string;
+  name: string;
+  parent_id?: string | null;
+  is_active: number;
+  notes?: string | null;
+  created_at: string;
+}
+
+// Phase 5: Egyptian Payroll
+export type EmploymentType = 'FULL_TIME' | 'PART_TIME' | 'CONTRACT';
+
+export interface Employee {
+  id: string;
+  code: string;
+  name: string;
+  national_id?: string | null;
+  phone?: string | null;
+  job_title: string;
+  department?: string | null;
+  branch_id: string;
+  branch_name?: string;
+  employment_type: EmploymentType;
+  basic_salary: number;
+  variable_salary: number;
+  insured_salary: number;
+  insurance_number?: string | null;
+  active: number;
+  hire_date: string;
+  created_at: string;
+}
+
+export interface PayrollRun {
+  id: string;
+  month: string; // YYYY-MM
+  branch_id?: string | null;
+  branch_name?: string | null;
+  status: 'DRAFT' | 'CONFIRMED' | 'PAID' | 'CANCELLED';
+  total_basic: number;
+  total_variable: number;
+  total_gross: number;
+  total_social_insurance_employee: number;
+  total_social_insurance_employer: number;
+  total_income_tax: number;
+  total_martyrs_fund: number;
+  total_advances: number;
+  total_net: number;
+  journal_entry_id?: string | null;
+  notes?: string | null;
+  created_by?: string;
+  created_at: string;
+  slips?: PayrollSlip[];
+}
+
+export interface PayrollSlip {
+  id: string;
+  payroll_run_id: string;
+  employee_id: string;
+  employee_name?: string;
+  employee_code?: string;
+  job_title?: string;
+  basic_salary: number;
+  variable_salary: number;
+  gross_salary: number;
+  social_insurance_employee: number;
+  social_insurance_employer: number;
+  income_tax: number;
+  martyrs_fund: number;
+  advances_deduction: number;
+  other_deductions: number;
+  net_salary: number;
+  notes?: string | null;
 }

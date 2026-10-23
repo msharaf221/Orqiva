@@ -260,9 +260,18 @@ export function Reports() {
             <div className="info-banner report-disclaimer">
               <ShieldCheck size={20} />
               <span>
-                هذا ملخص إداري، وليس قوائم مالية محاسبية معتمدة. الربح يعتمد على التكلفة المرجعية
-                وقت اعتماد البيع، ولا يشمل تقييم FIFO أو المتوسط المرجح. المستندات الملغاة والمسودات
-                لا تدخل في التقارير.
+                هذا ملخص إداري، وليس قوائم مالية محاسبية معتمدة. للحصول على القوائم المالية الرسمية
+                (قائمة الدخل، الميزانية العمومية) أو{' '}
+                <strong>إقرار ضريبة القيمة المضافة (نموذج 10)</strong> وسجلات الفواتير الضريبية،
+                يرجى الانتقال إلى{' '}
+                <Link
+                  to="/ledger?tab=vat-return"
+                  style={{ textDecoration: 'underline', fontWeight: 600 }}
+                >
+                  دفتر الأستاذ العام والضرائب{' '}
+                  <ArrowLeft size={14} style={{ display: 'inline', verticalAlign: 'middle' }} />
+                </Link>
+                .
               </span>
             </div>
           </>

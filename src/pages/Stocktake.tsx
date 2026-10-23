@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { ClipboardList, Plus, CheckCircle2, XCircle, Save, Send } from 'lucide-react';
+import { ClipboardList, Plus, CheckCircle2, XCircle, Save, Send, Barcode } from 'lucide-react';
 import {
   api,
   useData,
@@ -198,6 +198,12 @@ function StocktakeDetailModal({
     `/stocktakes/${session.id}`,
   );
   const [counts, setCounts] = useState<Record<string, string>>({});
+  const [scanBarcode, setScanBarcode] = useState('');
+  const [scanQty, setScanQty] = useState(1);
+  const [scanFeedback, setScanFeedback] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
   const { busy, act } = useAction();
 
   useEffect(() => {
@@ -211,6 +217,37 @@ function StocktakeDetailModal({
 
   const current = detail.data?.session ?? session;
   const editable = current.status === 'DRAFT' && canCount;
+
+  const handleScan = async () => {
+    if (!scanBarcode.trim() || !editable) return;
+    try {
+      const res = await api<{
+        line_id: string;
+        product_name: string;
+        sku: string;
+        counted_qty: number;
+        expected_qty: number;
+        variance: number;
+        location_code: string | null;
+      }>(`/stocktakes/${session.id}/scan`, 'POST', {
+        barcode: scanBarcode.trim(),
+        quantity: scanQty,
+      });
+      setCounts((prev) => ({
+        ...prev,
+        [res.line_id]: String(res.counted_qty),
+      }));
+      setScanFeedback({
+        type: 'success',
+        message: `تم عد (${scanQty}) لـ ${res.product_name} (${res.sku}) · الإجمالي: ${res.counted_qty} · الفرق: ${res.variance > 0 ? '+' : ''}${res.variance}${res.location_code ? ` · موقع: ${res.location_code}` : ''}`,
+      });
+      setScanBarcode('');
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error ? err.message : 'فشل مسح الباركود أو المنتج غير موجود بالجرد';
+      setScanFeedback({ type: 'error', message: msg });
+    }
+  };
 
   const save = () =>
     void act(async () => {
@@ -259,6 +296,62 @@ function StocktakeDetailModal({
           <ErrorState message={detail.error} retry={detail.reload} />
         ) : (
           <>
+            {editable && (
+              <div
+                style={{
+                  display: 'flex',
+                  gap: '0.5rem',
+                  alignItems: 'center',
+                  marginBottom: '1rem',
+                  padding: '0.75rem',
+                  background: 'var(--bg-subtle, #f8fafc)',
+                  border: '1px solid var(--border-color, #e2e8f0)',
+                  borderRadius: '8px',
+                }}
+              >
+                <Barcode size={22} className="muted" />
+                <input
+                  type="text"
+                  placeholder="مسح باركود المنتج أو SKU والضغط على Enter..."
+                  value={scanBarcode}
+                  onChange={(e) => setScanBarcode(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      void handleScan();
+                    }
+                  }}
+                  style={{ flex: 1 }}
+                />
+                <input
+                  type="number"
+                  min="1"
+                  max="1000"
+                  value={scanQty}
+                  onChange={(e) => setScanQty(Math.max(1, parseInt(e.target.value) || 1))}
+                  style={{ width: '80px', textAlign: 'center' }}
+                  title="الكمية لكل مسح"
+                />
+                <Button type="button" onClick={() => void handleScan()}>
+                  مسح
+                </Button>
+              </div>
+            )}
+            {scanFeedback && (
+              <div
+                style={{
+                  padding: '0.5rem 0.75rem',
+                  marginBottom: '0.75rem',
+                  borderRadius: '6px',
+                  fontSize: '0.875rem',
+                  backgroundColor: scanFeedback.type === 'success' ? '#ecfdf5' : '#fef2f2',
+                  color: scanFeedback.type === 'success' ? '#065f46' : '#991b1b',
+                  border: `1px solid ${scanFeedback.type === 'success' ? '#a7f3d0' : '#fecaca'}`,
+                }}
+              >
+                {scanFeedback.message}
+              </div>
+            )}
             <div className="table-scroll stocktake-lines">
               <table>
                 <thead>

@@ -286,6 +286,8 @@ export function Modal({
   children,
   onClose,
   wide = false,
+  xwide = false,
+  tall = false,
   sheet = false,
 }: {
   title: string;
@@ -293,6 +295,10 @@ export function Modal({
   children: ReactNode;
   onClose: () => void;
   wide?: boolean;
+  /** Extra-wide dialog (up to 1200px) for dense tables and multi-column forms. */
+  xwide?: boolean;
+  /** Fill ~90vh and let the body scroll, so long tables/reports are not cramped. */
+  tall?: boolean;
   /** On small/touch viewports, present as a bottom sheet (~85vh) instead of a centered dialog. */
   sheet?: boolean;
 }) {
@@ -344,7 +350,12 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={'modal ' + (wide ? 'modal-wide ' : '') + (sheet ? 'modal-sheet' : '')}
+        className={
+          'modal ' +
+          (xwide ? 'modal-xwide ' : wide ? 'modal-wide ' : '') +
+          (tall ? 'modal-tall ' : '') +
+          (sheet ? 'modal-sheet' : '')
+        }
       >
         <div className="modal-heading">
           <div>

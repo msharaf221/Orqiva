@@ -31,6 +31,10 @@ const productFields = {
   sale_price: money,
   cost_price: money,
   min_stock: z.number().int().min(0).max(1_000_000),
+  track_batches: z
+    .union([z.boolean(), z.number()])
+    .optional()
+    .transform((v) => (v ? 1 : 0)),
 };
 /** Stock is never edited directly; it changes through documents, transfers and adjustments. */
 export const productUpdateSchema = z.object(productFields).strict();
@@ -65,17 +69,48 @@ export const stocktakeSubmitSchema = z
   })
   .strict();
 
-export const stocktakeCountsSchema = z
+export const stocktakeCountsSchema = z.object({
+  notes: optionalText(500),
+  counts: z
+    .array(
+      z.object({
+        line_id: id(),
+        counted_qty: z.number().int().min(0).max(1_000_000).nullable(),
+      }),
+    )
+    .min(1, 'لا توجد بنود جرد للتحديث'),
+});
+export const stocktakeScanSchema = z
   .object({
+    barcode: z.string().trim().min(1).max(100),
+    quantity: z.number().int().min(1).max(10000).default(1),
+  })
+  .strict();
+
+export const warehouseLocationSchema = z
+  .object({
+    branch_id: id(),
+    code: z.string().trim().min(1).max(50),
+    name: text(100),
+    aisle: optionalText(50),
+    rack: optionalText(50),
+    shelf: optionalText(50),
+    bin: optionalText(50),
     notes: optionalText(500),
-    counts: z
-      .array(
-        z.object({
-          line_id: id(),
-          counted_qty: z.number().int().min(0).max(1_000_000).nullable(),
-        }),
-      )
-      .min(1, 'لا توجد بنود جرد للتحديث'),
+    active: z
+      .union([z.literal(0), z.literal(1), z.boolean()])
+      .optional()
+      .transform((v) => (v === false || v === 0 ? 0 : 1)),
+  })
+  .strict();
+
+export const productLocationAssignSchema = z
+  .object({
+    location_id: id(),
+    is_primary: z
+      .union([z.literal(0), z.literal(1), z.boolean()])
+      .optional()
+      .transform((v) => (v === false || v === 0 ? 0 : 1)),
   })
   .strict();
 
@@ -129,6 +164,58 @@ export const glSettingsSchema = z
   })
   .strict();
 
+export const openingBalancesSchema = z
+  .object({
+    date,
+    memo: optionalText(300),
+    balancing_account: z.enum(['OPENING_EQUITY', 'CAPITAL']).default('OPENING_EQUITY'),
+    cash_accounts: z
+      .array(
+        z.object({
+          cash_account_id: id(),
+          amount: money.default(0),
+        }),
+      )
+      .optional(),
+    customers: z
+      .array(
+        z.object({
+          party_id: id(),
+          amount: money.default(0),
+        }),
+      )
+      .optional(),
+    suppliers: z
+      .array(
+        z.object({
+          party_id: id(),
+          amount: money.default(0),
+        }),
+      )
+      .optional(),
+    inventory_items: z
+      .array(
+        z.object({
+          product_id: id(),
+          branch_id: id(),
+          quantity: z.number().int().min(1),
+          unit_cost: money.default(0),
+        }),
+      )
+      .optional(),
+    other_accounts: z
+      .array(
+        z.object({
+          account_id: id(),
+          debit: money.default(0),
+          credit: money.default(0),
+          memo: optionalText(200),
+        }),
+      )
+      .optional(),
+  })
+  .strict();
+
 export const documentSchema = z
   .object({
     type: z.enum(['SALE', 'PURCHASE', 'SALE_RETURN', 'PURCHASE_RETURN']),
@@ -147,6 +234,10 @@ export const documentSchema = z
             product_id: id(),
             quantity: quantity,
             unit_price: money,
+            batch_id: id().optional().nullable(),
+            batch_number: z.string().trim().max(100).optional().nullable(),
+            production_date: z.string().trim().optional().nullable(),
+            expiry_date: z.string().trim().optional().nullable(),
           })
           .strict(),
       )
@@ -530,6 +621,7 @@ export const posCheckoutSchema = z
           product_id: id(),
           quantity: z.number().int().min(1).max(10000),
           unit_price: money.refine((n) => n >= 0),
+          batch_id: id().optional().nullable(),
         }),
       )
       .min(1, 'يجب إضافة صنف واحد على الأقل في السلة'),
@@ -545,6 +637,7 @@ export const posCheckoutSchema = z
         method: 'CASH',
         amount_tendered: 0,
         amount_paid: 0,
+        reference: '',
       }),
     split_payments: z
       .array(
@@ -596,5 +689,85 @@ export const posReturnSchema = z
         }),
       )
       .min(1, 'يجب تحديد صنف واحد على الأقل للإرجاع'),
+  })
+  .strict();
+
+export const purchaseOrderSchema = z
+  .object({
+    branch_id: id(),
+    party_id: id(),
+    date,
+    expected_delivery_date: date.optional().nullable(),
+    tax_rate: z.number().int().min(0).max(10000).default(0),
+    notes: optionalText(2000),
+    lines: z
+      .array(
+        z
+          .object({
+            product_id: id(),
+            quantity: quantity,
+            unit_price: money,
+            tax_rate: z.number().int().min(0).max(10000).default(0),
+          })
+          .strict(),
+      )
+      .min(1, 'يجب إضافة صنف واحد على الأقل في أمر الشراء')
+      .max(100),
+  })
+  .strict();
+
+export const landedCostSchema = z
+  .object({
+    cost_type: z.enum(['SHIPPING', 'CUSTOMS', 'CLEARANCE', 'HANDLING', 'OTHER']),
+    cost_name: z.string().trim().min(2, 'اسم بند التكلفة مطلوب').max(100),
+    amount: money.refine((n) => n > 0, 'قيمة التكلفة يجب أن تكون أكبر من صفر'),
+    allocation_method: z.enum(['BY_VALUE', 'BY_QUANTITY']).default('BY_VALUE'),
+    notes: optionalText(500),
+  })
+  .strict();
+
+export const priceListSchema = z
+  .object({
+    name: z.string().trim().min(2, 'اسم قائمة الأسعار مطلوب').max(100),
+    code: z.string().trim().min(2, 'كود قائمة الأسعار مطلوب').max(50),
+    discount_basis_pts: z.number().int().min(0).max(10000).default(0),
+    is_default: z.boolean().optional(),
+    is_active: z.boolean().optional(),
+    notes: optionalText(500),
+  })
+  .strict();
+
+export const priceListItemSchema = z
+  .object({
+    price_list_id: id(),
+    product_id: id(),
+    min_quantity: z.number().int().min(1, 'الكمية الدنيا يجب أن تكون 1 على الأقل').default(1),
+    price: money.refine((n) => n >= 0, 'السعر لا يمكن أن يكون سالباً'),
+  })
+  .strict();
+
+export const quotationSchema = z
+  .object({
+    type: z.enum(['QUOTATION', 'PROFORMA']).default('QUOTATION'),
+    branch_id: id(),
+    party_id: id(),
+    date,
+    valid_until: date.optional().nullable(),
+    tax_rate: z.number().int().min(0).max(10000).default(1400),
+    discount: money.default(0),
+    notes: optionalText(2000),
+    lines: z
+      .array(
+        z
+          .object({
+            product_id: id(),
+            quantity: quantity,
+            unit_price: money,
+            notes: optionalText(500),
+          })
+          .strict(),
+      )
+      .min(1, 'يجب إضافة بند واحد على الأقل في عرض السعر')
+      .max(100),
   })
   .strict();

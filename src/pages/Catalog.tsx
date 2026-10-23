@@ -16,6 +16,12 @@ import {
   Phone,
   Boxes,
   Wallet,
+  ShieldCheck,
+  TrendingUp,
+  History,
+  Calculator,
+  ShoppingBag,
+  Calendar,
 } from 'lucide-react';
 import {
   api,
@@ -50,6 +56,9 @@ import type {
   Document,
   CostMovement,
   ReorderSuggestion,
+  StockValuationResponse,
+  ExpiryAlertResponse,
+  WarehouseLocation,
 } from '../types';
 import { can } from '../auth';
 export function Products() {
@@ -320,6 +329,7 @@ export function ProductForm({
       sale_price: toCents(f.get('sale_price')),
       cost_price: toCents(f.get('cost_price')),
       min_stock: Number(f.get('min_stock')),
+      track_batches: f.get('track_batches') === 'on' ? 1 : 0,
       ...(!product ? { stock: Number(f.get('stock')), branch_id: String(f.get('branch_id')) } : {}),
     };
     void act(
@@ -439,6 +449,35 @@ export function ProductForm({
               </Field>
             </>
           )}
+          <div className="form-field" style={{ margin: '12px 0 6px 0' }}>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                cursor: 'pointer',
+                fontWeight: 600,
+              }}
+            >
+              <input
+                type="checkbox"
+                name="track_batches"
+                defaultChecked={Boolean(product?.track_batches)}
+                style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+              />
+              <span>تتبع أرقام التشغيلات وتواريخ الصلاحية (FEFO)</span>
+            </label>
+            <span
+              style={{
+                fontSize: '12px',
+                color: 'var(--slate-500)',
+                display: 'block',
+                marginTop: '4px',
+              }}
+            >
+              يلزم إدخال رقم التشغيلة والصلاحية عند الشراء، ويطبّق الصرف الآلي للأقرب انتهاءً أولاً.
+            </span>
+          </div>
           <div className="info-banner">
             <Package size={18} />
             <span>التكلفة المرجعية تستخدم في تقدير الربح، ولا تتغير تلقائياً مع المشتريات.</span>
@@ -456,6 +495,830 @@ export function ProductForm({
     </Modal>
   );
 }
+
+function CostHistoryModal({
+  product,
+  branchId,
+  onClose,
+}: {
+  product: { id: string; name: string; sku: string };
+  branchId?: string | null;
+  onClose: () => void;
+}) {
+  const url = withBranch(`/inventory/cost-history/${product.id}`, branchId || 'all');
+  const data = useData<CostMovement[]>(url);
+  const rows = data.data || [];
+
+  return (
+    <Modal title={`سجل حركة وتطور تكلفة WAC: ${product.name} (${product.sku})`} onClose={onClose}>
+      <div style={{ marginBottom: '16px', fontSize: '13px', color: 'var(--slate-600)' }}>
+        تتبع دقيق لكل حركة شراء أو بيع أو تحويل أو تسوية أثرت على متوسط التكلفة المرجح (WAC) لهذا
+        الصنف.
+      </div>
+      {data.loading ? (
+        <Loading />
+      ) : data.error ? (
+        <ErrorState message={data.error} retry={data.reload} />
+      ) : !rows.length ? (
+        <Empty
+          title="لا توجد حركات تكلفة سابقة"
+          description="لم يتم تسجيل حركات WAC لهذا الصنف بعد في هذا النطاق."
+        />
+      ) : (
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>التاريخ والوقت</th>
+                <th>الفرع</th>
+                <th>الكمية</th>
+                <th>تكلفة الحركة</th>
+                <th>المتوسط قبل</th>
+                <th>المتوسط بعد</th>
+                <th>السبب / المستند</th>
+                <th>بواسطة</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((cm) => (
+                <tr key={cm.id}>
+                  <td className="muted">{formatDate(cm.created_at, true)}</td>
+                  <td>{cm.branch_name}</td>
+                  <td>
+                    <span
+                      className={'movement-amount ' + (cm.delta_qty > 0 ? 'positive' : 'negative')}
+                      dir="ltr"
+                    >
+                      {cm.delta_qty > 0 ? '+' : ''}
+                      {cm.delta_qty}
+                    </span>
+                  </td>
+                  <td className="num">{money(cm.unit_cost, 2)}</td>
+                  <td className="num muted">{money(cm.avg_before, 2)}</td>
+                  <td className="num amount">
+                    <strong>{money(cm.avg_after, 2)}</strong>
+                  </td>
+                  <td>{cm.reason}</td>
+                  <td>{cm.user_name}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+function StockValuationView({
+  data,
+  query,
+  category,
+  stockFilter,
+  onCategoryChange,
+  onStockFilterChange,
+  page,
+  setPage,
+  onInspectCost,
+}: {
+  data: ReturnType<typeof useData<StockValuationResponse>>;
+  query: string;
+  category: string;
+  stockFilter: string;
+  onCategoryChange: (c: string) => void;
+  onStockFilterChange: (s: string) => void;
+  page: number;
+  setPage: (p: number) => void;
+  onInspectCost: (p: { id: string; name: string; sku: string }) => void;
+}) {
+  if (data.loading) return <Loading />;
+  if (data.error) return <ErrorState message={data.error} retry={data.reload} />;
+  const report = data.data;
+  if (!report) return <Empty title="لا توجد بيانات تقييم متاحة" />;
+
+  const filteredRows = report.rows.filter((r) => {
+    const matchesQuery = (r.name + ' ' + r.sku + ' ' + r.category)
+      .toLowerCase()
+      .includes(query.toLowerCase());
+    const matchesCat = category === 'all' || r.category === category;
+    const matchesStock =
+      stockFilter === 'all' ||
+      (stockFilter === 'in_stock' && r.quantity > 0) ||
+      (stockFilter === 'out_of_stock' && r.quantity === 0) ||
+      (stockFilter === 'negative' && r.quantity < 0);
+    return matchesQuery && matchesCat && matchesStock;
+  });
+
+  const pagedRows = filteredRows.slice((page - 1) * 10, page * 10);
+
+  return (
+    <>
+      {/* 1. Stat cards */}
+      <div className="stock-valuation-stats">
+        <Stat
+          label="إجمالي قيمة المخزون (WAC)"
+          value={money(report.summary.total_inventory_cost)}
+          icon={<Boxes size={22} />}
+          tone="indigo"
+          foot={`${count(report.summary.total_products)} صنف مسجل`}
+        />
+        <Stat
+          label="القيمة البيعية المتوقعة"
+          value={money(report.summary.total_inventory_retail)}
+          icon={<ShoppingBag size={22} />}
+          tone="purple"
+          foot="بالأسعار الحالية المعلنة"
+        />
+        <Stat
+          label="الأرباح المتوقعة بالمخزون"
+          value={money(report.summary.total_potential_profit)}
+          icon={<TrendingUp size={22} />}
+          tone="green"
+          foot="هامش الربح الإجمالي المقدر"
+        />
+        <Stat
+          label="متوسط هامش الربح"
+          value={`${report.summary.overall_margin_percent}%`}
+          icon={<Calculator size={22} />}
+          tone="amber"
+          foot={`${count(report.summary.total_quantity)} قطعة بالمخازن`}
+        />
+      </div>
+
+      {/* 2. GL Reconciliation Card */}
+      <div
+        className={
+          'gl-reconciliation-card ' + (report.gl_check.reconciled ? 'reconciled' : 'variance')
+        }
+      >
+        <div className="rec-details">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <ShieldCheck size={28} />
+            <div>
+              <strong style={{ fontSize: '15px' }}>المطابقة المحاسبية مع الأستاذ العام</strong>
+              <div style={{ fontSize: '13px', marginTop: '2px' }}>
+                {report.gl_check.reconciled
+                  ? `قيمة المخزون الفعلي مطابقة بنسبة 100% بالقرش مع حساب المخزون (${report.gl_check.account_code} - ${report.gl_check.account_name})`
+                  : `يوجد فارق محاسبي بين المخزون الفعلي ورصيد الحساب (${report.gl_check.account_code}) يتطلب المراجعة`}
+              </div>
+            </div>
+          </div>
+          <div className="rec-item">
+            <span>رصيد المخزون الدفتري</span>
+            <strong>{money(report.gl_check.gl_inventory_balance, 2)} ج.م</strong>
+          </div>
+          <div className="rec-item">
+            <span>تقييم المخزون الفعلي (WAC)</span>
+            <strong>{money(report.gl_check.stock_valuation_total, 2)} ج.م</strong>
+          </div>
+          <div className="rec-item">
+            <span>الفارق</span>
+            <strong style={{ color: report.gl_check.reconciled ? '#15803d' : '#b45309' }}>
+              {money(report.gl_check.variance, 2)} ج.م
+            </strong>
+          </div>
+        </div>
+        <Link to="/ledger?tab=statement&account=1140" className="btn btn-secondary btn-small">
+          كشف حساب المخزون <ArrowUpRight size={14} />
+        </Link>
+      </div>
+
+      {/* 3. Valuation Toolbar */}
+      <div
+        style={{
+          display: 'flex',
+          gap: '12px',
+          marginBottom: '16px',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontSize: '13px', color: 'var(--slate-600)', fontWeight: 500 }}>
+            التصنيف:
+          </span>
+          <select
+            value={category}
+            onChange={(e) => {
+              onCategoryChange(e.target.value);
+              setPage(1);
+            }}
+            className="filter-select"
+            style={{
+              padding: '6px 10px',
+              borderRadius: '6px',
+              border: '1px solid var(--slate-300)',
+              fontSize: '13px',
+            }}
+          >
+            <option value="all">كافة التصنيفات</option>
+            {report.categories.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontSize: '13px', color: 'var(--slate-600)', fontWeight: 500 }}>
+            حالة الرصيد:
+          </span>
+          <select
+            value={stockFilter}
+            onChange={(e) => {
+              onStockFilterChange(e.target.value);
+              setPage(1);
+            }}
+            className="filter-select"
+            style={{
+              padding: '6px 10px',
+              borderRadius: '6px',
+              border: '1px solid var(--slate-300)',
+              fontSize: '13px',
+            }}
+          >
+            <option value="all">كافة الحالات</option>
+            <option value="in_stock">المتوفر فقط بالمخزن</option>
+            <option value="out_of_stock">رصيد صفري (نفد)</option>
+            <option value="negative">رصيد سالب (عجز)</option>
+          </select>
+        </div>
+
+        <div style={{ marginRight: 'auto', fontSize: '13px', color: 'var(--slate-500)' }}>
+          عرض {filteredRows.length} من {report.rows.length} صنف
+        </div>
+      </div>
+
+      {/* 4. Table */}
+      {!filteredRows.length ? (
+        <Empty title="لا توجد أصناف مطابقة" description="جرب تغيير خيارات التصفية أو البحث." />
+      ) : (
+        <>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>المنتج</th>
+                  <th>الكود</th>
+                  <th>الفئة</th>
+                  <th>الكمية المتاحة</th>
+                  <th>متوسط التكلفة WAC</th>
+                  <th>إجمالي التكلفة</th>
+                  <th>سعر البيع</th>
+                  <th>القيمة البيعية</th>
+                  <th>الربح المتوقع</th>
+                  <th>هامش الربح</th>
+                  <th>سجل WAC</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pagedRows.map((r) => {
+                  const marginClass =
+                    r.margin_percent >= 30
+                      ? 'high'
+                      : r.margin_percent >= 15
+                        ? 'normal'
+                        : r.margin_percent > 0
+                          ? 'low'
+                          : 'loss';
+                  return (
+                    <tr key={r.product_id + (r.branch_id || '')}>
+                      <td>
+                        <strong>{r.name}</strong>
+                      </td>
+                      <td className="num muted">{r.sku}</td>
+                      <td>
+                        <span className="category-tag">{r.category}</span>
+                      </td>
+                      <td className="num amount">
+                        <strong>{r.quantity}</strong> <small>{r.unit}</small>
+                      </td>
+                      <td className="num">{money(r.unit_cost, 2)}</td>
+                      <td className="num amount">
+                        <strong>{money(r.total_cost, 2)}</strong>
+                      </td>
+                      <td className="num muted">{money(r.sale_price, 2)}</td>
+                      <td className="num amount">{money(r.total_retail, 2)}</td>
+                      <td
+                        className="num"
+                        style={{ color: r.potential_profit >= 0 ? '#15803d' : '#b91c1c' }}
+                      >
+                        {money(r.potential_profit, 2)}
+                      </td>
+                      <td>
+                        <span className={'margin-pill ' + marginClass} dir="ltr">
+                          {r.margin_percent}%
+                        </span>
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          className="cost-evolution-btn"
+                          title="عرض سجل تطور تكلفة الصنف"
+                          onClick={() =>
+                            onInspectCost({ id: r.product_id, name: r.name, sku: r.sku })
+                          }
+                        >
+                          <History size={13} /> حركة التكلفة
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <Pagination page={page} setPage={setPage} total={filteredRows.length} size={10} />
+        </>
+      )}
+    </>
+  );
+}
+
+function BatchesExpiryView({
+  activeId,
+  isGroup,
+  query,
+}: {
+  activeId: string;
+  isGroup: boolean;
+  query: string;
+}) {
+  const alertsData = useData<ExpiryAlertResponse>(withBranch('/inventory/expiry-alerts', activeId));
+  const [statusFilter, setStatusFilter] = useState<
+    'all' | 'expired' | 'critical' | 'warning' | 'healthy'
+  >('all');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [page, setPage] = useState(1);
+
+  if (alertsData.loading) return <Loading />;
+  if (alertsData.error) return <ErrorState message={alertsData.error} retry={alertsData.reload} />;
+
+  const data = alertsData.data;
+  if (!data) return <Empty title="لا توجد بيانات صلاحية وتشغيلات متاحة" />;
+
+  const summary = data.summary;
+  const filtered = data.batches.filter((b) => {
+    const matchesQuery = (b.product_name + ' ' + b.sku + ' ' + b.batch_number)
+      .toLowerCase()
+      .includes(query.toLowerCase());
+    const matchesCategory = categoryFilter === 'all' || b.category === categoryFilter;
+    const matchesStatus = statusFilter === 'all' || b.status?.toLowerCase() === statusFilter;
+    return matchesQuery && matchesCategory && matchesStatus;
+  });
+
+  const exportBatches = () => {
+    downloadCSV(
+      'تشغيلات-المخزون-والصلاحيات',
+      [
+        'الكود',
+        'المنتج',
+        'الفئة',
+        'الفرع',
+        'رقم التشغيلة',
+        'تاريخ الإنتاج',
+        'تاريخ الصلاحية',
+        'الأيام المتبقية',
+        'الكمية',
+        'التكلفة (ج.م)',
+        'الحالة',
+      ],
+      filtered.map((b) => [
+        b.sku || '',
+        b.product_name || '',
+        b.category || '',
+        b.branch_name || '',
+        b.batch_number,
+        b.production_date || '—',
+        b.expiry_date,
+        b.days_to_expiry !== undefined ? b.days_to_expiry : '',
+        b.quantity,
+        b.cost_price / 100,
+        b.status === 'EXPIRED'
+          ? 'منتهية الصلاحية'
+          : b.status === 'CRITICAL'
+            ? 'حرجة (< 30 يوم)'
+            : b.status === 'WARNING'
+              ? 'تحذيرية (< 90 يوم)'
+              : 'صالحة',
+      ]),
+    );
+  };
+
+  return (
+    <>
+      <div className="batches-stats">
+        <Stat
+          label="إجمالي التشغيلات النشطة"
+          value={count(summary.total_batches)}
+          icon={<Boxes size={22} />}
+          tone="indigo"
+          foot={`${summary.total_quantity} قطعة بالمخازن · ${money(summary.total_value)}`}
+        />
+        <Stat
+          label="منتهية الصلاحية (معزولة)"
+          value={count(summary.expired_count)}
+          icon={<AlertTriangle size={22} color="#dc2626" />}
+          tone="red"
+          foot={`${summary.expired_quantity} قطعة · ${money(summary.expired_value)}`}
+        />
+        <Stat
+          label="حرجة (أقل من 30 يوماً)"
+          value={count(summary.critical_count)}
+          icon={<AlertTriangle size={22} color="#ea580c" />}
+          tone="amber"
+          foot={`${summary.critical_quantity} قطعة · ${money(summary.critical_value)}`}
+        />
+        <Stat
+          label="تحذيرية (30 إلى 90 يوماً)"
+          value={count(summary.warning_count)}
+          icon={<Calendar size={22} color="#ca8a04" />}
+          tone="purple"
+          foot={`${summary.warning_quantity} قطعة · ${money(summary.warning_value)}`}
+        />
+      </div>
+
+      <div className="table-toolbar" style={{ margin: '12px 0' }}>
+        <div className="filter-group" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <select
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value as any);
+              setPage(1);
+            }}
+          >
+            <option value="all">كل الحالات ({data.batches.length})</option>
+            <option value="expired">منتهية الصلاحية ({summary.expired_count})</option>
+            <option value="critical">حرجة &lt; 30 يوم ({summary.critical_count})</option>
+            <option value="warning">تحذيرية 30-90 يوم ({summary.warning_count})</option>
+            <option value="healthy">صالحة ومستقرة ({summary.healthy_count})</option>
+          </select>
+
+          {data.categories.length > 0 && (
+            <select
+              value={categoryFilter}
+              onChange={(e) => {
+                setCategoryFilter(e.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="all">كل التصنيفات</option>
+              {data.categories.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          )}
+
+          <Button variant="secondary" onClick={exportBatches}>
+            <Download size={15} /> تصدير تشغيلات المخزون
+          </Button>
+        </div>
+      </div>
+
+      {filtered.length === 0 ? (
+        <Empty
+          title="لا توجد تشغيلات تطابق معايير البحث"
+          description="لم يتم العثور على دفعات مسجلة بهذه الفلاتر."
+        />
+      ) : (
+        <>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>الصنف والكود</th>
+                  {isGroup && <th>الفرع</th>}
+                  <th>رقم التشغيلة</th>
+                  <th>تاريخ الإنتاج</th>
+                  <th>تاريخ الانتهاء</th>
+                  <th>الأيام المتبقية</th>
+                  <th>الكمية المتاحة</th>
+                  <th>تكلفة الشراء</th>
+                  <th>الحالة والسياسة</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.slice((page - 1) * 15, page * 15).map((b) => (
+                  <tr key={b.id}>
+                    <td>
+                      <strong>{b.product_name}</strong>
+                      <small className="cell-sub muted">
+                        {b.sku} · {b.category}
+                      </small>
+                    </td>
+                    {isGroup && <td>{b.branch_name || b.branch_code}</td>}
+                    <td>
+                      <span className="batch-number-tag">{b.batch_number}</span>
+                    </td>
+                    <td className="muted">
+                      {b.production_date ? formatDate(b.production_date) : '—'}
+                    </td>
+                    <td>
+                      <strong className="num">{formatDate(b.expiry_date)}</strong>
+                    </td>
+                    <td>
+                      {b.days_to_expiry !== undefined && (
+                        <span
+                          className={`num ${
+                            b.days_to_expiry < 0
+                              ? 'negative'
+                              : b.days_to_expiry <= 30
+                                ? 'warning'
+                                : 'muted'
+                          }`}
+                        >
+                          {b.days_to_expiry < 0
+                            ? `منتهية منذ ${Math.abs(b.days_to_expiry)} يوم`
+                            : `${b.days_to_expiry} يوم`}
+                        </span>
+                      )}
+                    </td>
+                    <td className="num amount">
+                      <strong>{b.quantity}</strong> <small>{b.unit}</small>
+                    </td>
+                    <td className="num">{money(b.cost_price)}</td>
+                    <td>
+                      {b.status === 'EXPIRED' && (
+                        <span className="batch-status-pill expired">منتهية (معزولة)</span>
+                      )}
+                      {b.status === 'CRITICAL' && (
+                        <span className="batch-status-pill critical">حرجة (&lt; 30 يوم)</span>
+                      )}
+                      {b.status === 'WARNING' && (
+                        <span className="batch-status-pill warning">تحذيرية (&lt; 90 يوم)</span>
+                      )}
+                      {b.status === 'HEALTHY' && (
+                        <span className="batch-status-pill healthy">صالحة (FEFO)</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <Pagination page={page} setPage={setPage} total={filtered.length} size={15} />
+          <p className="table-bottom-note">
+            تطبق سياسة الصرف الذكية (FEFO: الأقرب انتهاءً يخرج أولاً) تلقائياً عند البيع، وتعزل
+            التشغيلات المنتهية وتمنع من الصرف.
+          </p>
+        </>
+      )}
+    </>
+  );
+}
+
+function WarehouseLocationsView({ activeId, query }: { activeId: string; query: string }) {
+  const { user } = useSession();
+  const { branches, defaultBranchId } = useBranch();
+  const data = useData<WarehouseLocation[]>(withBranch('/warehouse-locations', activeId));
+  const [editing, setEditing] = useState<WarehouseLocation | 'new' | null>(null);
+  const [page, setPage] = useState(1);
+  const { busy, act } = useAction();
+
+  if (data.loading) return <Loading />;
+  if (data.error) return <ErrorState message={data.error} retry={data.reload} />;
+
+  const locations = data.data || [];
+  const filtered = locations.filter((loc) => {
+    const q = query.toLowerCase();
+    return (
+      loc.code.toLowerCase().includes(q) ||
+      loc.name.toLowerCase().includes(q) ||
+      (loc.aisle || '').toLowerCase().includes(q) ||
+      (loc.rack || '').toLowerCase().includes(q)
+    );
+  });
+
+  const saveLocation = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    const payload = {
+      code: f.get('code'),
+      name: f.get('name'),
+      branch_id: f.get('branch_id'),
+      aisle: f.get('aisle') || undefined,
+      rack: f.get('rack') || undefined,
+      shelf: f.get('shelf') || undefined,
+      bin: f.get('bin') || undefined,
+      notes: f.get('notes') || undefined,
+      active: f.get('active') === 'on',
+    };
+
+    void act(async () => {
+      if (editing === 'new') {
+        await api('/warehouse-locations', 'POST', payload);
+      } else if (editing) {
+        await api(`/warehouse-locations/${editing.id}`, 'PUT', payload);
+      }
+      setEditing(null);
+      data.reload();
+    }, 'تم حفظ موقع التخزين بنجاح');
+  };
+
+  const toggleActive = (loc: WarehouseLocation) => {
+    void act(async () => {
+      await api(`/warehouse-locations/${loc.id}`, 'PUT', { active: !loc.active });
+      data.reload();
+    }, 'تم تغيير حالة الموقع');
+  };
+
+  return (
+    <>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '1rem',
+          flexWrap: 'wrap',
+          gap: '0.75rem',
+        }}
+      >
+        <p className="muted" style={{ margin: 0 }}>
+          تنظيم المستودع حسب الممرات والستاندات والأرفف والصناديق (Aisle / Rack / Shelf / Bin)
+          لتسريع الجرد والالتقاط.
+        </p>
+        {can(user, 'inventory:adjust') && (
+          <Button onClick={() => setEditing('new')}>
+            <Plus size={16} /> إضافة موقع تخزين
+          </Button>
+        )}
+      </div>
+
+      {!filtered.length ? (
+        <Empty
+          title="لا توجد مواقع تخزين معرفة"
+          description="أضف مواقع التخزين لتنظيم وترتيب أصناف المستودع."
+        />
+      ) : (
+        <>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>رمز الموقع</th>
+                  <th>الاسم / الوصف</th>
+                  <th>الفرع</th>
+                  <th>الممر (Aisle)</th>
+                  <th>الستاند (Rack)</th>
+                  <th>الرف (Shelf)</th>
+                  <th>الصندوق (Bin)</th>
+                  <th>الحالة</th>
+                  <th>إجراءات</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.slice((page - 1) * 15, page * 15).map((loc) => (
+                  <tr key={loc.id}>
+                    <td>
+                      <strong className="num" dir="ltr">
+                        {loc.code}
+                      </strong>
+                    </td>
+                    <td>{loc.name}</td>
+                    <td>{loc.branch_name || '—'}</td>
+                    <td className="num">{loc.aisle || '—'}</td>
+                    <td className="num">{loc.rack || '—'}</td>
+                    <td className="num">{loc.shelf || '—'}</td>
+                    <td className="num">{loc.bin || '—'}</td>
+                    <td>
+                      <span className={`badge ${loc.active ? 'paid' : 'cancelled'}`}>
+                        <i />
+                        {loc.active ? 'نشط' : 'معطل'}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="row-actions">
+                        <button className="btn-small" onClick={() => setEditing(loc)}>
+                          تعديل
+                        </button>
+                        <button className="btn-small" onClick={() => toggleActive(loc)}>
+                          {loc.active ? 'تعطيل' : 'تفعيل'}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <Pagination page={page} setPage={setPage} total={filtered.length} size={15} />
+        </>
+      )}
+
+      {editing && (
+        <Modal
+          title={
+            editing === 'new' ? 'إضافة موقع تخزين جديد' : `تعديل موقع التخزين: ${editing.code}`
+          }
+          onClose={() => setEditing(null)}
+        >
+          <form onSubmit={saveLocation}>
+            <div className="modal-body form-grid">
+              <div className="form-row">
+                <Field label="رمز الموقع (Unique Code) *">
+                  <input
+                    required
+                    name="code"
+                    dir="ltr"
+                    maxLength={50}
+                    defaultValue={editing !== 'new' ? editing.code : ''}
+                    placeholder="مثال: A-01-R2-B4"
+                  />
+                </Field>
+                <Field label="اسم الموقع أو الوصف *">
+                  <input
+                    required
+                    name="name"
+                    maxLength={100}
+                    defaultValue={editing !== 'new' ? editing.name : ''}
+                    placeholder="مثال: ستاند قطع الغيار 2"
+                  />
+                </Field>
+              </div>
+              <Field label="الفرع / المستودع *">
+                <select
+                  name="branch_id"
+                  defaultValue={editing !== 'new' ? editing.branch_id : defaultBranchId}
+                  required
+                >
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <div className="form-row">
+                <Field label="الممر (Aisle)">
+                  <input
+                    name="aisle"
+                    maxLength={20}
+                    defaultValue={editing !== 'new' ? editing.aisle || '' : ''}
+                    placeholder="A"
+                  />
+                </Field>
+                <Field label="الستاند (Rack)">
+                  <input
+                    name="rack"
+                    maxLength={20}
+                    defaultValue={editing !== 'new' ? editing.rack || '' : ''}
+                    placeholder="01"
+                  />
+                </Field>
+                <Field label="الرف (Shelf)">
+                  <input
+                    name="shelf"
+                    maxLength={20}
+                    defaultValue={editing !== 'new' ? editing.shelf || '' : ''}
+                    placeholder="02"
+                  />
+                </Field>
+                <Field label="الصندوق (Bin)">
+                  <input
+                    name="bin"
+                    maxLength={20}
+                    defaultValue={editing !== 'new' ? editing.bin || '' : ''}
+                    placeholder="B"
+                  />
+                </Field>
+              </div>
+              <Field label="ملاحظات">
+                <textarea
+                  name="notes"
+                  maxLength={500}
+                  defaultValue={editing !== 'new' ? editing.notes || '' : ''}
+                />
+              </Field>
+              <label
+                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}
+              >
+                <input
+                  type="checkbox"
+                  name="active"
+                  defaultChecked={editing !== 'new' ? Boolean(editing.active) : true}
+                />
+                موقع نشط وجاهز للتخزين
+              </label>
+            </div>
+            <div className="modal-footer">
+              <Button type="button" variant="secondary" onClick={() => setEditing(null)}>
+                إلغاء
+              </Button>
+              <Button type="submit" busy={busy}>
+                حفظ الموقع
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+    </>
+  );
+}
+
 export function Inventory() {
   const { user } = useSession();
   const [params] = useSearchParams();
@@ -466,18 +1329,29 @@ export function Inventory() {
     reorder = useData<ReorderSuggestion[]>(withBranch('/inventory/reorder', activeId)),
     costMovements = useData<CostMovement[]>(
       can(user, 'inventory:view') ? withBranch('/cost-movements', activeId) : null,
+    ),
+    valuation = useData<StockValuationResponse>(
+      can(user, 'inventory:view') ? withBranch('/inventory/valuation', activeId) : null,
     );
   const [query, setQuery] = useState(params.get('q') || ''),
     [low, setLow] = useState(params.get('low') === '1'),
-    [tab, setTab] = useState('levels'),
+    [tab, setTab] = useState(params.get('tab') || 'levels'),
+    [valCategory, setValCategory] = useState('all'),
+    [valStockFilter, setValStockFilter] = useState('all'),
+    [costHistoryProduct, setCostHistoryProduct] = useState<{
+      id: string;
+      name: string;
+      sku: string;
+    } | null>(null),
     [page, setPage] = useState(1),
     [adjust, setAdjust] = useState<Product | null>(null);
   const { busy, act } = useAction();
   useEffect(() => {
     setQuery(params.get('q') || '');
     setLow(params.get('low') === '1');
+    if (params.get('tab')) setTab(params.get('tab')!);
   }, [params]);
-  useEffect(() => setPage(1), [query, low, tab]);
+  useEffect(() => setPage(1), [query, low, tab, valCategory, valStockFilter]);
   const filtered = (products.data || []).filter(
     (p) =>
       p.active &&
@@ -531,20 +1405,51 @@ export function Inventory() {
                       (p.stock * p.cost_price) / 100,
                     ]),
                   )
-                : downloadCSV(
-                    'حركات-المخزون',
-                    ['التاريخ', 'المنتج', 'الكمية', 'السبب', 'المرجع'],
-                    moves.map((m) => [
-                      m.created_at,
-                      m.product_name,
-                      m.quantity,
-                      m.reason,
-                      m.number || '',
-                    ]),
-                  )
+                : tab === 'valuation' && valuation.data
+                  ? downloadCSV(
+                      'تقييم-المخزون-WAC',
+                      [
+                        'الكود',
+                        'المنتج',
+                        'الفئة',
+                        'الكمية المتاحة',
+                        'الوحدة',
+                        'متوسط التكلفة WAC',
+                        'إجمالي التكلفة',
+                        'سعر البيع',
+                        'إجمالي القيمة البيعية',
+                        'الربح المتوقع',
+                        'هامش الربح %',
+                      ],
+                      valuation.data.rows.map((r) => [
+                        r.sku,
+                        r.name,
+                        r.category,
+                        r.quantity,
+                        r.unit,
+                        r.unit_cost / 100,
+                        r.total_cost / 100,
+                        r.sale_price / 100,
+                        r.total_retail / 100,
+                        r.potential_profit / 100,
+                        r.margin_percent + '%',
+                      ]),
+                    )
+                  : downloadCSV(
+                      'حركات-المخزون',
+                      ['التاريخ', 'المنتج', 'الكمية', 'السبب', 'المرجع'],
+                      moves.map((m) => [
+                        m.created_at,
+                        m.product_name,
+                        m.quantity,
+                        m.reason,
+                        m.number || '',
+                      ]),
+                    )
             }
           >
-            <Download size={16} /> تصدير {tab === 'levels' ? 'المخزون' : 'الحركات'}
+            <Download size={16} /> تصدير{' '}
+            {tab === 'levels' ? 'المخزون' : tab === 'valuation' ? 'تقييم المخزون' : 'الحركات'}
           </Button>
         }
       />
@@ -570,6 +1475,23 @@ export function Inventory() {
           <div className="tabs">
             <button className={tab === 'levels' ? 'active' : ''} onClick={() => setTab('levels')}>
               أرصدة المخزون
+            </button>
+            {can(user, 'inventory:view') && (
+              <button
+                className={tab === 'valuation' ? 'active' : ''}
+                onClick={() => setTab('valuation')}
+              >
+                تقييم المخزون (WAC والمطابقة)
+              </button>
+            )}
+            <button className={tab === 'batches' ? 'active' : ''} onClick={() => setTab('batches')}>
+              التشغيلات والصلاحيات (FEFO)
+            </button>
+            <button
+              className={tab === 'locations' ? 'active' : ''}
+              onClick={() => setTab('locations')}
+            >
+              أماكن التخزين (Bins & Racks)
             </button>
             <button
               className={tab === 'movements' ? 'active' : ''}
@@ -616,6 +1538,22 @@ export function Inventory() {
           />
         ) : products.loading || movements.loading ? (
           <Loading />
+        ) : tab === 'valuation' ? (
+          <StockValuationView
+            data={valuation}
+            query={query}
+            category={valCategory}
+            stockFilter={valStockFilter}
+            onCategoryChange={setValCategory}
+            onStockFilterChange={setValStockFilter}
+            page={page}
+            setPage={setPage}
+            onInspectCost={setCostHistoryProduct}
+          />
+        ) : tab === 'batches' ? (
+          <BatchesExpiryView activeId={activeId} isGroup={isGroup} query={query} />
+        ) : tab === 'locations' ? (
+          <WarehouseLocationsView activeId={activeId} query={query} />
         ) : tab === 'levels' ? (
           <>
             {!filtered.length ? (
@@ -922,6 +1860,13 @@ export function Inventory() {
             </div>
           </form>
         </Modal>
+      )}
+      {costHistoryProduct && (
+        <CostHistoryModal
+          product={costHistoryProduct}
+          branchId={activeId}
+          onClose={() => setCostHistoryProduct(null)}
+        />
       )}
     </>
   );

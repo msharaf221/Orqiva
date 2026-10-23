@@ -9,3 +9,4 @@ dist/
 *.db-shm
 coverage/
 playwright-results/
+test-results/

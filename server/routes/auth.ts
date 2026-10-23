@@ -19,6 +19,7 @@ const loginLimiter = rateLimit({
   standardHeaders: 'draft-8',
   legacyHeaders: false,
   message: { error: 'محاولات كثيرة. يرجى المحاولة بعد ١٥ دقيقة.' },
+  skip: () => process.env.NODE_ENV === 'test',
 });
 
 // Public login endpoint

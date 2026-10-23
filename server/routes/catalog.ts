@@ -6,6 +6,8 @@ import { admin } from '../middleware';
 import { requirePermission } from '../rbac';
 import { scopeFor, scopeSql } from '../scope';
 import { listProducts, createProduct, updateProduct, adjustStock } from '../catalog';
+import { getStockValuation, getProductCostHistory } from '../cost';
+import { getProductBatches, getExpiryAlerts } from '../batches';
 import { stockMatrix } from '../reports';
 import {
   startStocktake,
@@ -18,6 +20,14 @@ import {
   cancelStocktake,
   reorderSuggestions,
 } from '../stocktake';
+import {
+  listLocations,
+  createLocation,
+  updateLocation,
+  assignProductLocation,
+  getProductLocations,
+  scanStocktakeBarcode,
+} from '../locations';
 
 export const catalogRouter = Router();
 
@@ -72,6 +82,41 @@ catalogRouter.get('/inventory/reorder', requirePermission('inventory:view'), (re
   );
 });
 
+// Pack 2.1: Stock Valuation (تقرير تقييم المخزون المتقدم والمطابقة مع الأستاذ العام)
+catalogRouter.get('/inventory/valuation', requirePermission('inventory:view'), (req, res) => {
+  const scope = scopeFor(req.user, req.query.branch_id);
+  const branchId = req.query.branch_id ? String(req.query.branch_id) : undefined;
+  const category = req.query.category ? String(req.query.category) : undefined;
+  const stockFilter = req.query.stock_filter ? String(req.query.stock_filter) : undefined;
+  res.json(getStockValuation(scope, branchId, category, stockFilter));
+});
+
+// Pack 2.1: Product WAC Cost History (سجل تطور تكلفة الصنف)
+catalogRouter.get(
+  '/inventory/cost-history/:productId',
+  requirePermission('inventory:view'),
+  (req, res) => {
+    const scope = scopeFor(req.user, req.query.branch_id);
+    const branchId = req.query.branch_id ? String(req.query.branch_id) : undefined;
+    res.json(getProductCostHistory(String(req.params.productId), branchId, scope));
+  },
+);
+
+// Pack 2.2: Product Batches for a specific branch
+catalogRouter.get('/products/:id/batches', (req, res) => {
+  const branchId = req.query.branch_id ? String(req.query.branch_id) : 'main';
+  res.json(getProductBatches(String(req.params.id), branchId));
+});
+
+// Pack 2.2: Batch & Expiry Alerts Report
+catalogRouter.get('/inventory/expiry-alerts', requirePermission('inventory:view'), (req, res) => {
+  const scope = scopeFor(req.user, req.query.branch_id);
+  const branchId = req.query.branch_id ? String(req.query.branch_id) : undefined;
+  const category = req.query.category ? String(req.query.category) : undefined;
+  const status = req.query.status ? String(req.query.status) : undefined;
+  res.json(getExpiryAlerts(scope, branchId, category, status));
+});
+
 // Periodic Stocktake (جرد دوري)
 catalogRouter.get('/stocktakes', requirePermission('inventory:view'), (req, res) => {
   res.json(
@@ -108,6 +153,33 @@ catalogRouter.post('/stocktakes/:id/cancel', requirePermission('inventory:adjust
   res.json(cancelStocktake(String(req.params.id), req.user));
 });
 
+// Barcode Stocktake Fast Scan
+catalogRouter.post('/stocktakes/:id/scan', requirePermission('inventory:adjust'), (req, res) => {
+  res.json(scanStocktakeBarcode(String(req.params.id), req.body, req.user));
+});
+
+// Warehouse Locations & Bins CRUD
+catalogRouter.get('/warehouse-locations', requirePermission('inventory:view'), (req, res) => {
+  const scope = scopeFor(req.user, req.query.branch_id);
+  res.json(listLocations(scope, req.query.branch_id as string | undefined));
+});
+
+catalogRouter.post('/warehouse-locations', requirePermission('inventory:adjust'), (req, res) => {
+  res.status(201).json(createLocation(req.body, req.user));
+});
+
+catalogRouter.put('/warehouse-locations/:id', requirePermission('inventory:adjust'), (req, res) => {
+  res.json(updateLocation(String(req.params.id), req.body, req.user));
+});
+
+catalogRouter.get('/products/:id/locations', requirePermission('inventory:view'), (req, res) => {
+  res.json(getProductLocations(String(req.params.id)));
+});
+
+catalogRouter.post('/products/:id/locations', requirePermission('inventory:adjust'), (req, res) => {
+  res.json(assignProductLocation(String(req.params.id), req.body, req.user));
+});
+
 // Stock Movements
 catalogRouter.get('/movements', (req, res) => {
   const scope = scopeFor(req.user, req.query.branch_id);
@@ -124,8 +196,8 @@ catalogRouter.get('/movements', (req, res) => {
   );
 });
 
-// Cost Movements History (Admin only)
-catalogRouter.get('/cost-movements', admin, (req, res) => {
+// Cost Movements History
+catalogRouter.get('/cost-movements', requirePermission('inventory:view'), (req, res) => {
   const scope = scopeFor(req.user, req.query.branch_id);
   const f = scopeSql('cm.branch_id', scope);
   res.json(
