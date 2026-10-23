@@ -13,6 +13,9 @@ import {
   AlertTriangle,
   Printer,
   Coins,
+  FileText,
+  TrendingUp,
+  Users,
 } from 'lucide-react';
 import {
   api,
@@ -44,9 +47,13 @@ import type {
   AccountStatementEntry,
   PosShift,
   PosShiftSummary,
+  Party,
 } from '../../types';
 import { useBranch, withBranch } from '../../branch';
 import { ShiftTreasuryAuditModal, ShiftZReportModal } from './shift-audit';
+import { ChequesView } from './cheques';
+import { ReconciliationView } from './reconciliation';
+import { PayrollView } from './payroll';
 
 // Cash & Bank Accounts (Treasury) -----------------------------------------------------------------
 
@@ -523,7 +530,11 @@ export function Accounts() {
   const transfersData = useData<AccountTransfer[]>('/cash-accounts/transfers');
   const shiftsData = useData<PosShift[]>(withBranch('/pos/shifts', activeId));
 
-  const [tab, setTab] = useState<'accounts' | 'transfers' | 'shifts'>('accounts');
+  const [tab, setTab] = useState<
+    'accounts' | 'transfers' | 'shifts' | 'cheques' | 'reconciliation' | 'payroll'
+  >('accounts');
+  const partiesData = useData<Party[]>('/parties');
+  const parties = partiesData.data || [];
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [shiftStatusFilter, setShiftStatusFilter] = useState<
@@ -717,7 +728,7 @@ export function Accounts() {
             foot="مدفوعات إلكترونية ومحافظ مثبتة بأرقام تسوية"
           />
         </div>
-      ) : (
+      ) : tab === 'accounts' || tab === 'transfers' ? (
         <div className="stats-grid three">
           <Stat
             label="إجمالي السيولة المتاحة"
@@ -741,11 +752,11 @@ export function Accounts() {
             foot={`${accounts.filter((a) => a.type !== 'BANK').length} خزائن نقدية ومحافظ`}
           />
         </div>
-      )}
+      ) : null}
 
       <section className="card">
-        <div className="table-toolbar">
-          <div className="tabs">
+        <div className="table-toolbar" style={{ flexWrap: 'wrap', gap: '8px' }}>
+          <div className="tabs" style={{ margin: 0, flexWrap: 'wrap' }}>
             <button
               className={tab === 'accounts' ? 'active' : ''}
               onClick={() => {
@@ -773,44 +784,73 @@ export function Accounts() {
             >
               <ShieldCheck size={14} /> تسويات ورديات نقاط البيع ({shifts.length})
             </button>
+            <button
+              className={tab === 'cheques' ? 'active' : ''}
+              onClick={() => {
+                setTab('cheques');
+                setPage(1);
+              }}
+            >
+              <FileText size={14} /> أوراق القبض والدفع (الشيكات)
+            </button>
+            <button
+              className={tab === 'reconciliation' ? 'active' : ''}
+              onClick={() => {
+                setTab('reconciliation');
+                setPage(1);
+              }}
+            >
+              <TrendingUp size={14} /> التسوية والتوقع المالي
+            </button>
+            <button
+              className={tab === 'payroll' ? 'active' : ''}
+              onClick={() => {
+                setTab('payroll');
+                setPage(1);
+              }}
+            >
+              <Users size={14} /> الرواتب والأجور (HR)
+            </button>
           </div>
-          <div className="table-filters">
-            <SearchBox
-              value={query}
-              onChange={setQuery}
-              placeholder={
-                tab === 'accounts'
-                  ? 'بحث عن حساب أو بنك...'
-                  : tab === 'transfers'
-                    ? 'بحث في التحويلات...'
-                    : 'بحث برقم الوردية أو الكاشير أو الباتش...'
-              }
-            />
-            {tab === 'accounts' && (
-              <select
-                className="filter-select"
-                value={typeFilter}
-                onChange={(e) => setTypeFilter(e.target.value)}
-              >
-                <option value="all">كل الأنواع</option>
-                <option value="CASH">خزائن نقدية</option>
-                <option value="BANK">حسابات بنكية</option>
-                <option value="WALLET">محافظ إلكترونية</option>
-              </select>
-            )}
-            {tab === 'shifts' && (
-              <select
-                className="filter-select"
-                value={shiftStatusFilter}
-                onChange={(e) => setShiftStatusFilter(e.target.value as any)}
-              >
-                <option value="all">كل حالات الورديات</option>
-                <option value="PENDING_REVIEW">بانتظار اعتماد الخزنة (معلقة)</option>
-                <option value="CLOSED">معتمدة ومقفلة</option>
-                <option value="OPEN">ورديات جارية مفتوحة</option>
-              </select>
-            )}
-          </div>
+          {['accounts', 'transfers', 'shifts'].includes(tab) && (
+            <div className="table-filters">
+              <SearchBox
+                value={query}
+                onChange={setQuery}
+                placeholder={
+                  tab === 'accounts'
+                    ? 'بحث عن حساب أو بنك...'
+                    : tab === 'transfers'
+                      ? 'بحث في التحويلات...'
+                      : 'بحث برقم الوردية أو الكاشير أو الباتش...'
+                }
+              />
+              {tab === 'accounts' && (
+                <select
+                  className="filter-select"
+                  value={typeFilter}
+                  onChange={(e) => setTypeFilter(e.target.value)}
+                >
+                  <option value="all">كل الأنواع</option>
+                  <option value="CASH">خزائن نقدية</option>
+                  <option value="BANK">حسابات بنكية</option>
+                  <option value="WALLET">محافظ إلكترونية</option>
+                </select>
+              )}
+              {tab === 'shifts' && (
+                <select
+                  className="filter-select"
+                  value={shiftStatusFilter}
+                  onChange={(e) => setShiftStatusFilter(e.target.value as any)}
+                >
+                  <option value="all">كل حالات الورديات</option>
+                  <option value="PENDING_REVIEW">بانتظار اعتماد الخزنة (معلقة)</option>
+                  <option value="CLOSED">معتمدة ومقفلة</option>
+                  <option value="OPEN">ورديات جارية مفتوحة</option>
+                </select>
+              )}
+            </div>
+          )}
         </div>
 
         {tab === 'accounts' ? (
@@ -960,151 +1000,168 @@ export function Accounts() {
               />
             </div>
           )
-        ) : shiftsData.error ? (
-          <ErrorState message={shiftsData.error} retry={shiftsData.reload} />
-        ) : shiftsData.loading ? (
-          <Loading />
-        ) : !filteredShifts.length ? (
-          <Empty description="لا توجد ورديات نقاط بيع مسجلة مطابقة للبحث" />
-        ) : (
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>رقم الوردية</th>
-                  <th>الفرع</th>
-                  <th>الكاشير</th>
-                  <th>توقيت الفتح / الإغلاق</th>
-                  <th>نقدية الدرج (كاش)</th>
-                  <th>البطاقات والفيزا</th>
-                  <th>إنستاباي والمحافظ</th>
-                  <th>ظرف الخزنة</th>
-                  <th>الحالة</th>
-                  <th>الإجراءات</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredShifts.slice((page - 1) * 10, page * 10).map((s) => (
-                  <tr key={s.id}>
-                    <td>
-                      <strong style={{ fontFamily: 'Manrope Variable, sans-serif' }}>
-                        #{s.number}
-                      </strong>
-                    </td>
-                    <td>{s.branch_id || 'عام'}</td>
-                    <td>
-                      <span className="font-semibold">{s.user_name || '—'}</span>
-                    </td>
-                    <td style={{ fontSize: '11.5px', color: 'var(--slate-500)' }}>
-                      <div>ف: {formatDate(s.opened_at || '', true)}</div>
-                      {s.closed_at && <div>غ: {formatDate(s.closed_at, true)}</div>}
-                    </td>
-                    <td>
-                      <div style={{ fontSize: '12.5px' }}>
-                        <span>
-                          مسلّم: <b>{money(s.cashier_declared_cash ?? s.closing_cash ?? 0)} ج.م</b>
-                        </span>
-                        {s.difference !== 0 && s.difference !== null && (
-                          <div
+        ) : tab === 'shifts' ? (
+          shiftsData.error ? (
+            <ErrorState message={shiftsData.error} retry={shiftsData.reload} />
+          ) : shiftsData.loading ? (
+            <Loading />
+          ) : !filteredShifts.length ? (
+            <Empty description="لا توجد ورديات نقاط بيع مسجلة مطابقة للبحث" />
+          ) : (
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>رقم الوردية</th>
+                    <th>الفرع</th>
+                    <th>الكاشير</th>
+                    <th>توقيت الفتح / الإغلاق</th>
+                    <th>نقدية الدرج (كاش)</th>
+                    <th>البطاقات والفيزا</th>
+                    <th>إنستاباي والمحافظ</th>
+                    <th>ظرف الخزنة</th>
+                    <th>الحالة</th>
+                    <th>الإجراءات</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredShifts.slice((page - 1) * 10, page * 10).map((s) => (
+                    <tr key={s.id}>
+                      <td>
+                        <strong style={{ fontFamily: 'Manrope Variable, sans-serif' }}>
+                          #{s.number}
+                        </strong>
+                      </td>
+                      <td>{s.branch_id || 'عام'}</td>
+                      <td>
+                        <span className="font-semibold">{s.user_name || '—'}</span>
+                      </td>
+                      <td style={{ fontSize: '11.5px', color: 'var(--slate-500)' }}>
+                        <div>ف: {formatDate(s.opened_at || '', true)}</div>
+                        {s.closed_at && <div>غ: {formatDate(s.closed_at, true)}</div>}
+                      </td>
+                      <td>
+                        <div style={{ fontSize: '12.5px' }}>
+                          <span>
+                            مسلّم:{' '}
+                            <b>{money(s.cashier_declared_cash ?? s.closing_cash ?? 0)} ج.م</b>
+                          </span>
+                          {s.difference !== 0 && s.difference !== null && (
+                            <div
+                              style={{
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                color: s.difference < 0 ? '#dc2626' : '#2563eb',
+                              }}
+                            >
+                              {s.difference < 0
+                                ? `عجز: -${money(Math.abs(s.difference))} ج.م`
+                                : `زيادة: +${money(s.difference)} ج.م`}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ fontSize: '12.5px' }}>
+                          <span>{money(s.cashier_declared_card ?? s.expected_card ?? 0)} ج.م</span>
+                          {s.terminal_batch_number && (
+                            <div style={{ fontSize: '10.5px', color: '#2563eb', fontWeight: 600 }}>
+                              باتش: #{s.terminal_batch_number} ({s.card_slips_count || 0} إيصال)
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ fontSize: '12.5px' }}>
+                          <span>{money(s.cashier_declared_bank ?? s.expected_bank ?? 0)} ج.م</span>
+                          {(s.bank_transfers_count || 0) > 0 && (
+                            <div style={{ fontSize: '10.5px', color: '#059669', fontWeight: 600 }}>
+                              {s.bank_transfers_count} عملية تحويل
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td>
+                        {s.safe_envelope_number ? (
+                          <span
                             style={{
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              background: '#ede9fe',
+                              color: '#5b21b6',
                               fontSize: '11px',
                               fontWeight: 700,
-                              color: s.difference < 0 ? '#dc2626' : '#2563eb',
                             }}
                           >
-                            {s.difference < 0
-                              ? `عجز: -${money(Math.abs(s.difference))} ج.م`
-                              : `زيادة: +${money(s.difference)} ج.م`}
-                          </div>
+                            #{s.safe_envelope_number}
+                          </span>
+                        ) : (
+                          <span style={{ color: 'var(--muted)', fontSize: '11px' }}>—</span>
                         )}
-                      </div>
-                    </td>
-                    <td>
-                      <div style={{ fontSize: '12.5px' }}>
-                        <span>{money(s.cashier_declared_card ?? s.expected_card ?? 0)} ج.م</span>
-                        {s.terminal_batch_number && (
-                          <div style={{ fontSize: '10.5px', color: '#2563eb', fontWeight: 600 }}>
-                            باتش: #{s.terminal_batch_number} ({s.card_slips_count || 0} إيصال)
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    <td>
-                      <div style={{ fontSize: '12.5px' }}>
-                        <span>{money(s.cashier_declared_bank ?? s.expected_bank ?? 0)} ج.م</span>
-                        {(s.bank_transfers_count || 0) > 0 && (
-                          <div style={{ fontSize: '10.5px', color: '#059669', fontWeight: 600 }}>
-                            {s.bank_transfers_count} عملية تحويل
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    <td>
-                      {s.safe_envelope_number ? (
+                      </td>
+                      <td>
                         <span
-                          style={{
-                            padding: '2px 8px',
-                            borderRadius: '4px',
-                            background: '#ede9fe',
-                            color: '#5b21b6',
-                            fontSize: '11px',
-                            fontWeight: 700,
-                          }}
+                          className={
+                            s.status === 'CLOSED'
+                              ? 'badge green'
+                              : s.status === 'PENDING_REVIEW'
+                                ? 'badge amber'
+                                : 'badge blue'
+                          }
                         >
-                          #{s.safe_envelope_number}
-                        </span>
-                      ) : (
-                        <span style={{ color: 'var(--muted)', fontSize: '11px' }}>—</span>
-                      )}
-                    </td>
-                    <td>
-                      <span
-                        className={
-                          s.status === 'CLOSED'
-                            ? 'badge green'
+                          {s.status === 'CLOSED'
+                            ? 'معتمدة ومقفلة'
                             : s.status === 'PENDING_REVIEW'
-                              ? 'badge amber'
-                              : 'badge blue'
-                        }
-                      >
-                        {s.status === 'CLOSED'
-                          ? 'معتمدة ومقفلة'
-                          : s.status === 'PENDING_REVIEW'
-                            ? 'بانتظار الاعتماد'
-                            : 'وردية جارية'}
-                      </span>
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', gap: '6px' }}>
-                        {s.status === 'PENDING_REVIEW' && (
+                              ? 'بانتظار الاعتماد'
+                              : 'وردية جارية'}
+                        </span>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          {s.status === 'PENDING_REVIEW' && (
+                            <Button
+                              style={{ padding: '4px 10px', fontSize: '12px' }}
+                              onClick={() => setAuditingShiftId(s.id)}
+                            >
+                              <ShieldCheck size={14} /> اعتماد ومطابقة
+                            </Button>
+                          )}
                           <Button
+                            variant="secondary"
                             style={{ padding: '4px 10px', fontSize: '12px' }}
-                            onClick={() => setAuditingShiftId(s.id)}
+                            onClick={async () => {
+                              try {
+                                const sum = await api<PosShiftSummary>(
+                                  `/pos/shifts/${s.id}/summary`,
+                                );
+                                setViewingHandoverShift({ shift: s, summary: sum });
+                              } catch (err: any) {
+                                toast(err.message || 'تعذر تحميل ملخص الوردية');
+                              }
+                            }}
                           >
-                            <ShieldCheck size={14} /> اعتماد ومطابقة
+                            <Printer size={14} /> Z-Report
                           </Button>
-                        )}
-                        <Button
-                          variant="secondary"
-                          style={{ padding: '4px 10px', fontSize: '12px' }}
-                          onClick={async () => {
-                            try {
-                              const sum = await api<PosShiftSummary>(`/pos/shifts/${s.id}/summary`);
-                              setViewingHandoverShift({ shift: s, summary: sum });
-                            } catch (err: any) {
-                              toast(err.message || 'تعذر تحميل ملخص الوردية');
-                            }
-                          }}
-                        >
-                          <Printer size={14} /> Z-Report
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <Pagination page={page} setPage={setPage} total={filteredShifts.length} size={10} />
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <Pagination page={page} setPage={setPage} total={filteredShifts.length} size={10} />
+            </div>
+          )
+        ) : tab === 'cheques' ? (
+          <div style={{ padding: '16px' }}>
+            <ChequesView accounts={accounts} parties={parties} />
+          </div>
+        ) : tab === 'reconciliation' ? (
+          <div style={{ padding: '16px' }}>
+            <ReconciliationView accounts={accounts} />
+          </div>
+        ) : (
+          <div style={{ padding: '16px' }}>
+            <PayrollView />
           </div>
         )}
       </section>

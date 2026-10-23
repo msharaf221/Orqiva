@@ -724,3 +724,49 @@ export const landedCostSchema = z
     notes: optionalText(500),
   })
   .strict();
+
+export const priceListSchema = z
+  .object({
+    name: z.string().trim().min(2, 'اسم قائمة الأسعار مطلوب').max(100),
+    code: z.string().trim().min(2, 'كود قائمة الأسعار مطلوب').max(50),
+    discount_basis_pts: z.number().int().min(0).max(10000).default(0),
+    is_default: z.boolean().optional(),
+    is_active: z.boolean().optional(),
+    notes: optionalText(500),
+  })
+  .strict();
+
+export const priceListItemSchema = z
+  .object({
+    price_list_id: id(),
+    product_id: id(),
+    min_quantity: z.number().int().min(1, 'الكمية الدنيا يجب أن تكون 1 على الأقل').default(1),
+    price: money.refine((n) => n >= 0, 'السعر لا يمكن أن يكون سالباً'),
+  })
+  .strict();
+
+export const quotationSchema = z
+  .object({
+    type: z.enum(['QUOTATION', 'PROFORMA']).default('QUOTATION'),
+    branch_id: id(),
+    party_id: id(),
+    date,
+    valid_until: date.optional().nullable(),
+    tax_rate: z.number().int().min(0).max(10000).default(1400),
+    discount: money.default(0),
+    notes: optionalText(2000),
+    lines: z
+      .array(
+        z
+          .object({
+            product_id: id(),
+            quantity: quantity,
+            unit_price: money,
+            notes: optionalText(500),
+          })
+          .strict(),
+      )
+      .min(1, 'يجب إضافة بند واحد على الأقل في عرض السعر')
+      .max(100),
+  })
+  .strict();

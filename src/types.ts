@@ -1240,3 +1240,171 @@ export interface LandedCost {
   created_at: string;
   allocations?: LandedCostAllocation[];
 }
+
+// Phase 3: Price Lists & Quotations
+export interface PriceList {
+  id: string;
+  name: string;
+  code: string;
+  discount_basis_pts: number;
+  is_active: number;
+  is_default: number;
+  notes?: string | null;
+  created_at: string;
+  items_count?: number;
+}
+
+export interface PriceListItem {
+  id: string;
+  price_list_id: string;
+  product_id: string;
+  product_name?: string;
+  sku?: string;
+  min_quantity: number;
+  price: number;
+  created_at: string;
+}
+
+export type QuotationType = 'QUOTATION' | 'PROFORMA';
+export type QuotationStatus = 'DRAFT' | 'CONFIRMED' | 'CONVERTED' | 'REJECTED' | 'EXPIRED';
+
+export interface QuotationLine {
+  id: string;
+  quotation_id: string;
+  product_id: string;
+  product_name?: string;
+  sku?: string;
+  quantity: number;
+  unit_price: number;
+  total: number;
+  notes?: string | null;
+}
+
+export interface Quotation {
+  id: string;
+  number: string;
+  type: QuotationType;
+  branch_id: string;
+  branch_name?: string;
+  party_id: string;
+  party_name?: string;
+  party_phone?: string;
+  date: string;
+  valid_until?: string | null;
+  status: QuotationStatus;
+  subtotal: number;
+  discount: number;
+  tax_rate: number;
+  tax: number;
+  total: number;
+  converted_document_id?: string | null;
+  converted_document_number?: string | null;
+  notes?: string | null;
+  created_by?: string;
+  created_by_name?: string;
+  created_at: string;
+  updated_at: string;
+  lines?: QuotationLine[];
+}
+
+// Phase 4: Cheques, Bank Reconciliation & Cost Centers
+export type ChequeType = 'RECEIVABLE' | 'PAYABLE';
+export type ChequeStatus =
+  'PORTFOLIO' | 'COLLECTED' | 'DEPOSITED' | 'BOUNCED' | 'CANCELLED' | 'PAID';
+
+export interface Cheque {
+  id: string;
+  number: string;
+  type: ChequeType;
+  party_id: string;
+  party_name?: string;
+  bank_name: string;
+  branch_name?: string | null;
+  amount: number;
+  issue_date: string;
+  due_date: string;
+  status: ChequeStatus;
+  cash_account_id?: string | null;
+  cash_account_name?: string | null;
+  journal_entry_id?: string | null;
+  notes?: string | null;
+  created_by?: string;
+  created_by_name?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CostCenter {
+  id: string;
+  code: string;
+  name: string;
+  parent_id?: string | null;
+  is_active: number;
+  notes?: string | null;
+  created_at: string;
+}
+
+// Phase 5: Egyptian Payroll
+export type EmploymentType = 'FULL_TIME' | 'PART_TIME' | 'CONTRACT';
+
+export interface Employee {
+  id: string;
+  code: string;
+  name: string;
+  national_id?: string | null;
+  phone?: string | null;
+  job_title: string;
+  department?: string | null;
+  branch_id: string;
+  branch_name?: string;
+  employment_type: EmploymentType;
+  basic_salary: number;
+  variable_salary: number;
+  insured_salary: number;
+  insurance_number?: string | null;
+  active: number;
+  hire_date: string;
+  created_at: string;
+}
+
+export interface PayrollRun {
+  id: string;
+  month: string; // YYYY-MM
+  branch_id?: string | null;
+  branch_name?: string | null;
+  status: 'DRAFT' | 'CONFIRMED' | 'PAID' | 'CANCELLED';
+  total_basic: number;
+  total_variable: number;
+  total_gross: number;
+  total_social_insurance_employee: number;
+  total_social_insurance_employer: number;
+  total_income_tax: number;
+  total_martyrs_fund: number;
+  total_advances: number;
+  total_net: number;
+  journal_entry_id?: string | null;
+  notes?: string | null;
+  created_by?: string;
+  created_at: string;
+  slips?: PayrollSlip[];
+}
+
+export interface PayrollSlip {
+  id: string;
+  payroll_run_id: string;
+  employee_id: string;
+  employee_name?: string;
+  employee_code?: string;
+  job_title?: string;
+  basic_salary: number;
+  variable_salary: number;
+  gross_salary: number;
+  social_insurance_employee: number;
+  social_insurance_employer: number;
+  income_tax: number;
+  martyrs_fund: number;
+  advances_deduction: number;
+  other_deductions: number;
+  net_salary: number;
+  notes?: string | null;
+}

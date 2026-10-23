@@ -24,7 +24,27 @@ import {
   listLandedCosts,
   applyLandedCost,
 } from '../purchase_orders';
-import type { Document } from '../../src/types';
+import {
+  listPriceLists,
+  getPriceList,
+  createPriceList,
+  updatePriceList,
+  setPriceListItem,
+  deletePriceListItem,
+  assignPartyPriceList,
+  getPartyPriceList,
+  resolveProductPrice,
+} from '../pricing';
+import {
+  listQuotations,
+  getQuotation,
+  createQuotation,
+  confirmQuotation,
+  rejectQuotation,
+  convertQuotationToSale,
+} from '../quotations';
+import { priceListSchema, priceListItemSchema, quotationSchema } from '../validation';
+import type { Document, QuotationType, QuotationStatus } from '../../src/types';
 
 export const documentsRouter = Router();
 
@@ -169,3 +189,105 @@ documentsRouter.post(
     res.status(201).json(applyLandedCost(String(req.params.id), req.body, req.user));
   },
 );
+
+// --- Phase 3: Quotations & Proforma Invoices ---
+
+documentsRouter.get('/quotations', (req, res) => {
+  const branchId = req.query.branch_id ? String(req.query.branch_id) : undefined;
+  const type = req.query.type ? (String(req.query.type) as QuotationType) : undefined;
+  const status = req.query.status ? (String(req.query.status) as QuotationStatus) : undefined;
+  res.json(listQuotations({ branchId, type, status }));
+});
+
+documentsRouter.post('/quotations', requirePermission('documents:create'), (req, res) => {
+  const parsed = quotationSchema.parse(req.body);
+  res.status(201).json(createQuotation(parsed, req.user?.id));
+});
+
+documentsRouter.get('/quotations/:id', (req, res) => {
+  const q = getQuotation(String(req.params.id));
+  if (!q) throw new AppError(404, 'عرض السعر غير موجود');
+  res.json(q);
+});
+
+documentsRouter.post(
+  '/quotations/:id/confirm',
+  requirePermission('documents:create'),
+  (req, res) => {
+    res.json(confirmQuotation(String(req.params.id), req.user?.id));
+  },
+);
+
+documentsRouter.post(
+  '/quotations/:id/reject',
+  requirePermission('documents:create'),
+  (req, res) => {
+    res.json(rejectQuotation(String(req.params.id), req.user?.id));
+  },
+);
+
+documentsRouter.post(
+  '/quotations/:id/convert',
+  requirePermission('documents:create'),
+  (req, res) => {
+    res.json(convertQuotationToSale(String(req.params.id), req.user?.id));
+  },
+);
+
+// --- Phase 3: Price Lists & Customer Tiers ---
+
+documentsRouter.get('/price-lists', (_req, res) => {
+  res.json(listPriceLists());
+});
+
+documentsRouter.post('/price-lists', requirePermission('catalog:edit'), (req, res) => {
+  const parsed = priceListSchema.parse(req.body);
+  res.status(201).json(createPriceList(parsed));
+});
+
+documentsRouter.get('/price-lists/:id', (req, res) => {
+  const pl = getPriceList(String(req.params.id));
+  if (!pl) throw new AppError(404, 'قائمة الأسعار غير موجودة');
+  res.json(pl);
+});
+
+documentsRouter.put('/price-lists/:id', requirePermission('catalog:edit'), (req, res) => {
+  res.json(updatePriceList(String(req.params.id), req.body));
+});
+
+documentsRouter.post('/price-lists/:id/items', requirePermission('catalog:edit'), (req, res) => {
+  const parsed = priceListItemSchema.parse({
+    ...req.body,
+    price_list_id: req.params.id,
+  });
+  res.status(201).json(setPriceListItem(parsed));
+});
+
+documentsRouter.delete(
+  '/price-lists/items/:itemId',
+  requirePermission('catalog:edit'),
+  (req, res) => {
+    deletePriceListItem(String(req.params.itemId));
+    res.json({ ok: true });
+  },
+);
+
+documentsRouter.get('/pricing/resolve', (req, res) => {
+  const productId = String(req.query.product_id || '');
+  const quantity = Math.max(1, parseInt(String(req.query.quantity || '1')) || 1);
+  const partyId = req.query.party_id ? String(req.query.party_id) : undefined;
+  const priceListId = req.query.price_list_id ? String(req.query.price_list_id) : undefined;
+
+  if (!productId) throw new AppError(400, 'كود المنتج مطلوب');
+  res.json(resolveProductPrice(productId, quantity, partyId, priceListId));
+});
+
+documentsRouter.post('/parties/:id/price-list', requirePermission('parties:edit'), (req, res) => {
+  const plId = req.body.price_list_id ? String(req.body.price_list_id) : null;
+  assignPartyPriceList(String(req.params.id), plId);
+  res.json({ ok: true });
+});
+
+documentsRouter.get('/parties/:id/price-list', (req, res) => {
+  res.json(getPartyPriceList(String(req.params.id)));
+});

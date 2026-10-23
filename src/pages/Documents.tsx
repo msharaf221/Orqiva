@@ -57,6 +57,7 @@ import type {
   CashAccount,
   PurchaseOrder,
   LandedCost,
+  Quotation,
 } from '../types';
 import { can } from '../auth';
 import {
@@ -74,10 +75,12 @@ export function Documents({ type }: { type: DocType }) {
   const { user } = useSession();
   const [params] = useSearchParams();
   const { activeId, isGroup } = useBranch();
-  const [kind, setKind] = useState<'invoices' | 'returns' | 'orders'>('invoices');
+  const [kind, setKind] = useState<'invoices' | 'returns' | 'orders' | 'quotations'>('invoices');
   const currentType = kind === 'returns' ? returnType : type;
   const data = useData<Document[]>(
-    kind === 'orders' ? null : withBranch('/documents?type=' + currentType, activeId),
+    kind === 'orders' || kind === 'quotations'
+      ? null
+      : withBranch('/documents?type=' + currentType, activeId),
   );
   const [query, setQuery] = useState(''),
     [status, setStatus] = useState(params.get('status') || 'all'),
@@ -286,6 +289,17 @@ export function Documents({ type }: { type: DocType }) {
                 <Package size={13} /> أوامر الشراء (Purchase Orders)
               </button>
             )}
+            {sale && (
+              <button
+                className={kind === 'quotations' ? 'active' : ''}
+                onClick={() => {
+                  setKind('quotations');
+                  setStatus('all');
+                }}
+              >
+                <FileText size={13} /> عروض الأسعار والمبدئية (Quotations)
+              </button>
+            )}
           </div>
           <div className="table-filters">
             <SearchBox
@@ -296,10 +310,12 @@ export function Documents({ type }: { type: DocType }) {
                   ? 'بحث برقم الإشعار أو الفاتورة أو الطرف...'
                   : kind === 'orders'
                     ? 'بحث برقم أمر الشراء أو المورد...'
-                    : 'بحث برقم الفاتورة أو الحساب...'
+                    : kind === 'quotations'
+                      ? 'بحث برقم عرض السعر أو العميل...'
+                      : 'بحث برقم الفاتورة أو الحساب...'
               }
             />
-            {kind !== 'orders' && (
+            {kind !== 'orders' && kind !== 'quotations' && (
               <select
                 className="filter-select"
                 value={status}
@@ -325,6 +341,10 @@ export function Documents({ type }: { type: DocType }) {
         {kind === 'orders' ? (
           <div style={{ padding: '1.25rem' }}>
             <PurchaseOrdersView activeId={activeId} isGroup={isGroup} query={query} />
+          </div>
+        ) : kind === 'quotations' ? (
+          <div style={{ padding: '1.25rem' }}>
+            <QuotationsView activeId={activeId} isGroup={isGroup} query={query} />
           </div>
         ) : data.error ? (
           <ErrorState message={data.error} retry={data.reload} />
@@ -2534,6 +2554,510 @@ function CreatePurchaseOrderModal({
         <div className="modal-footer">
           <Button type="submit" busy={busy}>
             حفظ أمر الشراء
+          </Button>
+          <Button type="button" variant="secondary" onClick={onClose}>
+            إلغاء
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function QuotationsView({
+  activeId,
+  isGroup,
+  query,
+}: {
+  activeId: string;
+  isGroup: boolean;
+  query: string;
+}) {
+  const { user } = useSession();
+  const { branches, defaultBranchId } = useBranch();
+  const quotations = useData<Quotation[]>(withBranch('/quotations', activeId));
+  const customers = useData<Party[]>('/parties?type=CUSTOMER');
+  const products = useData<Product[]>(withBranch('/products', activeId));
+
+  const [creating, setCreating] = useState(false);
+  const [page, setPage] = useState(1);
+  const { act } = useAction();
+
+  if (quotations.loading) return <Loading />;
+  if (quotations.error) return <ErrorState message={quotations.error} retry={quotations.reload} />;
+
+  const STATUS_LABELS: Record<string, string> = {
+    DRAFT: 'مسودة',
+    CONFIRMED: 'مؤكد وبانتظار الموافقة',
+    CONVERTED: 'تم التحويل لفاتورة بيع',
+    REJECTED: 'مرفوض',
+    EXPIRED: 'منتهي الصلاحية',
+  };
+
+  const STATUS_TONE: Record<string, string> = {
+    DRAFT: 'draft',
+    CONFIRMED: 'pending',
+    CONVERTED: 'paid',
+    REJECTED: 'cancelled',
+    EXPIRED: 'cancelled',
+  };
+
+  const list = (quotations.data || []).filter((q) => {
+    const qStr = query.toLowerCase();
+    return (
+      q.number.toLowerCase().includes(qStr) ||
+      (q.party_name || '').toLowerCase().includes(qStr) ||
+      (q.notes || '').toLowerCase().includes(qStr)
+    );
+  });
+
+  const confirmQ = (q: Quotation) => {
+    void act(async () => {
+      await api(`/quotations/${q.id}/confirm`, 'POST', {});
+      quotations.reload();
+    }, `تم تأكيد عرض السعر ${q.number}`);
+  };
+
+  const rejectQ = (q: Quotation) => {
+    void act(async () => {
+      await api(`/quotations/${q.id}/reject`, 'POST', {});
+      quotations.reload();
+    }, `تم رفض عرض السعر ${q.number}`);
+  };
+
+  const convertToSale = (q: Quotation) => {
+    void act(async () => {
+      await api(`/quotations/${q.id}/convert`, 'POST', {});
+      quotations.reload();
+    }, `تم تحويل ${q.number} بنجاح إلى فاتورة بيع`);
+  };
+
+  return (
+    <>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '1rem',
+          flexWrap: 'wrap',
+          gap: '0.75rem',
+        }}
+      >
+        <p className="muted" style={{ margin: 0 }}>
+          إدارة عروض الأسعار الرسمية والفواتير المبدئية ومتابعة موافقة العملاء وتحويلها بنقرة واحدة
+          إلى فواتير بيع معتمدة.
+        </p>
+        {can(user, 'documents:create') && (
+          <Button onClick={() => setCreating(true)}>
+            <Plus size={16} /> عرض سعر / مبدئية جديدة
+          </Button>
+        )}
+      </div>
+
+      {!list.length ? (
+        <Empty
+          title="لا توجد عروض أسعار أو فواتير مبدئية"
+          description="أنشئ عرض سعر رسمي للعميل مع تحديد مدة السريان والخصومات وتحويله آلياً عند الموافقة."
+        />
+      ) : (
+        <>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>الرقم</th>
+                  <th>النوع</th>
+                  <th>العميل</th>
+                  {isGroup && <th>الفرع</th>}
+                  <th>تاريخ العرض</th>
+                  <th>صالح حتى</th>
+                  <th>الحالة</th>
+                  <th>الإجمالي</th>
+                  <th>إجراءات</th>
+                </tr>
+              </thead>
+              <tbody>
+                {list.slice((page - 1) * 15, page * 15).map((q) => (
+                  <tr key={q.id}>
+                    <td>
+                      <strong className="num" dir="ltr">
+                        {q.number}
+                      </strong>
+                    </td>
+                    <td>
+                      <span className="badge">
+                        {q.type === 'PROFORMA' ? 'فاتورة مبدئية' : 'عرض سعر'}
+                      </span>
+                    </td>
+                    <td>
+                      <strong>{q.party_name}</strong>
+                      {q.party_phone && <small className="cell-sub num">{q.party_phone}</small>}
+                    </td>
+                    {isGroup && <td>{q.branch_name || '—'}</td>}
+                    <td>{formatDate(q.date, true)}</td>
+                    <td className="muted">
+                      {q.valid_until ? formatDate(q.valid_until, true) : '—'}
+                    </td>
+                    <td>
+                      <span className={`badge ${STATUS_TONE[q.status] || 'draft'}`}>
+                        <i />
+                        {STATUS_LABELS[q.status] || q.status}
+                      </span>
+                    </td>
+                    <td className="num amount">
+                      <strong>{money(q.total, 2)}</strong> <small>ج.م</small>
+                    </td>
+                    <td>
+                      <div className="row-actions">
+                        {q.status === 'DRAFT' && can(user, 'documents:create') && (
+                          <button className="btn-small" onClick={() => confirmQ(q)}>
+                            تأكيد
+                          </button>
+                        )}
+                        {q.status === 'CONFIRMED' && can(user, 'documents:create') && (
+                          <button
+                            className="btn-small"
+                            onClick={() => convertToSale(q)}
+                            title="تحويل إلى فاتورة مبيعات"
+                          >
+                            تحويل لفاتورة
+                          </button>
+                        )}
+                        {(q.status === 'DRAFT' || q.status === 'CONFIRMED') &&
+                          can(user, 'documents:create') && (
+                            <button className="btn-small danger" onClick={() => rejectQ(q)}>
+                              رفض
+                            </button>
+                          )}
+                        {q.status === 'CONVERTED' && q.converted_document_number && (
+                          <Link
+                            to={`/sales/${q.converted_document_id}`}
+                            className="btn-small"
+                            style={{ textDecoration: 'none' }}
+                          >
+                            عرض الفاتورة ({q.converted_document_number})
+                          </Link>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <Pagination page={page} setPage={setPage} total={list.length} size={15} />
+        </>
+      )}
+
+      {creating && (
+        <CreateQuotationModal
+          branches={branches}
+          defaultBranchId={defaultBranchId}
+          customers={customers.data || []}
+          products={products.data || []}
+          onClose={() => setCreating(false)}
+          onSaved={() => {
+            setCreating(false);
+            quotations.reload();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function CreateQuotationModal({
+  branches,
+  defaultBranchId,
+  customers,
+  products,
+  onClose,
+  onSaved,
+}: {
+  branches: Array<{ id: string; name: string }>;
+  defaultBranchId: string;
+  customers: Party[];
+  products: Product[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [type, setType] = useState<'QUOTATION' | 'PROFORMA'>('QUOTATION');
+  const [branchId, setBranchId] = useState(defaultBranchId);
+  const [partyId, setPartyId] = useState(customers[0]?.id || '');
+  const [date, setDate] = useState(today());
+  const [validUntil, setValidUntil] = useState(dayOffset(30));
+  const [taxRate] = useState(1400); // 14%
+  const [discountPounds, setDiscountPounds] = useState(0);
+  const [notes, setNotes] = useState('');
+  const [lines, setLines] = useState<
+    Array<{ product_id: string; quantity: number; unit_price: number; notes?: string }>
+  >([
+    {
+      product_id: products[0]?.id || '',
+      quantity: 1,
+      unit_price: products[0]?.sale_price ? products[0].sale_price / 100 : 0,
+    },
+  ]);
+  const { busy, act } = useAction();
+
+  const addLine = () => {
+    setLines((prev) => [
+      ...prev,
+      {
+        product_id: products[0]?.id || '',
+        quantity: 1,
+        unit_price: products[0]?.sale_price ? products[0].sale_price / 100 : 0,
+      },
+    ]);
+  };
+
+  const removeLine = (idx: number) => {
+    setLines((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const updateLine = (
+    idx: number,
+    patch: Partial<{ product_id: string; quantity: number; unit_price: number; notes?: string }>,
+  ) => {
+    setLines((prev) =>
+      prev.map((l, i) => {
+        if (i !== idx) return l;
+        const updated = { ...l, ...patch };
+        if (patch.product_id) {
+          const p = products.find((x) => x.id === patch.product_id);
+          if (p) updated.unit_price = p.sale_price / 100;
+        }
+        return updated;
+      }),
+    );
+  };
+
+  const subtotal = lines.reduce((s, l) => s + l.quantity * l.unit_price, 0);
+  const discountVal = Math.min(subtotal, Math.max(0, discountPounds));
+  const taxable = Math.max(0, subtotal - discountVal);
+  const tax = Math.round((taxable * taxRate) / 10000);
+  const total = taxable + tax;
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!partyId) return;
+    if (!lines.length) return;
+
+    void act(async () => {
+      await api('/quotations', 'POST', {
+        type,
+        branch_id: branchId,
+        party_id: partyId,
+        date,
+        valid_until: validUntil || undefined,
+        tax_rate: taxRate,
+        discount: Math.round(discountVal * 100),
+        notes: notes || undefined,
+        lines: lines.map((l) => ({
+          product_id: l.product_id,
+          quantity: l.quantity,
+          unit_price: Math.round(l.unit_price * 100),
+          notes: l.notes || undefined,
+        })),
+      });
+      onSaved();
+    }, 'تم إنشاء عرض السعر بنجاح');
+  };
+
+  return (
+    <Modal
+      wide
+      title={
+        type === 'PROFORMA'
+          ? 'إنشاء فاتورة مبدئية (Proforma Invoice)'
+          : 'إنشاء عرض سعر جديد (Quotation)'
+      }
+      onClose={onClose}
+    >
+      <form onSubmit={submit}>
+        <div className="modal-body form-grid">
+          <div className="form-row">
+            <Field label="نوع المستند *">
+              <select value={type} onChange={(e) => setType(e.target.value as any)}>
+                <option value="QUOTATION">عرض سعر رسمي (Quotation)</option>
+                <option value="PROFORMA">فاتورة شكلية / مبدئية (Proforma Invoice)</option>
+              </select>
+            </Field>
+            <Field label="العميل *">
+              <select required value={partyId} onChange={(e) => setPartyId(e.target.value)}>
+                {customers.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          <div className="form-row">
+            <Field label="الفرع *">
+              <select required value={branchId} onChange={(e) => setBranchId(e.target.value)}>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="تاريخ العرض *">
+              <input type="date" required value={date} onChange={(e) => setDate(e.target.value)} />
+            </Field>
+            <Field label="صالح حتى تاريخ">
+              <input
+                type="date"
+                value={validUntil}
+                onChange={(e) => setValidUntil(e.target.value)}
+              />
+            </Field>
+          </div>
+
+          <div style={{ marginTop: '0.5rem', marginBottom: '0.5rem' }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '0.5rem',
+              }}
+            >
+              <strong>بنود العرض والأسعار المقترحة</strong>
+              <Button type="button" variant="secondary" onClick={addLine}>
+                <Plus size={14} /> إضافة صنف
+              </Button>
+            </div>
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>الصنف / المنتج</th>
+                    <th>الكمية</th>
+                    <th>سعر الوحدة المعروض (ج.م)</th>
+                    <th>الإجمالي</th>
+                    <th>حذف</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lines.map((line, idx) => (
+                    <tr key={idx}>
+                      <td style={{ minWidth: '200px' }}>
+                        <select
+                          required
+                          value={line.product_id}
+                          onChange={(e) => updateLine(idx, { product_id: e.target.value })}
+                        >
+                          {products.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name} ({p.sku})
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td style={{ width: '120px' }}>
+                        <input
+                          type="number"
+                          min="1"
+                          required
+                          dir="ltr"
+                          value={line.quantity}
+                          onChange={(e) =>
+                            updateLine(idx, {
+                              quantity: Math.max(1, parseInt(e.target.value) || 1),
+                            })
+                          }
+                          style={{ textAlign: 'center' }}
+                        />
+                      </td>
+                      <td style={{ width: '150px' }}>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          required
+                          dir="ltr"
+                          value={line.unit_price}
+                          onChange={(e) =>
+                            updateLine(idx, {
+                              unit_price: Math.max(0, parseFloat(e.target.value) || 0),
+                            })
+                          }
+                          style={{ textAlign: 'center' }}
+                        />
+                      </td>
+                      <td className="num amount">
+                        {money(Math.round(line.quantity * line.unit_price * 100), 2)} ج.م
+                      </td>
+                      <td>
+                        {lines.length > 1 && (
+                          <button
+                            type="button"
+                            className="btn-icon danger-text"
+                            onClick={() => removeLine(idx)}
+                            title="حذف البند"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                padding: '0.75rem 1rem',
+                background: 'var(--bg-subtle, #f8fafc)',
+                borderRadius: '6px',
+                marginTop: '0.5rem',
+                flexWrap: 'wrap',
+                gap: '0.5rem',
+              }}
+            >
+              <div>
+                قبل الخصم:{' '}
+                <strong className="num">{money(Math.round(subtotal * 100), 2)} ج.م</strong>
+              </div>
+              <div>
+                الخصم:{' '}
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={discountPounds || ''}
+                  onChange={(e) => setDiscountPounds(Math.max(0, parseFloat(e.target.value) || 0))}
+                  placeholder="0.00"
+                  style={{ width: '100px', padding: '2px 6px', textAlign: 'center' }}
+                />{' '}
+                ج.م
+              </div>
+              <div>
+                ضريبة 14%: <strong className="num">{money(Math.round(tax * 100), 2)} ج.م</strong>
+              </div>
+              <div>
+                الإجمالي النهائي للعرض:{' '}
+                <strong className="num amount">{money(Math.round(total * 100), 2)} ج.م</strong>
+              </div>
+            </div>
+          </div>
+
+          <Field label="شروط العرض والتركيب">
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="شروط التسليم والدفع والضمان..."
+            />
+          </Field>
+        </div>
+        <div className="modal-footer">
+          <Button type="submit" busy={busy}>
+            حفظ العرض
           </Button>
           <Button type="button" variant="secondary" onClick={onClose}>
             إلغاء
