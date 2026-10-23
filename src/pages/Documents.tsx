@@ -68,6 +68,7 @@ import {
   generateInvoiceQrData,
   ThermalReceiptPaper,
 } from '../receipt-components';
+import { parseInvoiceCustomization } from '../lib/invoice-customization';
 export function Documents({ type }: { type: DocType }) {
   const sale = type === 'SALE';
   const path = sale ? '/sales' : '/purchases';
@@ -983,6 +984,8 @@ export function DocumentDetail() {
                 ? 'partial'
                 : 'pending';
 
+  const invoiceSettings = parseInvoiceCustomization(company?.invoice_settings);
+
   const qrData = generateInvoiceQrData({
     sellerName: company?.name || 'مؤسسة أوركيفا',
     taxNumber: company?.tax_number,
@@ -1142,12 +1145,26 @@ export function DocumentDetail() {
         )}
       </div>
       <div className="document-detail-grid">
-        <section className="card invoice-paper" id="invoice-print">
+        <section
+          className={`card invoice-paper template-${invoiceSettings.template}`}
+          id="invoice-print"
+          style={{ '--invoice-primary': invoiceSettings.primaryColor } as React.CSSProperties}
+        >
           <div className="invoice-header">
-            <div className="invoice-header-company">
-              <div className="invoice-brand" dir="ltr">
-                orqiva<span>.</span>
-              </div>
+            <div className={`invoice-header-company logo-pos-${invoiceSettings.logoPosition}`}>
+              {invoiceSettings.logoUrl ? (
+                <div className="invoice-custom-logo-wrap">
+                  <img
+                    src={invoiceSettings.logoUrl}
+                    alt={company?.name || 'Company Logo'}
+                    className="invoice-custom-logo"
+                  />
+                </div>
+              ) : (
+                <div className="invoice-brand" dir="ltr">
+                  orqiva<span>.</span>
+                </div>
+              )}
               <h2>{company?.name}</h2>
               <p>{company?.address}</p>
               <p dir="ltr">
@@ -1163,9 +1180,11 @@ export function DocumentDetail() {
             </div>
 
             <div className="invoice-title">
-              <div className="invoice-qr-corner">
-                <QrCodeSvg value={qrData} size={84} />
-              </div>
+              {invoiceSettings.showQrCode && (
+                <div className="invoice-qr-corner">
+                  <QrCodeSvg value={qrData} size={84} />
+                </div>
+              )}
               <span>{docTypeLabel}</span>
               <h2 className="num">{doc.number}</h2>
               <Status doc={doc} />
@@ -1245,7 +1264,9 @@ export function DocumentDetail() {
                     <td className="num muted">{i + 1}</td>
                     <td>
                       <strong>{l.name}</strong>
-                      {l.sku && <small className="cell-sub num">{l.sku}</small>}
+                      {invoiceSettings.showSku && l.sku && (
+                        <small className="cell-sub num">{l.sku}</small>
+                      )}
                     </td>
                     <td className="num">{l.quantity}</td>
                     <td className="num">{money(l.unit_price, 2)}</td>
@@ -1265,10 +1286,55 @@ export function DocumentDetail() {
                   'شكراً لتعاملكم معنا. تسري على هذه الفاتورة الشروط والأحكام المعتمدة.'}
               </p>
               {doc.notes && company?.invoice_note && <p>{company.invoice_note}</p>}
-              <div className="invoice-guarantee-note">
-                البضاعة المباعة ترد وتستبدل خلال 14 يوماً وفقاً لقانون حماية المستهلك مع إحضار أصل
-                الفاتورة بحالتها الأصلية.
-              </div>
+              {invoiceSettings.showReturnPolicy && (
+                <div className="invoice-guarantee-note">
+                  البضاعة المباعة ترد وتستبدل خلال 14 يوماً وفقاً لقانون حماية المستهلك مع إحضار أصل
+                  الفاتورة بحالتها الأصلية.
+                </div>
+              )}
+              {invoiceSettings.showBankDetails &&
+                (invoiceSettings.bankName ||
+                  invoiceSettings.bankAccountName ||
+                  invoiceSettings.bankIban) && (
+                  <div
+                    className="invoice-bank-card"
+                    style={{
+                      marginTop: '10px',
+                      padding: '8px 12px',
+                      background: 'rgba(0,0,0,0.02)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '6px',
+                      fontSize: '11px',
+                    }}
+                  >
+                    <strong
+                      style={{
+                        display: 'block',
+                        marginBottom: '4px',
+                        color: 'var(--invoice-primary, #4338ca)',
+                      }}
+                    >
+                      بيانات التحويل البنكي المعتمدة:
+                    </strong>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+                      {invoiceSettings.bankName && (
+                        <span>
+                          <strong>البنك:</strong> {invoiceSettings.bankName}
+                        </span>
+                      )}
+                      {invoiceSettings.bankAccountName && (
+                        <span>
+                          <strong>اسم الحساب:</strong> {invoiceSettings.bankAccountName}
+                        </span>
+                      )}
+                      {invoiceSettings.bankIban && (
+                        <span dir="ltr">
+                          <strong>IBAN:</strong> {invoiceSettings.bankIban}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
             </div>
             <div className="invoice-totals">
               <div>
@@ -1311,28 +1377,32 @@ export function DocumentDetail() {
           </div>
 
           {/* Official Signatures Row */}
-          <div className="invoice-signatures-row">
-            <div className="sig-block">
-              <span>المحاسب المسئول</span>
-              <div className="sig-space" />
-              <small>التوقيع والاعتماد</small>
+          {invoiceSettings.showSignatures && (
+            <div className="invoice-signatures-row">
+              <div className="sig-block">
+                <span>المحاسب المسئول</span>
+                <div className="sig-space" />
+                <small>التوقيع والاعتماد</small>
+              </div>
+              <div className="sig-block">
+                <span>توقيع المستلم</span>
+                <div className="sig-space" />
+                <small>الاسم والتوقيع</small>
+              </div>
+              <div className="sig-block stamp-space-block">
+                <span>ختم المنشأة الرسمي</span>
+                <div className="sig-space stamp-box" />
+              </div>
             </div>
-            <div className="sig-block">
-              <span>توقيع المستلم</span>
-              <div className="sig-space" />
-              <small>الاسم والتوقيع</small>
-            </div>
-            <div className="sig-block stamp-space-block">
-              <span>ختم المنشأة الرسمي</span>
-              <div className="sig-space stamp-box" />
-            </div>
-          </div>
+          )}
 
           {/* Bottom Barcode & Signoff */}
           <div className="invoice-signoff">
-            <div className="invoice-barcode-wrapper">
-              <BarcodeSvg value={doc.number} height={34} fontSize={10} />
-            </div>
+            {invoiceSettings.showBarcode && (
+              <div className="invoice-barcode-wrapper">
+                <BarcodeSvg value={doc.number} height={34} fontSize={10} />
+              </div>
+            )}
             <span>
               {isReturn
                 ? 'إشعار صادر ومعتمد من نظام أوركيفا السحابي'
@@ -1505,7 +1575,12 @@ export function DocumentDetail() {
         />
       )}
       {thermalModal && (
-        <Modal title="معاينة إيصال الكاشير الحراري (POS)" onClose={() => setThermalModal(false)}>
+        <Modal
+          title="معاينة إيصال الكاشير الحراري (POS)"
+          onClose={() => setThermalModal(false)}
+          size="md"
+          showMaximize
+        >
           <div className="modal-body pos-receipt-wrapper">
             <ThermalReceiptPaper
               result={{
@@ -1540,6 +1615,8 @@ export function DocumentDetail() {
               branchName={doc.branch_name}
               cashierName={doc.created_by}
               customerName={doc.party_name}
+              ecoMode={invoiceSettings.thermalEcoMode}
+              showCashier={invoiceSettings.thermalShowCashier}
             />
           </div>
           <div className="modal-footer">
@@ -1589,6 +1666,8 @@ export function PaymentForm({
   };
   return (
     <Modal
+      size="md"
+      showMaximize
       title={doc.type === 'SALE' ? 'تسجيل دفعة من العميل' : 'تسجيل دفعة للمورد'}
       description={doc.number + ' · ' + doc.party_name}
       onClose={onClose}
@@ -1747,6 +1826,8 @@ export function ReturnModal({
 
   return (
     <Modal
+      size="xl"
+      showMaximize
       title={isSale ? 'إصدار إشعار دائن (مرتجع مبيعات)' : 'إصدار إشعار مدين (مرتجع مشتريات)'}
       description={`عن الفاتورة ${doc.number} · ${doc.party_name}`}
       onClose={onClose}
@@ -1948,7 +2029,8 @@ function LandedCostsModal({ doc, onClose }: { doc: Document; onClose: () => void
 
   return (
     <Modal
-      wide
+      size="xl"
+      showMaximize
       title={`التكاليف الإضافية ورسملة المخزون · ${doc.number}`}
       description="إضافة تكاليف الشحن والجمارك وتوزيعها على الأصناف لرسملتها على متوسط التكلفة (WAC) والقيد المزدوج."
       onClose={onClose}
@@ -2384,7 +2466,7 @@ function CreatePurchaseOrderModal({
   };
 
   return (
-    <Modal wide title="إنشاء أمر شراء جديد (Purchase Order)" onClose={onClose}>
+    <Modal size="xl" showMaximize title="إنشاء أمر شراء جديد (Purchase Order)" onClose={onClose}>
       <form onSubmit={submit}>
         <div className="modal-body form-grid">
           <div className="form-row">
@@ -2867,7 +2949,8 @@ function CreateQuotationModal({
 
   return (
     <Modal
-      wide
+      size="xl"
+      showMaximize
       title={
         type === 'PROFORMA'
           ? 'إنشاء فاتورة مبدئية (Proforma Invoice)'

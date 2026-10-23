@@ -13,6 +13,7 @@ import {
   Shield,
   Trash2,
   ReceiptText,
+  Palette,
 } from 'lucide-react';
 import {
   api,
@@ -33,6 +34,7 @@ import type { User, RoleDef, PermissionDef } from '../../types';
 import { useBranch } from '../../branch';
 import { PermissionsModal } from '../PermissionsModal';
 import { EInvoicePanel } from './e-invoice';
+import { InvoiceCustomizer } from './invoice-customizer';
 
 export function SettingsPage() {
   const { user } = useSession();
@@ -90,6 +92,13 @@ export function SettingsPage() {
               </div>
             </button>
           )}
+          <button onClick={() => setTab('invoices')} className={tab === 'invoices' ? 'active' : ''}>
+            <Palette size={19} />
+            <div>
+              <strong>تخصيص الفواتير والمطبوعات</strong>
+              <small>القوالب، الألوان، الشعار والعناصر</small>
+            </div>
+          </button>
           <button onClick={() => setTab('security')} className={tab === 'security' ? 'active' : ''}>
             <LockKeyhole size={19} />
             <div>
@@ -109,6 +118,8 @@ export function SettingsPage() {
         <div>
           {tab === 'company' ? (
             <CompanySettings />
+          ) : tab === 'invoices' ? (
+            <InvoiceCustomizer />
           ) : tab === 'users' ? (
             <UserSettings />
           ) : tab === 'roles' ? (

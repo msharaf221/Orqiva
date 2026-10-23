@@ -312,6 +312,8 @@ export function ThermalReceiptPaper({
   branchName,
   cashierName,
   customerName,
+  ecoMode = false,
+  showCashier = true,
 }: {
   result: ReceiptData;
   companyName: string;
@@ -319,6 +321,8 @@ export function ThermalReceiptPaper({
   branchName: string;
   cashierName?: string;
   customerName?: string;
+  ecoMode?: boolean;
+  showCashier?: boolean;
 }) {
   const invoiceDateStr = result.document.date || new Date().toLocaleDateString('ar-EG');
   const invoiceTimeStr = new Date().toLocaleTimeString('ar-EG', {
@@ -354,7 +358,7 @@ export function ThermalReceiptPaper({
     });
 
   return (
-    <div className="thermal-receipt" id="printable-pos-receipt">
+    <div className={`thermal-receipt ${ecoMode ? 'eco-mode' : ''}`} id="printable-pos-receipt">
       {/* Receipt Header */}
       <div className="receipt-header">
         <div className="receipt-brand-badge">ORQIVA POS</div>
@@ -381,7 +385,7 @@ export function ThermalReceiptPaper({
               {invoiceDateStr} - {invoiceTimeStr}
             </span>
           </div>
-          {cashierName && (
+          {showCashier && cashierName && (
             <div className="meta-item">
               <span className="meta-label">الكاشير:</span>
               <span className="meta-value">{cashierName}</span>

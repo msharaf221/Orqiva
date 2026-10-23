@@ -84,7 +84,8 @@ export function CreateEmployeeModalExtended({
 
   return (
     <Modal
-      wide
+      size="xl"
+      showMaximize
       title="إضافة موظف جديد وضبط عقد العمل"
       description="تسجيل بيانات الموظف، شروط العقد، الراتب الأساسي والمتغير، وفترة التجربة والتأمينات."
       onClose={onClose}
@@ -240,6 +241,8 @@ export function RecordAttendanceModal({
 
   return (
     <Modal
+      size="md"
+      showMaximize
       title="تسجيل الحضور والانصراف لموظف"
       description="إثبات الحضور أو الغياب أو التأخير وساعات الإضافي، وسيتم تسويتها آلياً في مسير الرواتب."
       onClose={onClose}
@@ -348,6 +351,8 @@ export function CreateLeaveRequestModal({
 
   return (
     <Modal
+      size="lg"
+      showMaximize
       title="تقديم طلب إجازة موظف"
       description="طلب إجازة اعتيادية أو عارضة أو مرضية، مع التحقق الآلي من عدم التداخل ورصيد الإجازات المتاح."
       onClose={onClose}

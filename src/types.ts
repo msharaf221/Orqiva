@@ -470,6 +470,30 @@ export interface Company {
   activity_code: string;
   /** ETA submission environment: stub (offline), preprod or production. */
   eta_environment: 'stub' | 'preprod' | 'production';
+  /** JSON-serialized invoice and print layout customization. */
+  invoice_settings?: string;
+}
+
+export type InvoiceTemplateId = 'modern' | 'classic' | 'minimal' | 'compact';
+export type InvoiceLogoPosition = 'right' | 'left' | 'center';
+
+export interface InvoiceCustomization {
+  template: InvoiceTemplateId;
+  primaryColor: string;
+  logoUrl?: string;
+  logoPosition: InvoiceLogoPosition;
+  showBarcode: boolean;
+  showQrCode: boolean;
+  showSignatures: boolean;
+  showReturnPolicy: boolean;
+  showBankDetails: boolean;
+  bankName?: string;
+  bankIban?: string;
+  bankAccountName?: string;
+  showSku: boolean;
+  footerNote?: string;
+  thermalEcoMode: boolean;
+  thermalShowCashier: boolean;
 }
 
 export type EtaDocumentStatus =

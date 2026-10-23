@@ -76,7 +76,8 @@ export function CreateDealModal({
 
   return (
     <Modal
-      wide
+      size="lg"
+      showMaximize
       title="إنشاء صفقة مبيعات جديدة"
       description="تسجيل فرصة بيعية جديدة في مسار الصفقات وتحديد القيمة المتوقعة ومسؤول المتابعة."
       onClose={onClose}
@@ -193,6 +194,8 @@ export function CreateActivityModal({
 
   return (
     <Modal
+      size="md"
+      showMaximize
       title="تسجيل نشاط متابعة جديد"
       description="جدولة مكالمة هاتفية، اجتماع، مهمة أو تسجيل بريد وملاحظة خاصة بصفقة مبيعات."
       onClose={onClose}
@@ -303,6 +306,8 @@ export function CreateTargetModal({
 
   return (
     <Modal
+      size="md"
+      showMaximize
       title="ضبط مستهدف مبيعات وعمولة لموظف"
       description="تحديد التارجت الشهري ونسبة العمولة، وسيتم احتسابها آلياً من الفواتير المحصلة وتضمينها في مسير الرواتب."
       onClose={onClose}
@@ -406,7 +411,8 @@ export function DealDetailModal({
 
   return (
     <Modal
-      wide
+      size="xl"
+      showMaximize
       title={`صفقة: ${deal.title}`}
       description={`كود: ${deal.code} | أنشئت في: ${formatDate(deal.created_at)}`}
       onClose={onClose}

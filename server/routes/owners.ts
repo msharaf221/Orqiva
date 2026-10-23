@@ -34,7 +34,7 @@ ownersRouter.put('/company', requirePermission('branches:manage'), (req, res) =>
   const c = companySchema.parse(req.body);
   transaction(() => {
     run(
-      'UPDATE company SET name=?,email=?,phone=?,address=?,tax_number=?,tax_registration_number=?,activity_code=?,tax_rate=?,invoice_note=?,eta_environment=COALESCE(?,eta_environment) WHERE id=1',
+      'UPDATE company SET name=?,email=?,phone=?,address=?,tax_number=?,tax_registration_number=?,activity_code=?,tax_rate=?,invoice_note=?,eta_environment=COALESCE(?,eta_environment),invoice_settings=COALESCE(?,invoice_settings) WHERE id=1',
       c.name,
       c.email,
       c.phone,
@@ -45,6 +45,7 @@ ownersRouter.put('/company', requirePermission('branches:manage'), (req, res) =>
       c.tax_rate,
       c.invoice_note,
       c.eta_environment || null,
+      c.invoice_settings || null,
     );
     audit(req.user, 'تحديث إعدادات الشركة', 'COMPANY', '1');
   });
