@@ -1130,3 +1130,44 @@ export interface ExpiryAlertResponse {
   batches: StockBatch[];
   categories: string[];
 }
+
+export interface WarehouseLocation {
+  id: string;
+  branch_id: string;
+  branch_name?: string;
+  code: string;
+  name: string;
+  aisle: string;
+  rack: string;
+  shelf: string;
+  bin: string;
+  notes: string;
+  active: number;
+  created_at: string;
+  products_count?: number;
+}
+
+export interface ProductLocation {
+  product_id: string;
+  product_name?: string;
+  sku?: string;
+  location_id: string;
+  location_code?: string;
+  location_name?: string;
+  branch_id?: string;
+  is_primary: number;
+  created_at: string;
+}
+
+export interface StocktakeScanResponse {
+  session_id: string;
+  line_id: string;
+  product_id: string;
+  product_name: string;
+  sku: string;
+  expected_qty: number;
+  counted_qty: number;
+  variance_qty: number;
+  incremented_by: number;
+  location_code?: string | null;
+}

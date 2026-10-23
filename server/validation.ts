@@ -69,17 +69,48 @@ export const stocktakeSubmitSchema = z
   })
   .strict();
 
-export const stocktakeCountsSchema = z
+export const stocktakeCountsSchema = z.object({
+  notes: optionalText(500),
+  counts: z
+    .array(
+      z.object({
+        line_id: id(),
+        counted_qty: z.number().int().min(0).max(1_000_000).nullable(),
+      }),
+    )
+    .min(1, 'لا توجد بنود جرد للتحديث'),
+});
+export const stocktakeScanSchema = z
   .object({
+    barcode: z.string().trim().min(1).max(100),
+    quantity: z.number().int().min(1).max(10000).default(1),
+  })
+  .strict();
+
+export const warehouseLocationSchema = z
+  .object({
+    branch_id: id(),
+    code: z.string().trim().min(1).max(50),
+    name: text(100),
+    aisle: optionalText(50),
+    rack: optionalText(50),
+    shelf: optionalText(50),
+    bin: optionalText(50),
     notes: optionalText(500),
-    counts: z
-      .array(
-        z.object({
-          line_id: id(),
-          counted_qty: z.number().int().min(0).max(1_000_000).nullable(),
-        }),
-      )
-      .min(1, 'لا توجد بنود جرد للتحديث'),
+    active: z
+      .union([z.literal(0), z.literal(1), z.boolean()])
+      .optional()
+      .transform((v) => (v === false || v === 0 ? 0 : 1)),
+  })
+  .strict();
+
+export const productLocationAssignSchema = z
+  .object({
+    location_id: id(),
+    is_primary: z
+      .union([z.literal(0), z.literal(1), z.boolean()])
+      .optional()
+      .transform((v) => (v === false || v === 0 ? 0 : 1)),
   })
   .strict();
 

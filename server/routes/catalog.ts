@@ -20,6 +20,14 @@ import {
   cancelStocktake,
   reorderSuggestions,
 } from '../stocktake';
+import {
+  listLocations,
+  createLocation,
+  updateLocation,
+  assignProductLocation,
+  getProductLocations,
+  scanStocktakeBarcode,
+} from '../locations';
 
 export const catalogRouter = Router();
 
@@ -143,6 +151,33 @@ catalogRouter.post(
 
 catalogRouter.post('/stocktakes/:id/cancel', requirePermission('inventory:adjust'), (req, res) => {
   res.json(cancelStocktake(String(req.params.id), req.user));
+});
+
+// Barcode Stocktake Fast Scan
+catalogRouter.post('/stocktakes/:id/scan', requirePermission('inventory:adjust'), (req, res) => {
+  res.json(scanStocktakeBarcode(String(req.params.id), req.body, req.user));
+});
+
+// Warehouse Locations & Bins CRUD
+catalogRouter.get('/warehouse-locations', requirePermission('inventory:view'), (req, res) => {
+  const scope = scopeFor(req.user, req.query.branch_id);
+  res.json(listLocations(scope, req.query.branch_id as string | undefined));
+});
+
+catalogRouter.post('/warehouse-locations', requirePermission('inventory:adjust'), (req, res) => {
+  res.status(201).json(createLocation(req.body, req.user));
+});
+
+catalogRouter.put('/warehouse-locations/:id', requirePermission('inventory:adjust'), (req, res) => {
+  res.json(updateLocation(String(req.params.id), req.body, req.user));
+});
+
+catalogRouter.get('/products/:id/locations', requirePermission('inventory:view'), (req, res) => {
+  res.json(getProductLocations(String(req.params.id)));
+});
+
+catalogRouter.post('/products/:id/locations', requirePermission('inventory:adjust'), (req, res) => {
+  res.json(assignProductLocation(String(req.params.id), req.body, req.user));
 });
 
 // Stock Movements

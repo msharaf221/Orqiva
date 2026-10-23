@@ -58,6 +58,7 @@ import type {
   ReorderSuggestion,
   StockValuationResponse,
   ExpiryAlertResponse,
+  WarehouseLocation,
 } from '../types';
 import { can } from '../auth';
 export function Products() {
@@ -1069,6 +1070,255 @@ function BatchesExpiryView({
   );
 }
 
+function WarehouseLocationsView({ activeId, query }: { activeId: string; query: string }) {
+  const { user } = useSession();
+  const { branches, defaultBranchId } = useBranch();
+  const data = useData<WarehouseLocation[]>(withBranch('/warehouse-locations', activeId));
+  const [editing, setEditing] = useState<WarehouseLocation | 'new' | null>(null);
+  const [page, setPage] = useState(1);
+  const { busy, act } = useAction();
+
+  if (data.loading) return <Loading />;
+  if (data.error) return <ErrorState message={data.error} retry={data.reload} />;
+
+  const locations = data.data || [];
+  const filtered = locations.filter((loc) => {
+    const q = query.toLowerCase();
+    return (
+      loc.code.toLowerCase().includes(q) ||
+      loc.name.toLowerCase().includes(q) ||
+      (loc.aisle || '').toLowerCase().includes(q) ||
+      (loc.rack || '').toLowerCase().includes(q)
+    );
+  });
+
+  const saveLocation = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    const payload = {
+      code: f.get('code'),
+      name: f.get('name'),
+      branch_id: f.get('branch_id'),
+      aisle: f.get('aisle') || undefined,
+      rack: f.get('rack') || undefined,
+      shelf: f.get('shelf') || undefined,
+      bin: f.get('bin') || undefined,
+      notes: f.get('notes') || undefined,
+      active: f.get('active') === 'on',
+    };
+
+    void act(async () => {
+      if (editing === 'new') {
+        await api('/warehouse-locations', 'POST', payload);
+      } else if (editing) {
+        await api(`/warehouse-locations/${editing.id}`, 'PUT', payload);
+      }
+      setEditing(null);
+      data.reload();
+    }, 'تم حفظ موقع التخزين بنجاح');
+  };
+
+  const toggleActive = (loc: WarehouseLocation) => {
+    void act(async () => {
+      await api(`/warehouse-locations/${loc.id}`, 'PUT', { active: !loc.active });
+      data.reload();
+    }, 'تم تغيير حالة الموقع');
+  };
+
+  return (
+    <>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '1rem',
+          flexWrap: 'wrap',
+          gap: '0.75rem',
+        }}
+      >
+        <p className="muted" style={{ margin: 0 }}>
+          تنظيم المستودع حسب الممرات والستاندات والأرفف والصناديق (Aisle / Rack / Shelf / Bin)
+          لتسريع الجرد والالتقاط.
+        </p>
+        {can(user, 'inventory:adjust') && (
+          <Button onClick={() => setEditing('new')}>
+            <Plus size={16} /> إضافة موقع تخزين
+          </Button>
+        )}
+      </div>
+
+      {!filtered.length ? (
+        <Empty
+          title="لا توجد مواقع تخزين معرفة"
+          description="أضف مواقع التخزين لتنظيم وترتيب أصناف المستودع."
+        />
+      ) : (
+        <>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>رمز الموقع</th>
+                  <th>الاسم / الوصف</th>
+                  <th>الفرع</th>
+                  <th>الممر (Aisle)</th>
+                  <th>الستاند (Rack)</th>
+                  <th>الرف (Shelf)</th>
+                  <th>الصندوق (Bin)</th>
+                  <th>الحالة</th>
+                  <th>إجراءات</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.slice((page - 1) * 15, page * 15).map((loc) => (
+                  <tr key={loc.id}>
+                    <td>
+                      <strong className="num" dir="ltr">
+                        {loc.code}
+                      </strong>
+                    </td>
+                    <td>{loc.name}</td>
+                    <td>{loc.branch_name || '—'}</td>
+                    <td className="num">{loc.aisle || '—'}</td>
+                    <td className="num">{loc.rack || '—'}</td>
+                    <td className="num">{loc.shelf || '—'}</td>
+                    <td className="num">{loc.bin || '—'}</td>
+                    <td>
+                      <span className={`badge ${loc.active ? 'paid' : 'cancelled'}`}>
+                        <i />
+                        {loc.active ? 'نشط' : 'معطل'}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="row-actions">
+                        <button className="btn-small" onClick={() => setEditing(loc)}>
+                          تعديل
+                        </button>
+                        <button className="btn-small" onClick={() => toggleActive(loc)}>
+                          {loc.active ? 'تعطيل' : 'تفعيل'}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <Pagination page={page} setPage={setPage} total={filtered.length} size={15} />
+        </>
+      )}
+
+      {editing && (
+        <Modal
+          title={
+            editing === 'new' ? 'إضافة موقع تخزين جديد' : `تعديل موقع التخزين: ${editing.code}`
+          }
+          onClose={() => setEditing(null)}
+        >
+          <form onSubmit={saveLocation}>
+            <div className="modal-body form-grid">
+              <div className="form-row">
+                <Field label="رمز الموقع (Unique Code) *">
+                  <input
+                    required
+                    name="code"
+                    dir="ltr"
+                    maxLength={50}
+                    defaultValue={editing !== 'new' ? editing.code : ''}
+                    placeholder="مثال: A-01-R2-B4"
+                  />
+                </Field>
+                <Field label="اسم الموقع أو الوصف *">
+                  <input
+                    required
+                    name="name"
+                    maxLength={100}
+                    defaultValue={editing !== 'new' ? editing.name : ''}
+                    placeholder="مثال: ستاند قطع الغيار 2"
+                  />
+                </Field>
+              </div>
+              <Field label="الفرع / المستودع *">
+                <select
+                  name="branch_id"
+                  defaultValue={editing !== 'new' ? editing.branch_id : defaultBranchId}
+                  required
+                >
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <div className="form-row">
+                <Field label="الممر (Aisle)">
+                  <input
+                    name="aisle"
+                    maxLength={20}
+                    defaultValue={editing !== 'new' ? editing.aisle || '' : ''}
+                    placeholder="A"
+                  />
+                </Field>
+                <Field label="الستاند (Rack)">
+                  <input
+                    name="rack"
+                    maxLength={20}
+                    defaultValue={editing !== 'new' ? editing.rack || '' : ''}
+                    placeholder="01"
+                  />
+                </Field>
+                <Field label="الرف (Shelf)">
+                  <input
+                    name="shelf"
+                    maxLength={20}
+                    defaultValue={editing !== 'new' ? editing.shelf || '' : ''}
+                    placeholder="02"
+                  />
+                </Field>
+                <Field label="الصندوق (Bin)">
+                  <input
+                    name="bin"
+                    maxLength={20}
+                    defaultValue={editing !== 'new' ? editing.bin || '' : ''}
+                    placeholder="B"
+                  />
+                </Field>
+              </div>
+              <Field label="ملاحظات">
+                <textarea
+                  name="notes"
+                  maxLength={500}
+                  defaultValue={editing !== 'new' ? editing.notes || '' : ''}
+                />
+              </Field>
+              <label
+                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}
+              >
+                <input
+                  type="checkbox"
+                  name="active"
+                  defaultChecked={editing !== 'new' ? Boolean(editing.active) : true}
+                />
+                موقع نشط وجاهز للتخزين
+              </label>
+            </div>
+            <div className="modal-footer">
+              <Button type="button" variant="secondary" onClick={() => setEditing(null)}>
+                إلغاء
+              </Button>
+              <Button type="submit" busy={busy}>
+                حفظ الموقع
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+    </>
+  );
+}
+
 export function Inventory() {
   const { user } = useSession();
   const [params] = useSearchParams();
@@ -1238,6 +1488,12 @@ export function Inventory() {
               التشغيلات والصلاحيات (FEFO)
             </button>
             <button
+              className={tab === 'locations' ? 'active' : ''}
+              onClick={() => setTab('locations')}
+            >
+              أماكن التخزين (Bins & Racks)
+            </button>
+            <button
               className={tab === 'movements' ? 'active' : ''}
               onClick={() => setTab('movements')}
             >
@@ -1296,6 +1552,8 @@ export function Inventory() {
           />
         ) : tab === 'batches' ? (
           <BatchesExpiryView activeId={activeId} isGroup={isGroup} query={query} />
+        ) : tab === 'locations' ? (
+          <WarehouseLocationsView activeId={activeId} query={query} />
         ) : tab === 'levels' ? (
           <>
             {!filtered.length ? (

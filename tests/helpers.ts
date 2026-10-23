@@ -55,6 +55,7 @@ export function resetBusinessData() {
     DELETE FROM pos_cash_movements; DELETE FROM pos_parked_sales; DELETE FROM pos_shifts;
     DELETE FROM stocktake_lines; DELETE FROM stocktake_sessions;
     DELETE FROM stock_batches; DELETE FROM product_batch_settings;
+    DELETE FROM product_locations; DELETE FROM warehouse_locations;
     DELETE FROM branch_stock; DELETE FROM branch_products; DELETE FROM products;
     DELETE FROM expenses;
     DELETE FROM parties WHERE id<>'walk-in-customer';
