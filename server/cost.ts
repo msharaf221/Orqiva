@@ -136,7 +136,7 @@ export function recordCostOut(opts: {
 // Internals
 // ---------------------------------------------------------------------------
 
-function upsertBranchCost(
+export function upsertBranchCost(
   branchId: string,
   productId: string,
   avgCost: number,
@@ -155,7 +155,7 @@ function upsertBranchCost(
   );
 }
 
-function insertCostMovement(opts: {
+export function insertCostMovement(opts: {
   branchId: string;
   productId: string;
   deltaQty: number;

@@ -55,6 +55,7 @@ describe('upgrading a single-warehouse installation', () => {
       '014_general_ledger.sql',
       '015_stock_batches.sql',
       '016_warehouse_locations.sql',
+      '017_purchase_orders_and_landed_costs.sql',
     ]);
     expect(one("SELECT role_id FROM user_roles WHERE user_id='u-admin'")).toEqual({
       role_id: 'role_admin',

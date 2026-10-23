@@ -48,7 +48,16 @@ import {
   methods,
 } from '../lib';
 import { GROUP, useBranch, withBranch } from '../branch';
-import type { Document, DocType, Product, Party, ReturnableLine, CashAccount } from '../types';
+import type {
+  Document,
+  DocType,
+  Product,
+  Party,
+  ReturnableLine,
+  CashAccount,
+  PurchaseOrder,
+  LandedCost,
+} from '../types';
 import { can } from '../auth';
 import {
   BarcodeSvg,
@@ -65,9 +74,11 @@ export function Documents({ type }: { type: DocType }) {
   const { user } = useSession();
   const [params] = useSearchParams();
   const { activeId, isGroup } = useBranch();
-  const [kind, setKind] = useState<'invoices' | 'returns'>('invoices');
+  const [kind, setKind] = useState<'invoices' | 'returns' | 'orders'>('invoices');
   const currentType = kind === 'returns' ? returnType : type;
-  const data = useData<Document[]>(withBranch('/documents?type=' + currentType, activeId));
+  const data = useData<Document[]>(
+    kind === 'orders' ? null : withBranch('/documents?type=' + currentType, activeId),
+  );
   const [query, setQuery] = useState(''),
     [status, setStatus] = useState(params.get('status') || 'all'),
     [page, setPage] = useState(1);
@@ -264,6 +275,17 @@ export function Documents({ type }: { type: DocType }) {
               <RotateCcw size={13} />
               {sale ? 'مرتجعات المبيعات (إشعارات دائن)' : 'مرتجعات المشتريات (إشعارات مدين)'}
             </button>
+            {!sale && (
+              <button
+                className={kind === 'orders' ? 'active' : ''}
+                onClick={() => {
+                  setKind('orders');
+                  setStatus('all');
+                }}
+              >
+                <Package size={13} /> أوامر الشراء (Purchase Orders)
+              </button>
+            )}
           </div>
           <div className="table-filters">
             <SearchBox
@@ -272,31 +294,39 @@ export function Documents({ type }: { type: DocType }) {
               placeholder={
                 kind === 'returns'
                   ? 'بحث برقم الإشعار أو الفاتورة أو الطرف...'
-                  : 'بحث برقم الفاتورة أو الحساب...'
+                  : kind === 'orders'
+                    ? 'بحث برقم أمر الشراء أو المورد...'
+                    : 'بحث برقم الفاتورة أو الحساب...'
               }
             />
-            <select
-              className="filter-select"
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              aria-label="حالة المستند"
-            >
-              <option value="all">كل الحالات</option>
-              <option value="draft">مسودة</option>
-              {kind === 'returns' ? (
-                <option value="posted">معتمد</option>
-              ) : (
-                <>
-                  <option value="paid">مدفوعة</option>
-                  <option value="unpaid">غير مسددة</option>
-                  <option value="overdue">متأخرة</option>
-                </>
-              )}
-              <option value="cancelled">ملغاة</option>
-            </select>
+            {kind !== 'orders' && (
+              <select
+                className="filter-select"
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+                aria-label="حالة المستند"
+              >
+                <option value="all">كل الحالات</option>
+                <option value="draft">مسودة</option>
+                {kind === 'returns' ? (
+                  <option value="posted">معتمد</option>
+                ) : (
+                  <>
+                    <option value="paid">مدفوعة</option>
+                    <option value="unpaid">غير مسددة</option>
+                    <option value="overdue">متأخرة</option>
+                  </>
+                )}
+                <option value="cancelled">ملغاة</option>
+              </select>
+            )}
           </div>
         </div>
-        {data.error ? (
+        {kind === 'orders' ? (
+          <div style={{ padding: '1.25rem' }}>
+            <PurchaseOrdersView activeId={activeId} isGroup={isGroup} query={query} />
+          </div>
+        ) : data.error ? (
           <ErrorState message={data.error} retry={data.reload} />
         ) : data.loading ? (
           <Loading />
@@ -899,7 +929,8 @@ export function DocumentDetail() {
   const [confirm, setConfirm] = useState<'post' | 'cancel' | null>(null),
     [payment, setPayment] = useState(false),
     [returnModal, setReturnModal] = useState(false),
-    [thermalModal, setThermalModal] = useState(false);
+    [thermalModal, setThermalModal] = useState(false),
+    [landedCostsModal, setLandedCostsModal] = useState(false);
   const doc = data.data;
 
   const isSale = doc ? doc.type === 'SALE' || doc.type === 'SALE_RETURN' : true;
@@ -1000,6 +1031,11 @@ export function DocumentDetail() {
               {!isReturn && doc.status === 'POSTED' && editable && (
                 <Button variant="secondary" onClick={() => setReturnModal(true)}>
                   <RotateCcw size={16} /> إصدار مرتجع
+                </Button>
+              )}
+              {!isReturn && doc.type === 'PURCHASE' && doc.status === 'POSTED' && editable && (
+                <Button variant="secondary" onClick={() => setLandedCostsModal(true)}>
+                  <Package size={16} /> تكاليف إضافية (شحن/جمارك)
                 </Button>
               )}
               {!isReturn && doc.status === 'POSTED' && doc.paid < doc.total && editable && (
@@ -1398,6 +1434,15 @@ export function DocumentDetail() {
           onCreated={(newDocId) => {
             setReturnModal(false);
             navigate(path + '/' + newDocId);
+          }}
+        />
+      )}
+      {landedCostsModal && (
+        <LandedCostsModal
+          doc={doc}
+          onClose={() => {
+            setLandedCostsModal(false);
+            data.reload();
           }}
         />
       )}
@@ -1835,6 +1880,660 @@ export function ReturnModal({
         <div className="modal-footer">
           <Button type="submit" busy={busy} disabled={totalReturnUnits <= 0}>
             {isSale ? 'إنشاء إشعار الدائن' : 'إنشاء إشعار المدين'}
+          </Button>
+          <Button type="button" variant="secondary" onClick={onClose}>
+            إلغاء
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function LandedCostsModal({ doc, onClose }: { doc: Document; onClose: () => void }) {
+  const { user } = useSession();
+  const data = useData<LandedCost[]>(`/documents/${doc.id}/landed-costs`);
+  const [adding, setAdding] = useState(false);
+  const { busy, act } = useAction();
+
+  const costs = data.data || [];
+  const totalLanded = costs.reduce((s, c) => s + c.amount, 0);
+
+  const saveCost = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    const amountVal = parseFloat(f.get('amount') as string);
+    if (!amountVal || amountVal <= 0) return;
+
+    void act(async () => {
+      await api(`/documents/${doc.id}/landed-costs`, 'POST', {
+        cost_type: f.get('cost_type'),
+        cost_name: f.get('cost_name'),
+        amount: toCents(f.get('amount')),
+        allocation_method: f.get('allocation_method'),
+        notes: f.get('notes') || undefined,
+      });
+      setAdding(false);
+      data.reload();
+    }, 'تمت رسملة التكلفة الإضافية على المخزون وتحديث WAC والقيد');
+  };
+
+  const TYPE_NAMES: Record<string, string> = {
+    SHIPPING: 'شحن ونقل',
+    CUSTOMS: 'رسوم جمركية',
+    CLEARANCE: 'تخليص جمركي',
+    HANDLING: 'تفريغ ومناولة',
+    OTHER: 'أخرى',
+  };
+
+  return (
+    <Modal
+      wide
+      title={`التكاليف الإضافية ورسملة المخزون · ${doc.number}`}
+      description="إضافة تكاليف الشحن والجمارك وتوزيعها على الأصناف لرسملتها على متوسط التكلفة (WAC) والقيد المزدوج."
+      onClose={onClose}
+    >
+      <div className="modal-body">
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '1rem',
+            flexWrap: 'wrap',
+            gap: '0.75rem',
+          }}
+        >
+          <div>
+            <span className="muted">إجمالي التكاليف الموزعة: </span>
+            <strong className="num amount">{money(totalLanded, 2)} ج.م</strong>
+          </div>
+          {can(user, 'documents:create_purchase') && !adding && (
+            <Button onClick={() => setAdding(true)}>
+              <Plus size={16} /> إضافة تكلفة (شحن / جمارك)
+            </Button>
+          )}
+        </div>
+
+        {adding && (
+          <form
+            onSubmit={saveCost}
+            style={{
+              background: 'var(--bg-subtle, #f8fafc)',
+              padding: '1rem',
+              borderRadius: '8px',
+              border: '1px solid var(--border-color, #e2e8f0)',
+              marginBottom: '1.25rem',
+            }}
+          >
+            <h4 style={{ margin: '0 0 0.75rem' }}>إضافة تكلفة شحن أو جمارك جديدة</h4>
+            <div className="form-grid">
+              <div className="form-row">
+                <Field label="نوع التكلفة *">
+                  <select name="cost_type" required defaultValue="SHIPPING">
+                    <option value="SHIPPING">شحن ونقل (Shipping & Freight)</option>
+                    <option value="CUSTOMS">رسوم جمركية (Customs Duties)</option>
+                    <option value="CLEARANCE">تخليص جمركي (Clearance)</option>
+                    <option value="HANDLING">تفريغ ومناولة (Handling & Storage)</option>
+                    <option value="OTHER">تكاليف استيرادية أخرى</option>
+                  </select>
+                </Field>
+                <Field label="البيان / اسم البند *">
+                  <input
+                    name="cost_name"
+                    required
+                    placeholder="مثال: بوليصة شحن بحري أو جمرك الإسكندرية"
+                  />
+                </Field>
+              </div>
+              <div className="form-row">
+                <Field label="المبلغ (بالجنيه المصري) *">
+                  <input
+                    name="amount"
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    required
+                    placeholder="0.00"
+                    dir="ltr"
+                  />
+                </Field>
+                <Field label="طريقة التوزيع على الأصناف *">
+                  <select name="allocation_method" required defaultValue="BY_VALUE">
+                    <option value="BY_VALUE">
+                      حسب القيمة الإجمالية للبند (Proportional by Value)
+                    </option>
+                    <option value="BY_QUANTITY">
+                      حسب عدد الوحدات والكمية (Proportional by Quantity)
+                    </option>
+                  </select>
+                </Field>
+              </div>
+              <Field label="ملاحظات">
+                <input name="notes" placeholder="رقم البوليصة أو السند أو أي تفاصيل إضافية..." />
+              </Field>
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                gap: '0.5rem',
+                justifyContent: 'flex-end',
+                marginTop: '0.75rem',
+              }}
+            >
+              <Button type="button" variant="secondary" onClick={() => setAdding(false)}>
+                إلغاء
+              </Button>
+              <Button type="submit" busy={busy}>
+                <Save size={16} /> رسملة التكلفة وتحديث WAC
+              </Button>
+            </div>
+          </form>
+        )}
+
+        {data.loading ? (
+          <Loading />
+        ) : data.error ? (
+          <ErrorState message={data.error} retry={data.reload} />
+        ) : !costs.length ? (
+          <Empty
+            title="لا توجد تكاليف إضافية مسجلة لهذه الفاتورة"
+            description="أضف تكاليف الشحن والجمارك لتوزيعها آلياً على تكلفة الأصناف وتحديث WAC."
+          />
+        ) : (
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>البند</th>
+                  <th>النوع</th>
+                  <th>المبلغ</th>
+                  <th>طريقة التوزيع</th>
+                  <th>المسؤول</th>
+                  <th>التاريخ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {costs.map((c) => (
+                  <tr key={c.id}>
+                    <td>
+                      <strong>{c.cost_name}</strong>
+                      {c.notes && <small className="cell-sub">{c.notes}</small>}
+                    </td>
+                    <td>{TYPE_NAMES[c.cost_type] || c.cost_type}</td>
+                    <td className="num amount">{money(c.amount, 2)} ج.م</td>
+                    <td>{c.allocation_method === 'BY_VALUE' ? 'حسب القيمة' : 'حسب الكمية'}</td>
+                    <td>{c.created_by_name || '—'}</td>
+                    <td className="muted">{formatDate(c.created_at, true)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+      <div className="modal-footer">
+        <Button variant="secondary" onClick={onClose}>
+          إغلاق
+        </Button>
+      </div>
+    </Modal>
+  );
+}
+
+function PurchaseOrdersView({
+  activeId,
+  isGroup,
+  query,
+}: {
+  activeId: string;
+  isGroup: boolean;
+  query: string;
+}) {
+  const { user } = useSession();
+  const { branches, defaultBranchId } = useBranch();
+  const orders = useData<PurchaseOrder[]>(withBranch('/purchase-orders', activeId));
+  const suppliers = useData<Party[]>('/parties?type=SUPPLIER');
+  const products = useData<Product[]>(withBranch('/products', activeId));
+
+  const [creating, setCreating] = useState(false);
+  const [page, setPage] = useState(1);
+  const { act } = useAction();
+
+  if (orders.loading) return <Loading />;
+  if (orders.error) return <ErrorState message={orders.error} retry={orders.reload} />;
+
+  const STATUS_LABELS: Record<string, string> = {
+    DRAFT: 'مسودة',
+    CONFIRMED: 'مؤكد وبانتظار التوريد',
+    PARTIALLY_RECEIVED: 'مستلم جزئياً',
+    RECEIVED: 'مستلم بالكامل',
+    CANCELLED: 'ملغى',
+  };
+
+  const STATUS_TONE: Record<string, string> = {
+    DRAFT: 'draft',
+    CONFIRMED: 'pending',
+    PARTIALLY_RECEIVED: 'partial',
+    RECEIVED: 'paid',
+    CANCELLED: 'cancelled',
+  };
+
+  const list = (orders.data || []).filter((po) => {
+    const q = query.toLowerCase();
+    return (
+      po.number.toLowerCase().includes(q) ||
+      (po.party_name || '').toLowerCase().includes(q) ||
+      (po.notes || '').toLowerCase().includes(q)
+    );
+  });
+
+  const confirmPO = (po: PurchaseOrder) => {
+    void act(async () => {
+      await api(`/purchase-orders/${po.id}/confirm`, 'POST', {});
+      orders.reload();
+    }, `تم تأكيد أمر الشراء ${po.number}`);
+  };
+
+  const cancelPO = (po: PurchaseOrder) => {
+    void act(async () => {
+      await api(`/purchase-orders/${po.id}/cancel`, 'POST', {});
+      orders.reload();
+    }, `تم إلغاء أمر الشراء ${po.number}`);
+  };
+
+  const receiveFull = (po: PurchaseOrder) => {
+    void act(async () => {
+      await api(`/purchase-orders/${po.id}/receive`, 'POST', {});
+      orders.reload();
+    }, `تم إنشاء فاتورة الشراء واستلام بضاعة أمر الشراء ${po.number}`);
+  };
+
+  return (
+    <>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '1rem',
+          flexWrap: 'wrap',
+          gap: '0.75rem',
+        }}
+      >
+        <p className="muted" style={{ margin: 0 }}>
+          إدارة أوامر الشراء الرسمية مع الموردين ومتابعة التوريد والاستلام وتحويلها آلياً إلى فواتير
+          مشتريات.
+        </p>
+        {can(user, 'documents:create_purchase') && (
+          <Button onClick={() => setCreating(true)}>
+            <Plus size={16} /> أمر شراء جديد
+          </Button>
+        )}
+      </div>
+
+      {!list.length ? (
+        <Empty
+          title="لا توجد أوامر شراء"
+          description="أنشئ أمر شراء لتأكيد طلبيات التوريد مع الموردين واستلام البضاعة."
+        />
+      ) : (
+        <>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>الرقم</th>
+                  <th>المورد</th>
+                  {isGroup && <th>الفرع</th>}
+                  <th>تاريخ الطلب</th>
+                  <th>موعد التوريد</th>
+                  <th>الحالة</th>
+                  <th>الإجمالي</th>
+                  <th>إجراءات</th>
+                </tr>
+              </thead>
+              <tbody>
+                {list.slice((page - 1) * 15, page * 15).map((po) => (
+                  <tr key={po.id}>
+                    <td>
+                      <strong className="num" dir="ltr">
+                        {po.number}
+                      </strong>
+                    </td>
+                    <td>
+                      <strong>{po.party_name}</strong>
+                      {po.party_phone && <small className="cell-sub num">{po.party_phone}</small>}
+                    </td>
+                    {isGroup && <td>{po.branch_name || '—'}</td>}
+                    <td>{formatDate(po.date, true)}</td>
+                    <td className="muted">
+                      {po.expected_delivery_date
+                        ? formatDate(po.expected_delivery_date, true)
+                        : '—'}
+                    </td>
+                    <td>
+                      <span className={`badge ${STATUS_TONE[po.status] || 'draft'}`}>
+                        <i />
+                        {STATUS_LABELS[po.status] || po.status}
+                      </span>
+                    </td>
+                    <td className="num amount">
+                      <strong>{money(po.total, 2)}</strong> <small>ج.م</small>
+                    </td>
+                    <td>
+                      <div className="row-actions">
+                        {po.status === 'DRAFT' && can(user, 'documents:create_purchase') && (
+                          <button className="btn-small" onClick={() => confirmPO(po)}>
+                            تأكيد الطلب
+                          </button>
+                        )}
+                        {(po.status === 'CONFIRMED' || po.status === 'PARTIALLY_RECEIVED') &&
+                          can(user, 'documents:create_purchase') && (
+                            <button
+                              className="btn-small"
+                              onClick={() => receiveFull(po)}
+                              title="استلام وتحويل إلى فاتورة شراء"
+                            >
+                              استلام وتوريد
+                            </button>
+                          )}
+                        {(po.status === 'DRAFT' || po.status === 'CONFIRMED') &&
+                          can(user, 'documents:cancel') && (
+                            <button className="btn-small danger" onClick={() => cancelPO(po)}>
+                              إلغاء
+                            </button>
+                          )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <Pagination page={page} setPage={setPage} total={list.length} size={15} />
+        </>
+      )}
+
+      {creating && (
+        <CreatePurchaseOrderModal
+          branches={branches}
+          defaultBranchId={defaultBranchId}
+          suppliers={suppliers.data || []}
+          products={products.data || []}
+          onClose={() => setCreating(false)}
+          onSaved={() => {
+            setCreating(false);
+            orders.reload();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function CreatePurchaseOrderModal({
+  branches,
+  defaultBranchId,
+  suppliers,
+  products,
+  onClose,
+  onSaved,
+}: {
+  branches: Array<{ id: string; name: string }>;
+  defaultBranchId: string;
+  suppliers: Party[];
+  products: Product[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [branchId, setBranchId] = useState(defaultBranchId);
+  const [partyId, setPartyId] = useState(suppliers[0]?.id || '');
+  const [date, setDate] = useState(today());
+  const [expectedDate, setExpectedDate] = useState(dayOffset(7));
+  const [taxRate, setTaxRate] = useState(1400); // 14%
+  const [notes, setNotes] = useState('');
+  const [lines, setLines] = useState<
+    Array<{ product_id: string; quantity: number; unit_price: number }>
+  >([
+    {
+      product_id: products[0]?.id || '',
+      quantity: 1,
+      unit_price: products[0]?.cost_price ? products[0].cost_price / 100 : 0,
+    },
+  ]);
+  const { busy, act } = useAction();
+
+  const addLine = () => {
+    setLines((prev) => [
+      ...prev,
+      {
+        product_id: products[0]?.id || '',
+        quantity: 1,
+        unit_price: products[0]?.cost_price ? products[0].cost_price / 100 : 0,
+      },
+    ]);
+  };
+
+  const removeLine = (idx: number) => {
+    setLines((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const updateLine = (
+    idx: number,
+    patch: Partial<{ product_id: string; quantity: number; unit_price: number }>,
+  ) => {
+    setLines((prev) =>
+      prev.map((l, i) => {
+        if (i !== idx) return l;
+        const updated = { ...l, ...patch };
+        if (patch.product_id) {
+          const p = products.find((x) => x.id === patch.product_id);
+          if (p) updated.unit_price = p.cost_price / 100;
+        }
+        return updated;
+      }),
+    );
+  };
+
+  const subtotal = lines.reduce((s, l) => s + l.quantity * l.unit_price, 0);
+  const tax = Math.round((subtotal * taxRate) / 10000);
+  const total = subtotal + tax;
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!partyId) return;
+    if (!lines.length) return;
+
+    void act(async () => {
+      await api('/purchase-orders', 'POST', {
+        branch_id: branchId,
+        party_id: partyId,
+        date,
+        expected_delivery_date: expectedDate || undefined,
+        tax_rate: taxRate,
+        notes: notes || undefined,
+        lines: lines.map((l) => ({
+          product_id: l.product_id,
+          quantity: l.quantity,
+          unit_price: Math.round(l.unit_price * 100),
+        })),
+      });
+      onSaved();
+    }, 'تم إنشاء أمر الشراء بنجاح');
+  };
+
+  return (
+    <Modal wide title="إنشاء أمر شراء جديد (Purchase Order)" onClose={onClose}>
+      <form onSubmit={submit}>
+        <div className="modal-body form-grid">
+          <div className="form-row">
+            <Field label="المورد *">
+              <select required value={partyId} onChange={(e) => setPartyId(e.target.value)}>
+                {suppliers.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="الفرع المستلم *">
+              <select required value={branchId} onChange={(e) => setBranchId(e.target.value)}>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          <div className="form-row">
+            <Field label="تاريخ أمر الشراء *">
+              <input type="date" required value={date} onChange={(e) => setDate(e.target.value)} />
+            </Field>
+            <Field label="الموعد المتوقع للتوريد">
+              <input
+                type="date"
+                value={expectedDate}
+                onChange={(e) => setExpectedDate(e.target.value)}
+              />
+            </Field>
+            <Field label="ضريبة القيمة المضافة">
+              <select value={taxRate} onChange={(e) => setTaxRate(Number(e.target.value))}>
+                <option value={1400}>14% (شامل الضريبة القياسية)</option>
+                <option value={0}>0% (معفى ضريبياً)</option>
+              </select>
+            </Field>
+          </div>
+
+          <div style={{ marginTop: '0.5rem', marginBottom: '0.5rem' }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '0.5rem',
+              }}
+            >
+              <strong>بنود أمر الشراء</strong>
+              <Button type="button" variant="secondary" onClick={addLine}>
+                <Plus size={14} /> إضافة صنف
+              </Button>
+            </div>
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>الصنف / المنتج</th>
+                    <th>الكمية المطلوبة</th>
+                    <th>سعر الوحدة التقديري (ج.م)</th>
+                    <th>الإجمالي</th>
+                    <th>حذف</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lines.map((line, idx) => (
+                    <tr key={idx}>
+                      <td style={{ minWidth: '200px' }}>
+                        <select
+                          required
+                          value={line.product_id}
+                          onChange={(e) => updateLine(idx, { product_id: e.target.value })}
+                        >
+                          {products.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name} ({p.sku})
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td style={{ width: '120px' }}>
+                        <input
+                          type="number"
+                          min="1"
+                          required
+                          dir="ltr"
+                          value={line.quantity}
+                          onChange={(e) =>
+                            updateLine(idx, {
+                              quantity: Math.max(1, parseInt(e.target.value) || 1),
+                            })
+                          }
+                          style={{ textAlign: 'center' }}
+                        />
+                      </td>
+                      <td style={{ width: '150px' }}>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          required
+                          dir="ltr"
+                          value={line.unit_price}
+                          onChange={(e) =>
+                            updateLine(idx, {
+                              unit_price: Math.max(0, parseFloat(e.target.value) || 0),
+                            })
+                          }
+                          style={{ textAlign: 'center' }}
+                        />
+                      </td>
+                      <td className="num amount">
+                        {money(Math.round(line.quantity * line.unit_price * 100), 2)} ج.م
+                      </td>
+                      <td>
+                        {lines.length > 1 && (
+                          <button
+                            type="button"
+                            className="btn-icon danger-text"
+                            onClick={() => removeLine(idx)}
+                            title="حذف البند"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                padding: '0.75rem 1rem',
+                background: 'var(--bg-subtle, #f8fafc)',
+                borderRadius: '6px',
+                marginTop: '0.5rem',
+              }}
+            >
+              <div>
+                قبل الضريبة:{' '}
+                <strong className="num">{money(Math.round(subtotal * 100), 2)} ج.م</strong>
+              </div>
+              <div>
+                الضريبة ({taxRate / 100}%):{' '}
+                <strong className="num">{money(Math.round(tax * 100), 2)} ج.م</strong>
+              </div>
+              <div>
+                الإجمالي النهائي:{' '}
+                <strong className="num amount">{money(Math.round(total * 100), 2)} ج.م</strong>
+              </div>
+            </div>
+          </div>
+
+          <Field label="ملاحظات أو شروط التوريد">
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="شروط السداد، مكان التسليم، أو أي تعليمات خاصة..."
+            />
+          </Field>
+        </div>
+        <div className="modal-footer">
+          <Button type="submit" busy={busy}>
+            حفظ أمر الشراء
           </Button>
           <Button type="button" variant="secondary" onClick={onClose}>
             إلغاء

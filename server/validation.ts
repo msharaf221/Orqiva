@@ -690,3 +690,37 @@ export const posReturnSchema = z
       .min(1, 'يجب تحديد صنف واحد على الأقل للإرجاع'),
   })
   .strict();
+
+export const purchaseOrderSchema = z
+  .object({
+    branch_id: id(),
+    party_id: id(),
+    date,
+    expected_delivery_date: date.optional().nullable(),
+    tax_rate: z.number().int().min(0).max(10000).default(0),
+    notes: optionalText(2000),
+    lines: z
+      .array(
+        z
+          .object({
+            product_id: id(),
+            quantity: quantity,
+            unit_price: money,
+            tax_rate: z.number().int().min(0).max(10000).default(0),
+          })
+          .strict(),
+      )
+      .min(1, 'يجب إضافة صنف واحد على الأقل في أمر الشراء')
+      .max(100),
+  })
+  .strict();
+
+export const landedCostSchema = z
+  .object({
+    cost_type: z.enum(['SHIPPING', 'CUSTOMS', 'CLEARANCE', 'HANDLING', 'OTHER']),
+    cost_name: z.string().trim().min(2, 'اسم بند التكلفة مطلوب').max(100),
+    amount: money.refine((n) => n > 0, 'قيمة التكلفة يجب أن تكون أكبر من صفر'),
+    allocation_method: z.enum(['BY_VALUE', 'BY_QUANTITY']).default('BY_VALUE'),
+    notes: optionalText(500),
+  })
+  .strict();

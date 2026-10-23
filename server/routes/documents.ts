@@ -13,6 +13,17 @@ import { getReturnableLines } from '../returns';
 import { canSee, scopeFor, scopeSql } from '../scope';
 import { requirePermission } from '../rbac';
 import { authorizeDoc, authorizePost, authorizePayment } from '../middleware';
+import {
+  listPurchaseOrders,
+  getPurchaseOrder,
+  createPurchaseOrder,
+  updatePurchaseOrder,
+  confirmPurchaseOrder,
+  cancelPurchaseOrder,
+  receivePurchaseOrder,
+  listLandedCosts,
+  applyLandedCost,
+} from '../purchase_orders';
 import type { Document } from '../../src/types';
 
 export const documentsRouter = Router();
@@ -88,3 +99,73 @@ documentsRouter.get('/payments', (req, res) => {
     ),
   );
 });
+
+// ---------------------------------------------------------------------------
+// Purchase Orders & Landed Costs
+// ---------------------------------------------------------------------------
+
+documentsRouter.get('/purchase-orders', (req, res) => {
+  res.json(
+    listPurchaseOrders(req.user, {
+      branchId: req.query.branch_id ? String(req.query.branch_id) : undefined,
+      status: req.query.status ? String(req.query.status) : undefined,
+      partyId: req.query.party_id ? String(req.query.party_id) : undefined,
+    }),
+  );
+});
+
+documentsRouter.post(
+  '/purchase-orders',
+  requirePermission('documents:create_purchase'),
+  (req, res) => {
+    res.status(201).json(createPurchaseOrder(req.body, req.user));
+  },
+);
+
+documentsRouter.get('/purchase-orders/:id', (req, res) => {
+  res.json(getPurchaseOrder(String(req.params.id), req.user));
+});
+
+documentsRouter.put(
+  '/purchase-orders/:id',
+  requirePermission('documents:create_purchase'),
+  (req, res) => {
+    res.json(updatePurchaseOrder(String(req.params.id), req.body, req.user));
+  },
+);
+
+documentsRouter.post(
+  '/purchase-orders/:id/confirm',
+  requirePermission('documents:create_purchase'),
+  (req, res) => {
+    res.json(confirmPurchaseOrder(String(req.params.id), req.user));
+  },
+);
+
+documentsRouter.post(
+  '/purchase-orders/:id/cancel',
+  requirePermission('documents:cancel'),
+  (req, res) => {
+    res.json(cancelPurchaseOrder(String(req.params.id), req.user));
+  },
+);
+
+documentsRouter.post(
+  '/purchase-orders/:id/receive',
+  requirePermission('documents:create_purchase'),
+  (req, res) => {
+    res.json(receivePurchaseOrder(String(req.params.id), req.user, req.body));
+  },
+);
+
+documentsRouter.get('/documents/:id/landed-costs', (req, res) => {
+  res.json(listLandedCosts(String(req.params.id), req.user));
+});
+
+documentsRouter.post(
+  '/documents/:id/landed-costs',
+  requirePermission('documents:create_purchase'),
+  (req, res) => {
+    res.status(201).json(applyLandedCost(String(req.params.id), req.body, req.user));
+  },
+);

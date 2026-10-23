@@ -1171,3 +1171,72 @@ export interface StocktakeScanResponse {
   incremented_by: number;
   location_code?: string | null;
 }
+
+export type PurchaseOrderStatus =
+  'DRAFT' | 'CONFIRMED' | 'PARTIALLY_RECEIVED' | 'RECEIVED' | 'CANCELLED';
+
+export interface PurchaseOrderLine {
+  id: string;
+  order_id: string;
+  product_id: string;
+  product_name?: string;
+  sku?: string;
+  unit?: string;
+  quantity: number;
+  received_quantity: number;
+  unit_price: number;
+  tax_rate: number;
+  line_total: number;
+}
+
+export interface PurchaseOrder {
+  id: string;
+  number: string;
+  branch_id: string;
+  branch_name?: string;
+  branch_code?: string;
+  party_id: string;
+  party_name?: string;
+  party_phone?: string;
+  status: PurchaseOrderStatus;
+  date: string;
+  expected_delivery_date: string | null;
+  subtotal: number;
+  tax_rate: number;
+  tax: number;
+  total: number;
+  notes: string | null;
+  created_by?: string;
+  created_by_name?: string;
+  created_at: string;
+  lines?: PurchaseOrderLine[];
+}
+
+export type LandedCostType = 'SHIPPING' | 'CUSTOMS' | 'CLEARANCE' | 'HANDLING' | 'OTHER';
+export type LandedCostAllocationMethod = 'BY_VALUE' | 'BY_QUANTITY';
+
+export interface LandedCostAllocation {
+  id: string;
+  landed_cost_id: string;
+  document_line_id: string;
+  product_id: string;
+  product_name?: string;
+  sku?: string;
+  allocated_amount: number;
+  additional_unit_cost: number;
+}
+
+export interface LandedCost {
+  id: string;
+  document_id: string;
+  document_number?: string;
+  cost_type: LandedCostType;
+  cost_name: string;
+  amount: number;
+  allocation_method: LandedCostAllocationMethod;
+  notes: string | null;
+  created_by?: string;
+  created_by_name?: string;
+  created_at: string;
+  allocations?: LandedCostAllocation[];
+}

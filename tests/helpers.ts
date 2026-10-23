@@ -51,6 +51,8 @@ export function resetBusinessData() {
     DELETE FROM transfer_lines; DELETE FROM transfers; DELETE FROM payments;
     DELETE FROM e_invoice_submissions;
     DELETE FROM journal_entries; DELETE FROM sequences;
+    DELETE FROM landed_cost_allocations; DELETE FROM landed_costs;
+    DELETE FROM purchase_order_lines; DELETE FROM purchase_orders;
     DELETE FROM document_lines; DELETE FROM documents;
     DELETE FROM pos_cash_movements; DELETE FROM pos_parked_sales; DELETE FROM pos_shifts;
     DELETE FROM stocktake_lines; DELETE FROM stocktake_sessions;
