@@ -24,12 +24,34 @@
   overflow: hidden;
   animation: slide-in 0.18s ease-out;
 }
-/* Prefer a wider dialog when the viewport allows it, without ever overflowing. */
-.modal-wide {
-  width: min(920px, 100%);
+/* Modal Sizing Architecture */
+.modal-sm {
+  width: min(440px, 100%);
 }
+.modal-md {
+  width: min(580px, 100%);
+}
+.modal-lg,
+.modal-wide {
+  width: min(880px, 100%);
+}
+.modal-xl {
+  width: min(1040px, 100%);
+}
+.modal-2xl,
 .modal-xwide {
-  width: min(1200px, 100%);
+  width: min(1240px, 100%);
+}
+.modal-full {
+  width: min(96vw, 1600px);
+  height: 94vh;
+}
+.modal-maximized {
+  width: 98vw !important;
+  height: 96vh !important;
+  max-height: 96vh !important;
+  border-radius: 14px !important;
+  animation: none !important;
 }
 /* Give tall tables/reports more vertical room. */
 .modal-tall {
@@ -88,12 +110,40 @@
   margin-top: 4px;
   line-height: 1.6;
 }
+.modal-heading-title {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.modal-icon-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: var(--indigo-50);
+  color: var(--indigo-600);
+  flex-shrink: 0;
+}
+.modal-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.modal-heading-actions .icon-btn,
 .modal-heading > .icon-btn {
   background: var(--slate-100);
   color: var(--slate-600);
-  width: 38px;
-  height: 38px;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
 }
+.modal-heading-actions .icon-btn:hover,
 .modal-heading > .icon-btn:hover {
   background: var(--slate-200);
   color: var(--slate-900);

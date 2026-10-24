@@ -307,6 +307,7 @@ export const companySchema = z
     tax_rate: z.number().int().min(0).max(10000),
     invoice_note: optionalText(1000),
     eta_environment: z.enum(['stub', 'preprod', 'production']).default('stub').optional(),
+    invoice_settings: z.string().optional(),
   })
   .strict();
 export const userSchema = z

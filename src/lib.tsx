@@ -19,6 +19,8 @@ import {
   Inbox,
   ArrowUpRight,
   ArrowDownRight,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import type { User, Company, Document } from './types';
 import { api, SessionExpiredError } from './api';
@@ -289,19 +291,25 @@ export function Modal({
   xwide = false,
   tall = false,
   sheet = false,
+  size,
+  showMaximize = true,
+  icon,
+  actions,
 }: {
   title: string;
   description?: string;
   children: ReactNode;
   onClose: () => void;
   wide?: boolean;
-  /** Extra-wide dialog (up to 1200px) for dense tables and multi-column forms. */
   xwide?: boolean;
-  /** Fill ~90vh and let the body scroll, so long tables/reports are not cramped. */
   tall?: boolean;
-  /** On small/touch viewports, present as a bottom sheet (~85vh) instead of a centered dialog. */
   sheet?: boolean;
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'full';
+  showMaximize?: boolean;
+  icon?: ReactNode;
+  actions?: ReactNode;
 }) {
+  const [maximized, setMaximized] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
   close.current = onClose;
@@ -338,6 +346,15 @@ export function Modal({
       previous?.focus();
     };
   }, []);
+
+  const resolvedSizeClass = size
+    ? `modal-${size}`
+    : xwide
+      ? 'modal-xwide'
+      : wide
+        ? 'modal-wide'
+        : 'modal-md';
+
   return (
     <div
       className="modal-backdrop"
@@ -352,24 +369,62 @@ export function Modal({
         aria-label={title}
         className={
           'modal ' +
-          (xwide ? 'modal-xwide ' : wide ? 'modal-wide ' : '') +
-          (tall ? 'modal-tall ' : '') +
-          (sheet ? 'modal-sheet' : '')
+          resolvedSizeClass +
+          (maximized ? ' modal-maximized' : '') +
+          (tall ? ' modal-tall' : '') +
+          (sheet ? ' modal-sheet' : '')
         }
       >
         <div className="modal-heading">
-          <div>
-            <h2>{title}</h2>
-            {description && <p>{description}</p>}
+          <div className="modal-heading-title">
+            {icon && <span className="modal-icon-badge">{icon}</span>}
+            <div>
+              <h2>{title}</h2>
+              {description && <p>{description}</p>}
+            </div>
           </div>
-          <button onClick={onClose} className="icon-btn" aria-label="إغلاق النافذة">
-            <X size={21} />
-          </button>
+          <div className="modal-heading-actions">
+            {actions}
+            {showMaximize && (
+              <button
+                type="button"
+                onClick={() => setMaximized(!maximized)}
+                className="icon-btn"
+                title={maximized ? 'استعادة الحجم الطبيعي' : 'تكبير النافذة لمساحة الشاشة'}
+                aria-label={maximized ? 'استعادة الحجم الطبيعي' : 'تكبير النافذة لمساحة الشاشة'}
+              >
+                {maximized ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+              </button>
+            )}
+            <button onClick={onClose} className="icon-btn" aria-label="إغلاق النافذة">
+              <X size={20} />
+            </button>
+          </div>
         </div>
         {children}
       </div>
     </div>
   );
+}
+
+export function ModalBody({
+  children,
+  className = '',
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return <div className={`modal-body ${className}`}>{children}</div>;
+}
+
+export function ModalFooter({
+  children,
+  className = '',
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return <div className={`modal-footer ${className}`}>{children}</div>;
 }
 export function Confirm({
   title,

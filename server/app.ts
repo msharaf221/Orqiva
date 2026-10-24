@@ -26,6 +26,8 @@ import { etaRouter } from './routes/eta';
 import { ledgerRouter } from './routes/ledger';
 import { treasuryRouter } from './routes/treasury';
 import { payrollRouter } from './routes/payroll';
+import { hrRouter } from './routes/hr';
+import { crmRouter } from './routes/crm';
 
 import type { User } from '../src/types';
 
@@ -127,6 +129,8 @@ app.use('/api', etaRouter);
 app.use('/api', ledgerRouter);
 app.use('/api', treasuryRouter);
 app.use('/api', payrollRouter);
+app.use('/api/hr', hrRouter);
+app.use('/api/crm', crmRouter);
 
 // API 404 handler
 app.use('/api', (_req, res) => res.status(404).json({ error: 'المسار غير موجود' }));

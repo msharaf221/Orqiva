@@ -470,6 +470,30 @@ export interface Company {
   activity_code: string;
   /** ETA submission environment: stub (offline), preprod or production. */
   eta_environment: 'stub' | 'preprod' | 'production';
+  /** JSON-serialized invoice and print layout customization. */
+  invoice_settings?: string;
+}
+
+export type InvoiceTemplateId = 'modern' | 'classic' | 'minimal' | 'compact';
+export type InvoiceLogoPosition = 'right' | 'left' | 'center';
+
+export interface InvoiceCustomization {
+  template: InvoiceTemplateId;
+  primaryColor: string;
+  logoUrl?: string;
+  logoPosition: InvoiceLogoPosition;
+  showBarcode: boolean;
+  showQrCode: boolean;
+  showSignatures: boolean;
+  showReturnPolicy: boolean;
+  showBankDetails: boolean;
+  bankName?: string;
+  bankIban?: string;
+  bankAccountName?: string;
+  showSku: boolean;
+  footerNote?: string;
+  thermalEcoMode: boolean;
+  thermalShowCashier: boolean;
 }
 
 export type EtaDocumentStatus =
@@ -1364,6 +1388,9 @@ export interface Employee {
   insurance_number?: string | null;
   active: number;
   hire_date: string;
+  contract_end_date?: string | null;
+  probation_end_date?: string | null;
+  emergency_contact?: string | null;
   created_at: string;
 }
 
@@ -1398,13 +1425,145 @@ export interface PayrollSlip {
   job_title?: string;
   basic_salary: number;
   variable_salary: number;
+  overtime_amount: number;
+  sales_commission: number;
   gross_salary: number;
   social_insurance_employee: number;
   social_insurance_employer: number;
   income_tax: number;
   martyrs_fund: number;
   advances_deduction: number;
+  attendance_deduction: number;
   other_deductions: number;
   net_salary: number;
   notes?: string | null;
+}
+
+// HR Extension: Leaves, Attendance, Contracts
+export interface LeaveType {
+  id: string;
+  code: string;
+  name: string;
+  days_per_year: number;
+  is_paid: number;
+  deduct_from_salary: number;
+  created_at: string;
+}
+
+export type LeaveStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+
+export interface EmployeeLeave {
+  id: string;
+  employee_id: string;
+  employee_name?: string;
+  employee_code?: string;
+  leave_type_id: string;
+  leave_type_name?: string;
+  leave_type_code?: string;
+  start_date: string;
+  end_date: string;
+  total_days: number;
+  reason?: string | null;
+  status: LeaveStatus;
+  approved_by?: string | null;
+  approved_by_name?: string | null;
+  approved_at?: string | null;
+  notes?: string | null;
+  created_at: string;
+}
+
+export type AttendanceStatus = 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED' | 'REST_DAY';
+
+export interface EmployeeAttendance {
+  id: string;
+  employee_id: string;
+  employee_name?: string;
+  employee_code?: string;
+  branch_id: string;
+  branch_name?: string;
+  date: string;
+  check_in?: string | null;
+  check_out?: string | null;
+  status: AttendanceStatus;
+  late_minutes: number;
+  overtime_hours: number;
+  notes?: string | null;
+  created_at: string;
+}
+
+// Enterprise CRM Suite
+export interface CrmStage {
+  id: string;
+  name: string;
+  order_index: number;
+  probability: number;
+  is_won: number;
+  is_lost: number;
+  color: string;
+}
+
+export type DealStatus = 'OPEN' | 'WON' | 'LOST';
+
+export interface CrmDeal {
+  id: string;
+  code: string;
+  title: string;
+  party_id?: string | null;
+  customer_name?: string | null;
+  contact_name: string;
+  contact_phone?: string | null;
+  contact_email?: string | null;
+  stage_id: string;
+  stage_name?: string;
+  stage_color?: string;
+  expected_revenue: number; // in piasters
+  probability: number;
+  expected_close_date?: string | null;
+  assigned_to_user_id?: string | null;
+  assigned_to_name?: string | null;
+  branch_id: string;
+  branch_name?: string;
+  quotation_id?: string | null;
+  quotation_number?: string | null;
+  status: DealStatus;
+  lost_reason?: string | null;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+  activities?: CrmActivity[];
+}
+
+export type ActivityType = 'CALL' | 'MEETING' | 'TASK' | 'EMAIL' | 'NOTE';
+export type ActivityStatus = 'PENDING' | 'COMPLETED' | 'CANCELLED';
+
+export interface CrmActivity {
+  id: string;
+  deal_id?: string | null;
+  deal_title?: string | null;
+  party_id?: string | null;
+  customer_name?: string | null;
+  type: ActivityType;
+  title: string;
+  due_date: string;
+  due_time?: string | null;
+  assigned_to_user_id?: string | null;
+  assigned_to_name?: string | null;
+  status: ActivityStatus;
+  outcome_notes?: string | null;
+  completed_at?: string | null;
+  created_at: string;
+}
+
+export interface SalesTarget {
+  id: string;
+  user_id: string;
+  user_name?: string;
+  month: string; // YYYY-MM
+  target_amount: number; // in piasters
+  commission_bps: number; // basis points, e.g. 200 = 2%
+  achieved_amount?: number;
+  achieved_pct?: number;
+  earned_commission?: number;
+  notes?: string | null;
+  created_at: string;
 }

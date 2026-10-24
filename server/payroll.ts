@@ -12,6 +12,7 @@
 import { all, one, run, transaction, id, now } from './db';
 import { AppError } from './errors';
 import { postEntry } from './ledger';
+import { getMonthlyAttendanceAndLeaveImpact } from './hr';
 import { Employee, PayrollRun, PayrollSlip, EmploymentType } from '../src/types';
 import type { Actor } from './scope';
 
@@ -277,19 +278,45 @@ export function createPayrollRun(
     employee_id: string;
     basic: number;
     variable: number;
+    overtime: number;
+    commission: number;
     gross: number;
     socialEmp: number;
     socialEmpr: number;
     tax: number;
     martyrs: number;
     advances: number;
+    attendanceDeduction: number;
     net: number;
   }> = [];
 
   for (const emp of activeEmployees) {
+    // 1. Attendance & Leaves impact (overtime & attendance deductions)
+    const attImpact = getMonthlyAttendanceAndLeaveImpact(emp.id, month);
+
+    // 2. Sales commission (if any earned from sales targets)
+    const commissionRow = one<{ earned: number }>(
+      `SELECT COALESCE(SUM(achieved * commission_bps / 10000), 0) AS earned
+       FROM (
+         SELECT st.commission_bps, COALESCE(SUM(p.amount), 0) AS achieved
+         FROM sales_targets st
+         JOIN users u ON u.id = st.user_id
+         JOIN documents d ON d.created_by = u.id AND d.type = 'SALE'
+         JOIN payments p ON p.document_id = d.id AND p.date LIKE ?
+         WHERE LOWER(u.name) = LOWER(?) AND st.month = ?
+         GROUP BY st.id
+       )`,
+      `${month}%`,
+      emp.name,
+      month,
+    );
+    const salesCommission = commissionRow?.earned || 0;
+
+    const totalEmpVariable = emp.variable_salary + attImpact.overtimeAmount + salesCommission;
+
     const deductions = calculateEgyptianPayrollDeductions(
       emp.basic_salary,
-      emp.variable_salary,
+      totalEmpVariable,
       emp.insured_salary,
     );
 
@@ -306,11 +333,12 @@ export function createPayrollRun(
         deductions.employeeSocialIns -
         deductions.incomeTax -
         deductions.martyrsFund -
-        adv,
+        adv -
+        attImpact.attendanceDeduction,
     );
 
     totalBasic += emp.basic_salary;
-    totalVariable += emp.variable_salary;
+    totalVariable += totalEmpVariable;
     totalGross += deductions.gross;
     totalSocialInsEmp += deductions.employeeSocialIns;
     totalSocialInsEmpr += deductions.employerSocialIns;
@@ -324,12 +352,15 @@ export function createPayrollRun(
       employee_id: emp.id,
       basic: emp.basic_salary,
       variable: emp.variable_salary,
+      overtime: attImpact.overtimeAmount,
+      commission: salesCommission,
       gross: deductions.gross,
       socialEmp: deductions.employeeSocialIns,
       socialEmpr: deductions.employerSocialIns,
       tax: deductions.incomeTax,
       martyrs: deductions.martyrsFund,
       advances: adv,
+      attendanceDeduction: attImpact.attendanceDeduction,
       net: netSalary,
     });
   }
@@ -361,21 +392,24 @@ export function createPayrollRun(
     for (const s of slipsToInsert) {
       run(
         `INSERT INTO payroll_slips(id, payroll_run_id, employee_id, basic_salary, variable_salary,
-                                   gross_salary, social_insurance_employee, social_insurance_employer,
-                                   income_tax, martyrs_fund, advances_deduction, other_deductions,
-                                   net_salary)
-         VALUES(?,?,?,?,?,?,?,?,?,?,?, 0, ?)`,
+                                   overtime_amount, sales_commission, gross_salary, social_insurance_employee,
+                                   social_insurance_employer, income_tax, martyrs_fund, advances_deduction,
+                                   attendance_deduction, other_deductions, net_salary)
+         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?, 0, ?)`,
         s.id,
         runId,
         s.employee_id,
         s.basic,
         s.variable,
+        s.overtime,
+        s.commission,
         s.gross,
         s.socialEmp,
         s.socialEmpr,
         s.tax,
         s.martyrs,
         s.advances,
+        s.attendanceDeduction,
         s.net,
       );
     }
@@ -393,16 +427,18 @@ export function confirmPayrollRun(payrollRunId: string, actorId?: string): Payro
 
   transaction(() => {
     // Generate Double-Entry General Ledger journal entry:
-    // Dr Salaries & Wages Expense (6120): totalGross + employerSocialInsurance
-    // Cr Social Insurance Authority (2140): employeeSocialInsurance + employerSocialInsurance
-    // Cr Tax Authority - Payroll Tax (2150): incomeTax + martyrsFund
-    // Cr Employee Advances (1165): totalAdvances (if any)
-    // Cr Salaries Payable (2130): totalNet
+    // Net expense recognized = (total_gross - total_attendance_deduction) + employer_social_insurance
+    const totalAttendanceDeductions = (pr.slips || []).reduce(
+      (sum, s) => sum + (s.attendance_deduction || 0),
+      0,
+    );
+    const netSalariesExpense =
+      pr.total_gross - totalAttendanceDeductions + pr.total_social_insurance_employer;
 
     const lines: Array<{ accountId: string; debit: number; credit: number }> = [
       {
         accountId: 'acc_salaries_exp',
-        debit: pr.total_gross + pr.total_social_insurance_employer,
+        debit: netSalariesExpense,
         credit: 0,
       },
       {
