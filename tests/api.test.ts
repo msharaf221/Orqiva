@@ -147,7 +147,7 @@ describe('Real database migrations and security', () => {
 
   it('applies the SQL migration once and creates persistent relational tables', () => {
     migrate();
-    expect(all('SELECT * FROM schema_migrations')).toHaveLength(22);
+    expect(all('SELECT * FROM schema_migrations')).toHaveLength(25);
     expect(one<{ foreign_keys: number }>('PRAGMA foreign_keys')?.foreign_keys).toBe(1);
     expect(all("SELECT name FROM sqlite_master WHERE type='table'").length).toBeGreaterThanOrEqual(
       13,
@@ -371,8 +371,8 @@ describe('Atomic invoice lifecycle', () => {
     expect(res.body).toMatchObject({
       subtotal: 20000,
       discount: 1000,
-      tax: 2660,
-      total: 21660,
+      tax: 0,
+      total: 19000,
       paid: 0,
       status: 'DRAFT',
       number: 'INV-HQ-2026-0001',
@@ -538,7 +538,7 @@ describe('Payments and financial reports', () => {
     const final = await admin
       .post(`/api/documents/${doc.id}/payments`)
       .set(header)
-      .send({ amount: 11660, method: 'BANK', date: '2026-10-02' })
+      .send({ amount: 9000, method: 'BANK', date: '2026-10-02' })
       .expect(201);
     expect(final.body.paid).toBe(doc.total);
     expect(final.body.payments).toHaveLength(2);
@@ -604,13 +604,13 @@ describe('Payments and financial reports', () => {
       collected: 10000,
       disbursed: 0,
       cashFlow: 8000,
-      receivables: 11660,
-      payables: 13680,
+      receivables: 9000,
+      payables: 12000,
       invoiceCount: 1,
     });
     expect(response.body.series).toHaveLength(31);
     const parties = await admin.get('/api/parties?type=CUSTOMER').expect(200);
-    expect(parties.body[0].balance).toBe(11660);
+    expect(parties.body[0].balance).toBe(9000);
   });
   it('excludes cancelled invoices from operational reports', async () => {
     const doc = await createAndPost();

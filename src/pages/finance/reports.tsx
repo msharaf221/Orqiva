@@ -26,6 +26,7 @@ import {
   downloadCSV,
 } from '../../lib';
 import { useBranch, withBranch } from '../../branch';
+import { TAX_FREE } from '../../config';
 import { RevenueChart } from '../Dashboard';
 import type { Dashboard as DashboardData } from '../../types';
 
@@ -107,7 +108,7 @@ export function Reports() {
                 label="صافي المبيعات"
                 value={money(report.sales)}
                 icon={<ReceiptText size={20} />}
-                foot="بعد الخصم، قبل الضريبة"
+                foot={TAX_FREE ? 'بعد الخصم' : 'بعد الخصم، قبل الضريبة'}
               />
               <Stat
                 label="مجمل الربح التقديري"
@@ -134,7 +135,7 @@ export function Reports() {
               <div className="card-heading">
                 <div>
                   <h2>اتجاه المبيعات والمشتريات</h2>
-                  <p>القيم قبل الضريبة وبعد الخصومات</p>
+                  <p>{TAX_FREE ? 'القيم بعد الخصومات' : 'القيم قبل الضريبة وبعد الخصومات'}</p>
                 </div>
                 <div className="chart-legend">
                   <span>
@@ -213,7 +214,11 @@ export function Reports() {
               <div className="card-heading">
                 <div>
                   <h2>المنتجات الأعلى مبيعاً</h2>
-                  <p>حسب قيمة بنود المبيعات، قبل خصم الفاتورة والضريبة</p>
+                  <p>
+                    {TAX_FREE
+                      ? 'حسب قيمة بنود المبيعات، قبل خصم الفاتورة'
+                      : 'حسب قيمة بنود المبيعات، قبل خصم الفاتورة والضريبة'}
+                  </p>
                 </div>
                 <Link to="/products" className="text-link">
                   كل المنتجات <ArrowLeft size={15} />
@@ -261,17 +266,31 @@ export function Reports() {
               <ShieldCheck size={20} />
               <span>
                 هذا ملخص إداري، وليس قوائم مالية محاسبية معتمدة. للحصول على القوائم المالية الرسمية
-                (قائمة الدخل، الميزانية العمومية) أو{' '}
-                <strong>إقرار ضريبة القيمة المضافة (نموذج 10)</strong> وسجلات الفواتير الضريبية،
-                يرجى الانتقال إلى{' '}
-                <Link
-                  to="/ledger?tab=vat-return"
-                  style={{ textDecoration: 'underline', fontWeight: 600 }}
-                >
-                  دفتر الأستاذ العام والضرائب{' '}
-                  <ArrowLeft size={14} style={{ display: 'inline', verticalAlign: 'middle' }} />
-                </Link>
-                .
+                (قائمة الدخل، الميزانية العمومية)
+                {TAX_FREE ? (
+                  <>
+                    ، يرجى الانتقال إلى{' '}
+                    <Link to="/ledger" style={{ textDecoration: 'underline', fontWeight: 600 }}>
+                      دفتر الأستاذ العام{' '}
+                      <ArrowLeft size={14} style={{ display: 'inline', verticalAlign: 'middle' }} />
+                    </Link>
+                    .
+                  </>
+                ) : (
+                  <>
+                    {' '}
+                    أو <strong>إقرار ضريبة القيمة المضافة (نموذج 10)</strong> وسجلات الفواتير
+                    الضريبية، يرجى الانتقال إلى{' '}
+                    <Link
+                      to="/ledger?tab=vat-return"
+                      style={{ textDecoration: 'underline', fontWeight: 600 }}
+                    >
+                      دفتر الأستاذ العام والضرائب{' '}
+                      <ArrowLeft size={14} style={{ display: 'inline', verticalAlign: 'middle' }} />
+                    </Link>
+                    .
+                  </>
+                )}
               </span>
             </div>
           </>

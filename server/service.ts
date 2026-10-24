@@ -2,6 +2,8 @@ import { all, one, run, transaction, id, now } from './db';
 import { documentSchema, paymentSchema } from './validation';
 import { z } from 'zod';
 import { AppError } from './errors';
+import { audit } from './audit';
+import { nextNumber } from './sequence';
 import { writableBranch, type Actor } from './scope';
 import { effectiveCost, recordCostIn, recordCostOut } from './cost';
 import { validateReturnLines } from './returns';
@@ -9,6 +11,7 @@ import { resolveDefaultAccountId, assertAccountFunds, glAccountForCashAccount } 
 import { enqueueEtaSubmission, isEtaEligible } from './eta';
 import { postDocumentLedger, reverseDocumentLedger, postPaymentLedger } from './posting';
 import { recordBatchStock } from './batches';
+import { calculateTax, effectiveTaxRate } from '../src/config';
 import type { Document, DocLine, Party, Payment, Branch } from '../src/types';
 
 export { AppError } from './errors';
@@ -27,43 +30,14 @@ export type ProductRow = {
   created_at: string;
 };
 
-export function audit(
-  actor: Pick<Actor, 'id' | 'name'>,
-  action: string,
-  entity: string,
-  entityId: string,
-  details = '',
-) {
-  run(
-    'INSERT INTO audit_logs(id,user_id,user_name,action,entity,entity_id,details,created_at) VALUES(?,?,?,?,?,?,?,?)',
-    id(),
-    actor.id,
-    actor.name,
-    action,
-    entity,
-    entityId,
-    details,
-    now(),
-  );
-}
+export { audit };
 
 export function requireRow<T>(row: T | undefined): T {
   if (!row) throw new AppError(404, 'العنصر غير موجود');
   return row;
 }
 
-/** Annual, gap-free sequence per prefix, e.g. `TR-2026-0001`. Must run inside a transaction. */
-export function nextNumber(prefix: string, year: string): string {
-  const key = `${prefix}-${year}`;
-  run(
-    'INSERT INTO sequences(id,value) VALUES(?,1) ON CONFLICT(id) DO UPDATE SET value=value+1',
-    key,
-  );
-  const sequence = requireRow(
-    one<{ value: number }>('SELECT value FROM sequences WHERE id=?', key),
-  );
-  return `${key}-${String(sequence.value).padStart(4, '0')}`;
-}
+export { nextNumber };
 
 export function branchStock(branchId: string, productId: string): number {
   return (
@@ -278,11 +252,13 @@ function prepareDocument(
   });
   const subtotal = lines.reduce((s, l) => s + l.total, 0);
   if (input.discount > subtotal) throw new AppError(400, 'الخصم أكبر من قيمة الفاتورة');
-  const tax = Math.round(((subtotal - input.discount) * input.tax_rate) / 10000);
+  // Tax-free mode: the requested rate is accepted for API compatibility but never persisted.
+  const taxRate = effectiveTaxRate(input.tax_rate);
+  const tax = calculateTax(subtotal - input.discount, taxRate);
   const total = subtotal - input.discount + tax;
   if (!Number.isSafeInteger(total) || total > 1_000_000_000)
     throw new AppError(400, 'قيمة الفاتورة تتجاوز الحد المسموح (١٠ مليون جنيه)');
-  return { lines, subtotal, tax, total };
+  return { lines, subtotal, taxRate, tax, total };
 }
 
 export function saveDocument(raw: unknown, actor: Actor, existingId?: string) {
@@ -306,7 +282,7 @@ export function saveDocument(raw: unknown, actor: Actor, existingId?: string) {
         input.due_date,
         computed.subtotal,
         input.discount,
-        input.tax_rate,
+        computed.taxRate,
         computed.tax,
         computed.total,
         input.notes,
@@ -347,7 +323,7 @@ export function saveDocument(raw: unknown, actor: Actor, existingId?: string) {
         input.due_date,
         computed.subtotal,
         input.discount,
-        input.tax_rate,
+        computed.taxRate,
         computed.tax,
         computed.total,
         input.notes,

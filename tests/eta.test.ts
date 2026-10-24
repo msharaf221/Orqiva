@@ -1,14 +1,13 @@
 /**
- * Phase 4.1 — Egyptian Tax Authority (ETA) e-invoicing foundation.
+ * ETA e-invoicing foundation in tax-free mode.
  *
- * Verifies the offline-capable building blocks:
- *  - every document receives a unique UBL 2.1 UUID (internal_code);
- *  - posting a sale enqueues an outbox row in PENDING state;
- *  - the stub pipeline validates the payload and moves it to VALID with a long id;
- *  - retry/backoff bookkeeping is bounded and monotonically increasing;
- *  - the TLV QR code carries the ETA tags (seller, VAT, timestamp, total, tax);
- *  - credit notes reference the UUID of the original invoice;
- *  - cancelling an invoice cancels its pending submission.
+ * The tax authority integration depends on a tax identity and VAT amounts, so Orqiva keeps
+ * the pipeline dormant while `TAX_FREE` is enabled. These tests pin that behaviour:
+ *  - every document still receives a unique UBL 2.1 UUID (internal_code);
+ *  - posting a sale does NOT enqueue an outbox row;
+ *  - the UBL builder remains usable and reports zero tax;
+ *  - the TLV QR helper still encodes tags 1..5 for future use;
+ *  - retry/process endpoints refuse to run while ETA is disabled.
  */
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
@@ -19,7 +18,6 @@ import {
   buildEtaInvoice,
   etaDocTypeFor,
   isEtaEligible,
-  backoffSeconds,
   processPendingSubmissions,
   retrySubmission,
 } from '../server/eta';
@@ -113,7 +111,7 @@ async function draftSale(
     });
 }
 
-describe('ETA e-invoicing foundation', () => {
+describe('ETA e-invoicing foundation (disabled in tax-free mode)', () => {
   it('assigns a unique UBL 2.1 UUID to every document', async () => {
     const client = await admin();
     const { customerId, productId } = await setup(client);
@@ -153,7 +151,7 @@ describe('ETA e-invoicing foundation', () => {
     expect(a.body.internal_code).not.toBe(b.body.internal_code);
   });
 
-  it('enqueues a PENDING submission on post and completes it via the stub pipeline', async () => {
+  it('does not enqueue a submission when posting a sale', async () => {
     const client = await admin();
     const { customerId, supplierId, productId } = await setup(client);
     await stockUp(client, supplierId, productId);
@@ -161,35 +159,17 @@ describe('ETA e-invoicing foundation', () => {
     const sale = await draftSale(client, customerId, productId, 2);
     await client.post(`/api/documents/${sale.body.id}/post`).set(header).send({});
 
-    const pending = one<{ status: string; uuid: string; document_type: string }>(
-      'SELECT status, uuid, document_type FROM e_invoice_submissions WHERE document_id=?',
-      sale.body.id,
-    );
-    expect(pending?.status).toBe('PENDING');
-    expect(pending?.uuid).toBe(sale.body.internal_code);
-    expect(pending?.document_type).toBe('INVOICE');
-
-    const result = processPendingSubmissions(10);
-    expect(result.processed).toBe(1);
-    expect(result.succeeded).toBe(1);
-
-    const done = one<{ status: string; eta_long_id: string; attempt: number }>(
-      'SELECT status, eta_long_id, attempt FROM e_invoice_submissions WHERE document_id=?',
-      sale.body.id,
-    );
-    expect(done?.status).toBe('VALID');
-    expect(done?.eta_long_id).toContain(sale.body.internal_code);
-    expect(done?.attempt).toBe(1);
-
-    const doc = one<{ eta_status: string; eta_long_id: string }>(
-      'SELECT eta_status, eta_long_id FROM documents WHERE id=?',
-      sale.body.id,
-    );
-    expect(doc?.eta_status).toBe('VALID');
-    expect(doc?.eta_long_id).toBe(done?.eta_long_id);
+    expect(
+      all('SELECT id FROM e_invoice_submissions WHERE document_id=?', sale.body.id),
+    ).toHaveLength(0);
+    expect(
+      one<{ eta_status: string }>('SELECT eta_status FROM documents WHERE id=?', sale.body.id)
+        ?.eta_status,
+    ).toBe('NOT_SUBMITTED');
+    expect(processPendingSubmissions(10)).toEqual({ processed: 0, succeeded: 0 });
   });
 
-  it('builds a UBL 2.1 payload with the mandatory fields and 14% VAT', async () => {
+  it('builds a UBL 2.1 payload with mandatory fields and zero tax', async () => {
     const client = await admin();
     const { customerId, productId } = await setup(client);
     const today = new Date().toISOString().slice(0, 10);
@@ -215,7 +195,8 @@ describe('ETA e-invoicing foundation', () => {
     expect(payload.documentType).toBe('INVOICE');
     expect(payload.receiver.id).toBe('123456789');
     expect(payload.invoiceLines).toHaveLength(1);
-    expect(payload.invoiceLines[0].taxableItems[0].rate).toBe(14);
+    expect(payload.invoiceLines[0].taxableItems[0].rate).toBe(0);
+    expect(payload.taxAmount).toBe(0);
     expect(payload.totalAmount).toBe(sale.body.total / 100);
   });
 
@@ -224,8 +205,8 @@ describe('ETA e-invoicing foundation', () => {
       sellerName: 'شركة أوركيفا',
       taxNumber: '123456789',
       timestamp: '2026-03-01T00:00:00.000Z',
-      total: 22800,
-      tax: 2800,
+      total: 20000,
+      tax: 0,
     });
     const buf = Buffer.from(encoded, 'base64');
     // Tag 1 (seller) must be the first record, tag 2 the second, etc.
@@ -241,75 +222,11 @@ describe('ETA e-invoicing foundation', () => {
     offset += 2 + buf[offset + 1];
     expect(buf[offset]).toBe(4); // Total
     const totalLen = buf[offset + 1];
-    expect(buf.subarray(offset + 2, offset + 2 + totalLen).toString('utf8')).toBe('228.00');
+    expect(buf.subarray(offset + 2, offset + 2 + totalLen).toString('utf8')).toBe('200.00');
     offset += 2 + totalLen;
     expect(buf[offset]).toBe(5); // Tax
     const taxLen = buf[offset + 1];
-    expect(buf.subarray(offset + 2, offset + 2 + taxLen).toString('utf8')).toBe('28.00');
-  });
-
-  it('references the original invoice UUID for credit notes', async () => {
-    const client = await admin();
-    const { customerId, supplierId, productId } = await setup(client);
-    const today = new Date().toISOString().slice(0, 10);
-
-    const po = await client
-      .post('/api/documents')
-      .set(header)
-      .send({
-        type: 'PURCHASE',
-        branch_id: 'main',
-        party_id: supplierId,
-        date: today,
-        due_date: today,
-        tax_rate: 0,
-        discount: 0,
-        notes: '',
-        lines: [{ product_id: productId, quantity: 5, unit_price: 6000 }],
-      });
-    await client.post(`/api/documents/${po.body.id}/post`).set(header).send({});
-
-    const sale = await client
-      .post('/api/documents')
-      .set(header)
-      .send({
-        type: 'SALE',
-        branch_id: 'main',
-        party_id: customerId,
-        date: today,
-        due_date: today,
-        tax_rate: 1400,
-        discount: 0,
-        notes: '',
-        lines: [{ product_id: productId, quantity: 3, unit_price: 10000 }],
-      });
-    await client.post(`/api/documents/${sale.body.id}/post`).set(header).send({});
-
-    const ret = await client
-      .post('/api/documents')
-      .set(header)
-      .send({
-        type: 'SALE_RETURN',
-        branch_id: 'main',
-        party_id: customerId,
-        original_document_id: sale.body.id,
-        date: today,
-        due_date: today,
-        tax_rate: 1400,
-        discount: 0,
-        notes: '',
-        lines: [{ product_id: productId, quantity: 1, unit_price: 10000 }],
-      });
-    await client.post(`/api/documents/${ret.body.id}/post`).set(header).send({});
-
-    const sub = one<{ document_type: string }>(
-      'SELECT document_type FROM e_invoice_submissions WHERE document_id=?',
-      ret.body.id,
-    );
-    expect(sub?.document_type).toBe('CREDIT_NOTE');
-
-    const payload = buildEtaInvoice(ret.body.id);
-    expect(payload.references).toEqual([sale.body.internal_code]);
+    expect(buf.subarray(offset + 2, offset + 2 + taxLen).toString('utf8')).toBe('0.00');
   });
 
   it('does not enqueue submissions for purchase invoices', async () => {
@@ -340,55 +257,42 @@ describe('ETA e-invoicing foundation', () => {
     expect(etaDocTypeFor('PURCHASE')).toBe('INVOICE');
   });
 
-  it('cancels a queued submission when its invoice is cancelled', async () => {
+  it('rejects retry while ETA is disabled', async () => {
     const client = await admin();
-    const { customerId, supplierId, productId } = await setup(client);
-    await stockUp(client, supplierId, productId);
+    const { customerId, productId } = await setup(client);
+    const today = new Date().toISOString().slice(0, 10);
 
-    const sale = await draftSale(client, customerId, productId, 1);
-    await client.post(`/api/documents/${sale.body.id}/post`).set(header).send({});
-    await client.post(`/api/documents/${sale.body.id}/cancel`).set(header).send({});
+    const sale = await client
+      .post('/api/documents')
+      .set(header)
+      .send({
+        type: 'SALE',
+        branch_id: 'main',
+        party_id: customerId,
+        date: today,
+        due_date: today,
+        tax_rate: 1400,
+        discount: 0,
+        notes: '',
+        lines: [{ product_id: productId, quantity: 1, unit_price: 10000 }],
+      });
 
-    const sub = one<{ status: string }>(
-      'SELECT status FROM e_invoice_submissions WHERE document_id=?',
-      sale.body.id,
-    );
-    expect(sub?.status).toBe('CANCELLED');
-    expect(processPendingSubmissions(10).processed).toBe(0);
-  });
-
-  it('applies bounded exponential backoff and exposes retry', async () => {
-    // Pure backoff growth, capped at 30 minutes.
-    expect(backoffSeconds(1)).toBe(30);
-    expect(backoffSeconds(2)).toBe(60);
-    expect(backoffSeconds(3)).toBe(120);
-    expect(backoffSeconds(4)).toBe(240);
-    expect(backoffSeconds(20)).toBe(1800);
-
-    const client = await admin();
-    const { customerId, supplierId, productId } = await setup(client);
-    await stockUp(client, supplierId, productId);
-
-    const sale = await draftSale(client, customerId, productId, 1);
-    await client.post(`/api/documents/${sale.body.id}/post`).set(header).send({});
-
-    const subId = one<{ id: string }>(
-      'SELECT id FROM e_invoice_submissions WHERE document_id=?',
-      sale.body.id,
-    )!.id;
-    // Simulate a permanent failure.
     run(
-      "UPDATE e_invoice_submissions SET status='FAILED', attempt=5, last_error='خطأ' WHERE id=?",
-      subId,
+      `INSERT INTO e_invoice_submissions(
+         id, document_id, uuid, document_type, status, attempt, max_attempts,
+         next_attempt_at, created_by, created_at, updated_at
+       ) VALUES('eta-disabled', ?, ?, 'INVOICE', 'FAILED', 5, 5, ?, 'admin', ?, ?)`,
+      sale.body.id,
+      sale.body.internal_code,
+      today,
+      today,
+      today,
     );
-    const retried = retrySubmission(subId);
-    expect(retried.status).toBe('PENDING');
-    expect(retried.last_error).toBe('');
 
-    expect(processPendingSubmissions(10).succeeded).toBe(1);
+    expect(() => retrySubmission('eta-disabled')).toThrow('معطّلة');
   });
 
-  it('exposes the submission log over the API with eta:view', async () => {
+  it('exposes an empty submission log and refuses to process while disabled', async () => {
     const client = await admin();
     const { customerId, supplierId, productId } = await setup(client);
     await stockUp(client, supplierId, productId);
@@ -398,14 +302,15 @@ describe('ETA e-invoicing foundation', () => {
 
     const list = await client.get('/api/eta/submissions');
     expect(list.status).toBe(200);
-    expect(list.body).toHaveLength(1);
-    expect(list.body[0].document_id).toBe(sale.body.id);
+    expect(list.body).toHaveLength(0);
 
     const status = await client.get('/api/eta/status');
     expect(status.status).toBe(200);
-    expect(status.body.summary.PENDING).toBe(1);
+    expect(status.body.configured).toBe(false);
+    expect(status.body.summary.PENDING ?? 0).toBe(0);
 
     const process = await client.post('/api/eta/process').set(header).send({});
-    expect(process.body.succeeded).toBe(1);
+    expect(process.body.processed).toBe(0);
+    expect(process.body.succeeded).toBe(0);
   });
 });

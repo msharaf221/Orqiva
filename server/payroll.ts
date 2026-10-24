@@ -13,8 +13,10 @@ import { all, one, run, transaction, id, now } from './db';
 import { AppError } from './errors';
 import { postEntry } from './ledger';
 import { getMonthlyAttendanceAndLeaveImpact } from './hr';
-import { Employee, PayrollRun, PayrollSlip, EmploymentType } from '../src/types';
-import type { Actor } from './scope';
+import { TAX_FREE } from '../src/config';
+import { Employee, PayrollRun, PayrollSlip, EmploymentType, JournalEntry } from '../src/types';
+import { audit } from './audit';
+import { inScope, scopeSql, writableBranch, type Actor, type Scope } from './scope';
 
 function toActor(actorId?: string): Actor {
   return { id: actorId || 'system', name: 'Payroll Engine', role: 'ADMIN' };
@@ -22,55 +24,62 @@ function toActor(actorId?: string): Actor {
 
 // --- Employee Management ---
 
-export function listEmployees(branchId?: string): Employee[] {
-  const where = branchId ? 'WHERE e.branch_id=?' : '';
-  const params = branchId ? [branchId] : [];
+export function listEmployees(scope: Scope): Employee[] {
+  const visible = scopeSql('e.branch_id', scope);
   return all<Employee>(
     `SELECT e.*, b.name AS branch_name
      FROM employees e
      JOIN branches b ON b.id = e.branch_id
-     ${where}
+     WHERE ${visible.sql}
      ORDER BY e.name ASC`,
-    ...params,
+    ...visible.params,
   );
 }
 
-export function getEmployee(id: string): Employee | null {
-  return (
+export function getEmployee(id: string, scope?: Scope): Employee | null {
+  const employee =
     one<Employee>(
       `SELECT e.*, b.name AS branch_name
        FROM employees e
        JOIN branches b ON b.id = e.branch_id
        WHERE e.id=?`,
       id,
-    ) || null
-  );
+    ) || null;
+  if (employee && scope && !inScope(scope, employee.branch_id)) return null;
+  return employee;
 }
 
-export function createEmployee(data: {
-  code: string;
-  name: string;
-  national_id?: string;
-  phone?: string;
-  job_title: string;
-  department?: string;
-  branch_id: string;
-  employment_type?: EmploymentType;
-  basic_salary: number; // in piasters
-  variable_salary?: number;
-  insured_salary?: number;
-  insurance_number?: string;
-  hire_date: string;
-}): Employee {
-  const branch = one<{ id: string }>('SELECT id FROM branches WHERE id=?', data.branch_id);
-  if (!branch) throw new AppError(404, 'الفرع غير موجود');
+export function createEmployee(
+  data: {
+    code: string;
+    name: string;
+    national_id?: string;
+    phone?: string;
+    job_title: string;
+    department?: string;
+    branch_id: string;
+    employment_type?: EmploymentType;
+    basic_salary: number; // in piasters
+    variable_salary?: number;
+    insured_salary?: number;
+    insurance_number?: string;
+    hire_date: string;
+  },
+  actor?: Actor,
+): Employee {
+  if (actor) writableBranch(actor, data.branch_id);
+  else if (!one('SELECT id FROM branches WHERE id=?', data.branch_id)) {
+    throw new AppError(404, 'الفرع غير موجود');
+  }
 
   const existing = one<{ id: string }>('SELECT id FROM employees WHERE code=?', data.code);
   if (existing) throw new AppError(400, 'كود الموظف مستخدم بالفعل');
 
   const empId = id();
   const ts = now();
-  const insured = data.insured_salary ?? data.basic_salary;
+  // Tax-free mode removes social insurance from the payroll model, so the insured wage and
+  // insurance number are kept empty even if an older client still sends them.
+  const insured = TAX_FREE ? 0 : (data.insured_salary ?? data.basic_salary);
 
   run(
     `INSERT INTO employees(id, code, name, national_id, phone, job_title, department, branch_id,
@@ -89,23 +98,31 @@ export function createEmployee(data: {
     data.basic_salary,
     data.variable_salary || 0,
     insured,
-    data.insurance_number || null,
+    TAX_FREE ? null : data.insurance_number || null,
     data.hire_date,
     ts,
   );
+
+  if (actor) {
+    audit(actor, 'إضافة موظف', 'EMPLOYEE', empId, `${data.code}: ${data.name}`);
+  }
 
   return getEmployee(empId)!;
 }
 
 // --- Advances ---
 
-export function createAdvance(data: {
-  employee_id: string;
-  amount: number;
-  date: string;
-  notes?: string;
-}): { id: string } {
-  const emp = getEmployee(data.employee_id);
+export function createAdvance(
+  data: {
+    employee_id: string;
+    amount: number;
+    date: string;
+    notes?: string;
+  },
+  actor?: Actor,
+  scope?: Scope,
+): { id: string } {
+  const emp = getEmployee(data.employee_id, scope);
   if (!emp) throw new AppError(404, 'الموظف غير موجود');
   if (data.amount <= 0) throw new AppError(400, 'قيمة السلفة يجب أن تكون أكبر من صفر');
 
@@ -120,6 +137,9 @@ export function createAdvance(data: {
     data.notes || null,
     now(),
   );
+  if (actor) {
+    audit(actor, 'منح سلفة', 'EMPLOYEE_ADVANCE', advId, `${emp.name}: ${data.amount}`);
+  }
   return { id: advId };
 }
 
@@ -143,6 +163,18 @@ export function calculateEgyptianPayrollDeductions(
   martyrsFund: number;
 } {
   const gross = basicSalary + variableSalary;
+
+  // Tax-free mode: no social insurance, martyrs fund, or income tax. Gross pay is the
+  // employee's full entitlement before advances and attendance adjustments.
+  if (TAX_FREE) {
+    return {
+      gross,
+      employeeSocialIns: 0,
+      employerSocialIns: 0,
+      incomeTax: 0,
+      martyrsFund: 0,
+    };
+  }
 
   // 1. Social Insurance (11% employee, 18.75% employer)
   const employeeSocialIns = Math.round(insuredSalary * 0.11);
@@ -202,20 +234,19 @@ export function calculateEgyptianPayrollDeductions(
 
 // --- Monthly Payroll Run ---
 
-export function listPayrollRuns(branchId?: string): PayrollRun[] {
-  const where = branchId ? 'WHERE pr.branch_id=?' : '';
-  const params = branchId ? [branchId] : [];
+export function listPayrollRuns(scope: Scope): PayrollRun[] {
+  const visible = scopeSql('pr.branch_id', scope);
   return all<PayrollRun>(
     `SELECT pr.*, b.name AS branch_name
      FROM payroll_runs pr
      LEFT JOIN branches b ON b.id = pr.branch_id
-     ${where}
+     WHERE ${visible.sql}
      ORDER BY pr.month DESC`,
-    ...params,
+    ...visible.params,
   );
 }
 
-export function getPayrollRun(id: string): PayrollRun | null {
+export function getPayrollRun(id: string, scope?: Scope): PayrollRun | null {
   const runData = one<PayrollRun>(
     `SELECT pr.*, b.name AS branch_name
      FROM payroll_runs pr
@@ -224,6 +255,7 @@ export function getPayrollRun(id: string): PayrollRun | null {
     id,
   );
   if (!runData) return null;
+  if (scope && !inScope(scope, runData.branch_id)) return null;
 
   const slips = all<PayrollSlip>(
     `SELECT ps.*, e.name AS employee_name, e.code AS employee_code, e.job_title
@@ -240,9 +272,20 @@ export function getPayrollRun(id: string): PayrollRun | null {
 export function createPayrollRun(
   month: string, // YYYY-MM
   branchId?: string,
-  actorId?: string,
+  actor?: Actor,
   notes?: string,
+  scope?: Scope,
 ): PayrollRun {
+  if (branchId) {
+    if (actor) writableBranch(actor, branchId);
+    else if (!one('SELECT id FROM branches WHERE id=?', branchId)) {
+      throw new AppError(404, 'الفرع غير موجود');
+    }
+    if (scope && !inScope(scope, branchId))
+      throw new AppError(403, 'ليس لديك صلاحية على هذا الفرع');
+  } else if (actor && actor.role !== 'ADMIN') {
+    throw new AppError(403, 'مسير رواتب المجموعة متاح لمدير النظام فقط');
+  }
   const existing = one<{ id: string }>(
     `SELECT id FROM payroll_runs WHERE month=? AND branch_id ${branchId ? '=?' : 'IS NULL'}`,
     ...(branchId ? [month, branchId] : [month]),
@@ -385,7 +428,7 @@ export function createPayrollRun(
       totalAdvances,
       totalNet,
       notes || null,
-      actorId || null,
+      actor?.id || null,
       ts,
     );
 
@@ -415,69 +458,54 @@ export function createPayrollRun(
     }
   });
 
+  if (actor) {
+    audit(actor, 'إنشاء مسير رواتب', 'PAYROLL_RUN', runId, `${month}`);
+  }
+
   return getPayrollRun(runId)!;
 }
 
-export function confirmPayrollRun(payrollRunId: string, actorId?: string): PayrollRun {
-  const pr = getPayrollRun(payrollRunId);
+/**
+ * Posts the accrual entry for a payroll run. Exported so the tax-free reset can repost
+ * historical runs with exactly the same account mapping as a fresh confirmation.
+ *
+ * The expense is the net payable plus advances withheld; tax-free mode has no employer
+ * social-insurance or payroll-tax liability lines.
+ */
+export function postPayrollRunLedger(pr: PayrollRun, actor?: Actor): JournalEntry | null {
+  const totalAdvances = pr.total_advances || 0;
+  const expense = pr.total_net + totalAdvances;
+  const lines: Array<{ accountId: string; debit: number; credit: number }> = [];
+
+  if (expense > 0) lines.push({ accountId: 'acc_salaries_exp', debit: expense, credit: 0 });
+  if (totalAdvances > 0)
+    lines.push({ accountId: 'acc_emp_advances', debit: 0, credit: totalAdvances });
+  if (pr.total_net > 0) lines.push({ accountId: 'acc_salaries', debit: 0, credit: pr.total_net });
+
+  if (lines.length < 2) return null;
+
+  return postEntry(
+    {
+      date: `${pr.month}-28`,
+      sourceType: 'MANUAL',
+      sourceId: pr.id,
+      branchId: pr.branch_id || undefined,
+      memo: `استحقاق مسير رواتب شهر ${pr.month}`,
+      lines,
+    },
+    toActor(actor?.id),
+  );
+}
+
+export function confirmPayrollRun(payrollRunId: string, actor?: Actor, scope?: Scope): PayrollRun {
+  const pr = getPayrollRun(payrollRunId, scope);
   if (!pr) throw new AppError(404, 'مسير الرواتب غير موجود');
   if (pr.status !== 'DRAFT') {
     throw new AppError(400, 'مسير الرواتب مؤكد بالفعل أو تم إلغاؤه');
   }
 
   transaction(() => {
-    // Generate Double-Entry General Ledger journal entry:
-    // Net expense recognized = (total_gross - total_attendance_deduction) + employer_social_insurance
-    const totalAttendanceDeductions = (pr.slips || []).reduce(
-      (sum, s) => sum + (s.attendance_deduction || 0),
-      0,
-    );
-    const netSalariesExpense =
-      pr.total_gross - totalAttendanceDeductions + pr.total_social_insurance_employer;
-
-    const lines: Array<{ accountId: string; debit: number; credit: number }> = [
-      {
-        accountId: 'acc_salaries_exp',
-        debit: netSalariesExpense,
-        credit: 0,
-      },
-      {
-        accountId: 'acc_social_ins',
-        debit: 0,
-        credit: pr.total_social_insurance_employee + pr.total_social_insurance_employer,
-      },
-      {
-        accountId: 'acc_payroll_tax',
-        debit: 0,
-        credit: pr.total_income_tax + pr.total_martyrs_fund,
-      },
-    ];
-
-    if (pr.total_advances > 0) {
-      lines.push({
-        accountId: 'acc_emp_advances',
-        debit: 0,
-        credit: pr.total_advances,
-      });
-    }
-
-    lines.push({
-      accountId: 'acc_salaries',
-      debit: 0,
-      credit: pr.total_net,
-    });
-
-    const entry = postEntry(
-      {
-        date: `${pr.month}-28`,
-        sourceType: 'MANUAL',
-        sourceId: pr.id,
-        branchId: pr.branch_id || undefined,
-        memo: `استحقاق مسير رواتب شهر ${pr.month}`,
-        lines,
-      },
-      toActor(actorId),
-    );
+    const entry = postPayrollRunLedger(pr, actor);
 
     // Mark deducted advances as REPAID
     for (const slip of pr.slips || []) {
@@ -491,10 +519,14 @@ export function confirmPayrollRun(payrollRunId: string, actorId?: string): Payro
 
     run(
       "UPDATE payroll_runs SET status='CONFIRMED', journal_entry_id=? WHERE id=?",
-      entry.id,
+      entry?.id ?? null,
       pr.id,
     );
   });
+
+  if (actor) {
+    audit(actor, 'اعتماد مسير رواتب', 'PAYROLL_RUN', payrollRunId, `شهر ${pr.month}`);
+  }
 
   return getPayrollRun(payrollRunId)!;
 }

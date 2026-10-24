@@ -113,20 +113,23 @@ export function useData<T>(url: string | null) {
       return;
     }
     let alive = true;
+    const controller = new AbortController();
     setLoading(true);
     setError('');
-    api<T>(url)
+    api<T>(url, 'GET', undefined, undefined, controller.signal)
       .then((d) => {
         if (alive) setData(d);
       })
       .catch((e) => {
-        if (alive) setError(e instanceof Error ? e.message : 'تعذر تحميل البيانات');
+        if (!alive || (e instanceof DOMException && e.name === 'AbortError')) return;
+        setError(e instanceof Error ? e.message : 'تعذر تحميل البيانات');
       })
       .finally(() => {
         if (alive) setLoading(false);
       });
     return () => {
       alive = false;
+      controller.abort();
     };
   }, [url, version]);
   return { data, error, loading, reload };

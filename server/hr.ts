@@ -1,5 +1,7 @@
-import { all, one, run, id, now } from './db';
+import { all, one, run, transaction, id, now } from './db';
 import { AppError } from './errors';
+import { audit } from './audit';
+import { inScope, type Actor, type Scope } from './scope';
 import type {
   LeaveType,
   EmployeeLeave,
@@ -7,6 +9,20 @@ import type {
   LeaveStatus,
   AttendanceStatus,
 } from '../src/types';
+
+/** Employees are branch-owned: a foreign employee id is indistinguishable from a missing one. */
+function employeeInScope(
+  employeeId: string,
+  scope?: Scope,
+): { id: string; name: string; branch_id: string } {
+  const emp = one<{ id: string; name: string; branch_id: string }>(
+    'SELECT id, name, branch_id FROM employees WHERE id=?',
+    employeeId,
+  );
+  if (!emp) throw new AppError(404, 'الموظف غير موجود');
+  if (scope && !inScope(scope, emp.branch_id)) throw new AppError(404, 'الموظف غير موجود');
+  return emp;
+}
 
 // --- Leave Types ---
 
@@ -20,11 +36,14 @@ export function getLeaveType(id: string): LeaveType | null {
 
 // --- Leaves & Leave Balances ---
 
-export function listEmployeeLeaves(params?: {
-  employee_id?: string;
-  status?: string;
-  branch_id?: string;
-}): EmployeeLeave[] {
+export function listEmployeeLeaves(
+  params?: {
+    employee_id?: string;
+    status?: string;
+    branch_id?: string;
+  },
+  scope?: Scope,
+): EmployeeLeave[] {
   let query = `
     SELECT el.*, e.name AS employee_name, e.code AS employee_code,
            lt.name AS leave_type_name, lt.code AS leave_type_code,
@@ -36,6 +55,17 @@ export function listEmployeeLeaves(params?: {
     WHERE 1=1
   `;
   const sqlParams: any[] = [];
+
+  if (scope) {
+    if (scope.ids === null) {
+      // Whole group.
+    } else if (!scope.ids.length) {
+      query += ' AND 0=1';
+    } else {
+      query += ` AND e.branch_id IN (${scope.ids.map(() => '?').join(',')})`;
+      sqlParams.push(...scope.ids);
+    }
+  }
 
   if (params?.employee_id) {
     query += ' AND el.employee_id = ?';
@@ -54,18 +84,18 @@ export function listEmployeeLeaves(params?: {
   return all<EmployeeLeave>(query, ...sqlParams);
 }
 
-export function createLeaveRequest(data: {
-  employee_id: string;
-  leave_type_id: string;
-  start_date: string;
-  end_date: string;
-  reason?: string;
-}): EmployeeLeave {
-  const emp = one<{ id: string; name: string }>(
-    'SELECT id, name FROM employees WHERE id=?',
-    data.employee_id,
-  );
-  if (!emp) throw new AppError(404, 'الموظف غير موجود');
+export function createLeaveRequest(
+  data: {
+    employee_id: string;
+    leave_type_id: string;
+    start_date: string;
+    end_date: string;
+    reason?: string;
+  },
+  actor?: Actor,
+  scope?: Scope,
+): EmployeeLeave {
+  const emp = employeeInScope(data.employee_id, scope);
 
   const leaveType = getLeaveType(data.leave_type_id);
   if (!leaveType) throw new AppError(404, 'نوع الإجازة غير موجود');
@@ -109,6 +139,16 @@ export function createLeaveRequest(data: {
     ts,
   );
 
+  if (actor) {
+    audit(
+      actor,
+      'طلب إجازة',
+      'EMPLOYEE_LEAVE',
+      leaveId,
+      `${emp.name}: ${data.start_date} ← ${data.end_date}`,
+    );
+  }
+
   return one<EmployeeLeave>(
     `SELECT el.*, e.name AS employee_name, e.code AS employee_code,
             lt.name AS leave_type_name, lt.code AS leave_type_code
@@ -124,10 +164,12 @@ export function updateLeaveStatus(
   leaveId: string,
   status: LeaveStatus,
   actor: { id: string; name: string },
+  scope?: Scope,
   notes?: string,
 ): EmployeeLeave {
   const leave = one<EmployeeLeave>('SELECT * FROM employee_leaves WHERE id=?', leaveId);
   if (!leave) throw new AppError(404, 'طلب الإجازة غير موجود');
+  employeeInScope(leave.employee_id, scope);
   if (leave.status !== 'PENDING' && status !== 'CANCELLED') {
     throw new AppError(400, `لا يمكن تعديل طلب إجازة بحالة ${leave.status}`);
   }
@@ -142,6 +184,14 @@ export function updateLeaveStatus(
     status === 'APPROVED' ? ts : null,
     notes || null,
     leaveId,
+  );
+
+  audit(
+    actor,
+    status === 'APPROVED' ? 'اعتماد إجازة' : status === 'REJECTED' ? 'رفض إجازة' : 'تعديل إجازة',
+    'EMPLOYEE_LEAVE',
+    leaveId,
+    `الحالة: ${status}`,
   );
 
   return one<EmployeeLeave>(
@@ -160,6 +210,7 @@ export function updateLeaveStatus(
 export function getEmployeeLeaveBalance(
   employeeId: string,
   year?: string,
+  scope?: Scope,
 ): Array<{
   leave_type_id: string;
   leave_type_name: string;
@@ -169,6 +220,7 @@ export function getEmployeeLeaveBalance(
   days_remaining: number;
   is_paid: number;
 }> {
+  employeeInScope(employeeId, scope);
   const currentYear = year || new Date().getFullYear().toString();
   const types = listLeaveTypes();
 
@@ -200,12 +252,15 @@ export function getEmployeeLeaveBalance(
 
 // --- Attendance Management ---
 
-export function listAttendance(params?: {
-  branch_id?: string;
-  date?: string;
-  employee_id?: string;
-  month?: string;
-}): EmployeeAttendance[] {
+export function listAttendance(
+  params?: {
+    branch_id?: string;
+    date?: string;
+    employee_id?: string;
+    month?: string;
+  },
+  scope?: Scope,
+): EmployeeAttendance[] {
   let query = `
     SELECT ea.*, e.name AS employee_name, e.code AS employee_code, b.name AS branch_name
     FROM employee_attendance ea
@@ -214,6 +269,17 @@ export function listAttendance(params?: {
     WHERE 1=1
   `;
   const sqlParams: any[] = [];
+
+  if (scope) {
+    if (scope.ids === null) {
+      // Whole group.
+    } else if (!scope.ids.length) {
+      query += ' AND 0=1';
+    } else {
+      query += ` AND ea.branch_id IN (${scope.ids.map(() => '?').join(',')})`;
+      sqlParams.push(...scope.ids);
+    }
+  }
 
   if (params?.branch_id) {
     query += ' AND ea.branch_id = ?';
@@ -236,31 +302,38 @@ export function listAttendance(params?: {
   return all<EmployeeAttendance>(query, ...sqlParams);
 }
 
-export function recordAttendance(data: {
-  employee_id: string;
-  branch_id: string;
-  date: string;
-  check_in?: string;
-  check_out?: string;
-  status?: AttendanceStatus;
-  late_minutes?: number;
-  overtime_hours?: number;
-  notes?: string;
-}): EmployeeAttendance {
-  const emp = one<{ id: string; branch_id: string }>(
-    'SELECT id, branch_id FROM employees WHERE id=?',
-    data.employee_id,
-  );
-  if (!emp) throw new AppError(404, 'الموظف غير موجود');
+export function recordAttendance(
+  data: {
+    employee_id: string;
+    branch_id: string;
+    date: string;
+    check_in?: string;
+    check_out?: string;
+    status?: AttendanceStatus;
+    late_minutes?: number;
+    overtime_hours?: number;
+    notes?: string;
+  },
+  actor?: Actor,
+  scope?: Scope,
+): EmployeeAttendance {
+  const emp = employeeInScope(data.employee_id, scope);
+  if (data.branch_id && data.branch_id !== emp.branch_id) {
+    throw new AppError(400, 'فرع الحضور يجب أن يطابق فرع الموظف');
+  }
+  if (scope && !inScope(scope, data.branch_id)) {
+    throw new AppError(403, 'ليس لديك صلاحية على هذا الفرع');
+  }
 
   const status = data.status || 'PRESENT';
   const lateMinutes = Math.max(0, data.late_minutes || 0);
   const overtimeHours = Math.max(0, data.overtime_hours || 0);
   const ts = now();
+  const attendanceId = id();
 
   run(
-    `INSERT INTO employee_attendance (id, employee_id, branch_id, date, check_in, check_out, status, late_minutes, overtime_hours, notes, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO employee_attendance (id, employee_id, branch_id, date, check_in, check_out, status, late_minutes, overtime_hours, notes, created_at, source)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'MANUAL')
      ON CONFLICT(employee_id, date) DO UPDATE SET
        branch_id = excluded.branch_id,
        check_in = excluded.check_in,
@@ -268,8 +341,12 @@ export function recordAttendance(data: {
        status = excluded.status,
        late_minutes = excluded.late_minutes,
        overtime_hours = excluded.overtime_hours,
-       notes = excluded.notes`,
-    id(),
+       notes = excluded.notes,
+       source = 'MANUAL',
+       device_id = NULL,
+       check_in_punch_id = NULL,
+       check_out_punch_id = NULL`,
+    attendanceId,
     data.employee_id,
     data.branch_id || emp.branch_id,
     data.date,
@@ -282,7 +359,7 @@ export function recordAttendance(data: {
     ts,
   );
 
-  return one<EmployeeAttendance>(
+  const recorded = one<EmployeeAttendance>(
     `SELECT ea.*, e.name AS employee_name, e.code AS employee_code, b.name AS branch_name
      FROM employee_attendance ea
      JOIN employees e ON e.id = ea.employee_id
@@ -291,6 +368,13 @@ export function recordAttendance(data: {
     data.employee_id,
     data.date,
   )!;
+
+  // On conflict the pre-generated id is discarded; audit the row that actually persisted.
+  if (actor) {
+    audit(actor, 'تسجيل حضور', 'EMPLOYEE_ATTENDANCE', recorded.id, `${emp.name}: ${data.date}`);
+  }
+
+  return recorded;
 }
 
 export function batchRecordAttendance(
@@ -305,13 +389,17 @@ export function batchRecordAttendance(
     overtime_hours?: number;
     notes?: string;
   }>,
+  actor?: Actor,
+  scope?: Scope,
 ): { count: number } {
-  let count = 0;
-  for (const r of records) {
-    recordAttendance(r);
-    count++;
-  }
-  return { count };
+  return transaction(() => {
+    let count = 0;
+    for (const r of records) {
+      recordAttendance(r, actor, scope);
+      count++;
+    }
+    return { count };
+  });
 }
 
 /**
@@ -324,6 +412,7 @@ export function batchRecordAttendance(
 export function getMonthlyAttendanceAndLeaveImpact(
   employeeId: string,
   month: string, // YYYY-MM
+  scope?: Scope,
 ): {
   overtimeAmount: number;
   attendanceDeduction: number;
@@ -332,6 +421,7 @@ export function getMonthlyAttendanceAndLeaveImpact(
   absentDays: number;
   unpaidLeaveDays: number;
 } {
+  employeeInScope(employeeId, scope);
   const emp = one<{ basic_salary: number }>(
     'SELECT basic_salary FROM employees WHERE id=?',
     employeeId,

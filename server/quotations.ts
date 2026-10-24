@@ -9,6 +9,7 @@
 
 import { all, one, run, transaction, id, now } from './db';
 import { AppError } from './errors';
+import { calculateTax, effectiveTaxRate } from '../src/config';
 import { Quotation, QuotationLine, QuotationStatus, QuotationType } from '../src/types';
 
 export function listQuotations(filter?: {
@@ -156,8 +157,8 @@ export function createQuotation(
 
     const discount = data.discount || 0;
     const taxableBase = Math.max(0, subtotal - discount);
-    const taxRate = data.tax_rate !== undefined ? data.tax_rate : 1400;
-    const tax = Math.round((taxableBase * taxRate) / 10000);
+    const taxRate = effectiveTaxRate(data.tax_rate ?? 1400);
+    const tax = calculateTax(taxableBase, taxRate);
     const total = taxableBase + tax;
 
     run(
@@ -250,6 +251,10 @@ export function convertQuotationToSale(
     );
     const seq = one<{ value: number }>('SELECT value FROM sequences WHERE id=?', prefix)!;
     const docNumber = `${prefix}-${String(seq.value).padStart(4, '0')}`;
+    // Tax-free mode: a converted quotation is recalculated from its pre-tax base.
+    const taxRate = effectiveTaxRate(q.tax_rate);
+    const tax = calculateTax(q.subtotal - q.discount, taxRate);
+    const total = q.subtotal - q.discount + tax;
 
     run(
       `INSERT INTO documents(id, number, type, status, party_id, branch_id, date, due_date,
@@ -263,9 +268,9 @@ export function convertQuotationToSale(
       now().slice(0, 10),
       q.subtotal,
       q.discount,
-      q.tax_rate,
-      q.tax,
-      q.total,
+      taxRate,
+      tax,
+      total,
       q.notes ? `${q.notes} (محول من ${q.number})` : `محول من ${q.number}`,
       id(), // unique UUID for ETA
       actorId || null,

@@ -47,7 +47,7 @@ describe('Reports & Financial Dashboard API', () => {
       })
       .expect(201);
 
-    // 3. Post a Sale Invoice: 10 items @ 200 EGP = 2000 EGP (+14% VAT = 2280 EGP)
+    // 3. Post a Sale Invoice: 10 items @ 200 EGP = 2000 EGP (tax-free)
     const saleDraft = await admin
       .post('/api/documents')
       .set(header)
@@ -75,7 +75,7 @@ describe('Reports & Financial Dashboard API', () => {
       .send({ amount: 100000, method: 'CASH', date: '2026-06-16' })
       .expect(201);
 
-    // 4. Issue a Sale Return (Credit Note): 2 items returned @ 200 EGP = 400 EGP (+14% VAT = 456 EGP)
+    // 4. Issue a Sale Return (Credit Note): 2 items returned @ 200 EGP = 400 EGP (tax-free)
     const returnDraft = await admin
       .post('/api/documents')
       .set(header)
@@ -150,10 +150,10 @@ describe('Reports & Financial Dashboard API', () => {
     expect(data.cashFlow).toBe(50000);
 
     // Net Receivables:
-    // Original invoice remaining: 2,280 - 1,000 = 1,280 EGP
-    // Credit note remaining: 456 - 200 = 256 EGP
-    // Net Customer Receivables: 1,280 - 256 = 1,024 EGP (102,400 piastres)
-    expect(data.receivables).toBe(102400);
+    // Original invoice remaining: 2,000 - 1,000 = 1,000 EGP
+    // Credit note remaining: 400 - 200 = 200 EGP
+    // Net Customer Receivables: 1,000 - 200 = 800 EGP (80,000 piastres)
+    expect(data.receivables).toBe(80000);
   });
 
   it('fetches group overview with branch aggregated totals', async () => {

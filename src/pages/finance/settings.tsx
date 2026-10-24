@@ -32,6 +32,7 @@ import {
 } from '../../lib';
 import type { User, RoleDef, PermissionDef } from '../../types';
 import { useBranch } from '../../branch';
+import { TAX_FREE, ETA_ENABLED } from '../../config';
 import { PermissionsModal } from '../PermissionsModal';
 import { EInvoicePanel } from './e-invoice';
 import { InvoiceCustomizer } from './invoice-customizer';
@@ -80,7 +81,7 @@ export function SettingsPage() {
               </div>
             </button>
           )}
-          {can(user, 'eta:view') && (
+          {ETA_ENABLED && can(user, 'eta:view') && (
             <button
               onClick={() => setTab('einvoice')}
               className={tab === 'einvoice' ? 'active' : ''}
@@ -150,12 +151,16 @@ function CompanySettings() {
         email: f.get('email'),
         phone: f.get('phone'),
         address: f.get('address'),
-        tax_number: f.get('tax_number'),
-        tax_registration_number: f.get('tax_registration_number'),
-        activity_code: f.get('activity_code'),
-        tax_rate: Math.round(Number(f.get('tax_rate')) * 100),
+        ...(TAX_FREE
+          ? {}
+          : {
+              tax_number: f.get('tax_number'),
+              tax_registration_number: f.get('tax_registration_number'),
+              activity_code: f.get('activity_code'),
+              tax_rate: Math.round(Number(f.get('tax_rate')) * 100),
+              eta_environment: f.get('eta_environment'),
+            }),
         invoice_note: f.get('invoice_note'),
-        eta_environment: f.get('eta_environment'),
       });
       refreshCompany();
     }, 'تم حفظ إعدادات الشركة');
@@ -193,53 +198,57 @@ function CompanySettings() {
         <Field label="العنوان">
           <input name="address" maxLength={500} defaultValue={company.address} />
         </Field>
-        <div className="form-row">
-          <Field label="الرقم الضريبي">
-            <input name="tax_number" maxLength={50} defaultValue={company.tax_number} />
-          </Field>
-          <Field label="نسبة الضريبة الافتراضية (%)">
-            <input
-              name="tax_rate"
-              type="number"
-              min="0"
-              max="100"
-              step=".01"
-              required
-              defaultValue={company.tax_rate / 100}
-            />
-          </Field>
-        </div>
-        <div className="form-row">
-          <Field
-            label="رقم التسجيل الضريبي (ETA)"
-            hint="يُستخدم في حمولة الفاتورة الإلكترونية UBL 2.1."
-          >
-            <input
-              name="tax_registration_number"
-              dir="ltr"
-              maxLength={50}
-              defaultValue={company.tax_registration_number}
-            />
-          </Field>
-          <Field label="كود النشاط (ETA)" hint="كود النشاط الضريبي المسجّل لدى هيئة الضرائب.">
-            <input
-              name="activity_code"
-              dir="ltr"
-              maxLength={50}
-              defaultValue={company.activity_code}
-            />
-          </Field>
-        </div>
-        <Field
-          label="بيئة الفاتورة الإلكترونية"
-          hint="تظل «تجريبية» حتى تركيب مفاتيح sandbox من هيئة الضرائب."
-        >
-          <select name="eta_environment" defaultValue={company.eta_environment || 'stub'}>
-            <option value="stub">تجريبية (بدون إرسال فعلي)</option>
-            <option value="preprod">اختبار مبدئي (Preprod)</option>
-            <option value="production">إنتاج (Production)</option>
-          </select>
-        </Field>
+        {!TAX_FREE && (
+          <>
+            <div className="form-row">
+              <Field label="الرقم الضريبي">
+                <input name="tax_number" maxLength={50} defaultValue={company.tax_number} />
+              </Field>
+              <Field label="نسبة الضريبة الافتراضية (%)">
+                <input
+                  name="tax_rate"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step=".01"
+                  required
+                  defaultValue={company.tax_rate / 100}
+                />
+              </Field>
+            </div>
+            <div className="form-row">
+              <Field
+                label="رقم التسجيل الضريبي (ETA)"
+                hint="يُستخدم في حمولة الفاتورة الإلكترونية UBL 2.1."
+              >
+                <input
+                  name="tax_registration_number"
+                  dir="ltr"
+                  maxLength={50}
+                  defaultValue={company.tax_registration_number}
+                />
+              </Field>
+              <Field label="كود النشاط (ETA)" hint="كود النشاط الضريبي المسجّل لدى هيئة الضرائب.">
+                <input
+                  name="activity_code"
+                  dir="ltr"
+                  maxLength={50}
+                  defaultValue={company.activity_code}
+                />
+              </Field>
+            </div>
+            <Field
+              label="بيئة الفاتورة الإلكترونية"
+              hint="تظل «تجريبية» حتى تركيب مفاتيح sandbox من هيئة الضرائب."
+            >
+              <select name="eta_environment" defaultValue={company.eta_environment || 'stub'}>
+                <option value="stub">تجريبية (بدون إرسال فعلي)</option>
+                <option value="preprod">اختبار مبدئي (Preprod)</option>
+                <option value="production">إنتاج (Production)</option>
+              </select>
+            </Field>
+          </>
+        )}
         <Field
           label="العملة الأساسية"
           hint="هذه النسخة تعمل بالجنيه المصري لتجنب خلط العملات في التقارير."

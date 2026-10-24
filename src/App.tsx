@@ -37,6 +37,7 @@ import {
   BookOpen,
   Kanban,
   Briefcase,
+  Fingerprint,
 } from 'lucide-react';
 import { BranchProvider, BranchSwitcher, useBranch, withBranch } from './branch';
 import {
@@ -92,6 +93,9 @@ const Distributions = lazy(() =>
 );
 const CRM = lazy(() => import('./pages/CRM').then((m) => ({ default: m.CRM })));
 const HR = lazy(() => import('./pages/HR').then((m) => ({ default: m.HR })));
+const AttendanceDevices = lazy(() =>
+  import('./pages/AttendanceDevices').then((m) => ({ default: m.AttendanceDevices })),
+);
 export function Brand({ light = false }: { light?: boolean }) {
   return (
     <div className={'brand ' + (light ? 'brand-light' : '')} dir="ltr">
@@ -409,6 +413,12 @@ const navigation: { label: string; items: NavItem[] }[] = [
       },
       { to: '/crm', label: 'مسار الصفقات (CRM)', icon: Kanban, permission: 'crm:view' },
       { to: '/hr', label: 'الموارد البشرية (HR)', icon: Briefcase, permission: 'hr:view' },
+      {
+        to: '/attendance-devices',
+        label: 'أجهزة الحضور والبصمة',
+        icon: Fingerprint,
+        permission: 'attendance_devices:view',
+      },
       { to: '/customers', label: 'العملاء', icon: Users, permission: 'parties:view' },
       { to: '/suppliers', label: 'الموردون', icon: Truck, permission: 'documents:create_purchase' },
       { to: '/branches', label: 'الفروع', icon: Store, permission: 'branches:manage' },
@@ -636,6 +646,12 @@ function Layout() {
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/crm" element={can(user, 'crm:view') ? <CRM /> : <Navigate to="/" />} />
               <Route path="/hr" element={can(user, 'hr:view') ? <HR /> : <Navigate to="/" />} />
+              <Route
+                path="/attendance-devices"
+                element={
+                  can(user, 'attendance_devices:view') ? <AttendanceDevices /> : <Navigate to="/" />
+                }
+              />
               <Route
                 path="/activity"
                 element={can(user, 'users:manage') ? <ActivityPage /> : <Navigate to="/" />}

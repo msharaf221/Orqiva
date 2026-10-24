@@ -138,7 +138,7 @@ describe('Odoo-like Fast POS Interface & Shifts', () => {
     expect(item.stock).toBe(10);
     expect(item.sale_price).toBe(2500);
 
-    // Perform POS sale checkout: 2 items @ 25.00 EGP = 50.00 EGP (with 14% tax = 57.00 EGP)
+    // Perform POS sale checkout: 2 items @ 25.00 EGP = 50.00 EGP (tax-free)
     // Customer hands 100.00 EGP bill (10000 piasters)
     const checkoutRes = await cashier
       .post('/api/pos/checkout')
@@ -153,16 +153,16 @@ describe('Odoo-like Fast POS Interface & Shifts', () => {
         payment: {
           method: 'CASH',
           amount_tendered: 10000,
-          amount_paid: 5700,
+          amount_paid: 5000,
         },
       })
       .expect(201);
 
     expect(checkoutRes.body.document.number).toMatch(/^INV-HQ-/);
     expect(checkoutRes.body.document.pos_shift_id).toBe(shift.body.id);
-    expect(checkoutRes.body.document.total).toBe(5700);
-    expect(checkoutRes.body.document.paid).toBe(5700);
-    expect(checkoutRes.body.payment.change_due).toBe(4300); // 100.00 - 57.00 = 43.00 EGP
+    expect(checkoutRes.body.document.total).toBe(5000);
+    expect(checkoutRes.body.document.paid).toBe(5000);
+    expect(checkoutRes.body.payment.change_due).toBe(5000); // 100.00 - 50.00 = 50.00 EGP
 
     // Verify stock decreased from 10 to 8
     const stockAfter = one<{ quantity: number }>(
@@ -175,8 +175,8 @@ describe('Odoo-like Fast POS Interface & Shifts', () => {
       .get(`/api/pos/shifts/${shift.body.id}/summary`)
       .set(header)
       .expect(200);
-    expect(summary.body.cash_sales).toBe(5700);
-    expect(summary.body.expected_cash).toBe(10000 + 5700); // opening + sales
+    expect(summary.body.cash_sales).toBe(5000);
+    expect(summary.body.expected_cash).toBe(10000 + 5000); // opening + sales
   });
 
   it('strictly prevents negative stock in POS checkout', async () => {
@@ -243,7 +243,7 @@ describe('Odoo-like Fast POS Interface & Shifts', () => {
       .expect(201);
     const shiftId = openRes.body.id;
 
-    // 3. Cashier sells 2 items @ 25.00 EGP = 50.00 EGP + 14% tax = 57.00 EGP (5700 piasters cash)
+    // 3. Cashier sells 2 items @ 25.00 EGP = 50.00 EGP tax-free (5000 piasters cash)
     await cashier
       .post('/api/pos/checkout')
       .set(header)
@@ -254,26 +254,26 @@ describe('Odoo-like Fast POS Interface & Shifts', () => {
         lines: [{ product_id: 'pos-p1', quantity: 2, unit_price: 2500 }],
         payment: {
           method: 'CASH',
-          amount_tendered: 5700,
-          amount_paid: 5700,
+          amount_tendered: 5000,
+          amount_paid: 5000,
         },
       })
       .expect(201);
 
-    // Expected Cash = 10,000 + 5,700 = 15,700 piasters
+    // Expected Cash = 10,000 + 5,000 = 15,000 piasters
 
-    // 4. Cashier submits shift handover to Treasury with declared cash = 15,000 piasters (counted in drawer)
+    // 4. Cashier submits shift handover to Treasury with declared cash = 14,000 piasters (counted in drawer)
     const submitRes = await cashier
       .post(`/api/pos/shifts/${shiftId}/submit`)
       .set(header)
       .send({
-        declared_cash: 15000,
+        declared_cash: 14000,
         notes: 'تسليم الدرج لمسؤول الخزنة',
       })
       .expect(200);
 
     expect(submitRes.body.status).toBe('PENDING_REVIEW');
-    expect(submitRes.body.cashier_declared_cash).toBe(15000);
+    expect(submitRes.body.cashier_declared_cash).toBe(14000);
 
     // Cashier cannot make new sales on this shift anymore
     const blockedSale = await cashier
@@ -284,7 +284,7 @@ describe('Odoo-like Fast POS Interface & Shifts', () => {
         shift_id: shiftId,
         date: '2026-03-01',
         lines: [{ product_id: 'pos-p1', quantity: 1, unit_price: 2500 }],
-        payment: { method: 'CASH', amount_tendered: 2850, amount_paid: 2850 },
+        payment: { method: 'CASH', amount_tendered: 2500, amount_paid: 2500 },
       })
       .expect(409);
     expect(blockedSale.body.error).toContain('الوردية المحددة غير صالحة');
@@ -298,18 +298,18 @@ describe('Odoo-like Fast POS Interface & Shifts', () => {
     expect(pendingList.body.length).toBe(1);
     expect(pendingList.body[0].id).toBe(shiftId);
 
-    // 6. Treasury Accountant reviews and approves shift with closing cash = 15,000 piasters (Shortage of 700 piasters = 7.00 EGP)
+    // 6. Treasury Accountant reviews and approves shift with closing cash = 14,000 piasters (Shortage of 1,000 piasters = 10.00 EGP)
     const approveRes = await treasury
       .post(`/api/pos/shifts/${shiftId}/approve`)
       .set(header)
       .send({
-        closing_cash: 15000,
-        review_notes: 'تم استلام النقدية بالخزنة مع تسجيل قيد عجز بقيمة 7 جنيه',
+        closing_cash: 14000,
+        review_notes: 'تم استلام النقدية بالخزنة مع تسجيل قيد عجز بقيمة 10 جنيه',
       })
       .expect(200);
 
     expect(approveRes.body.status).toBe('CLOSED');
-    expect(approveRes.body.difference).toBe(-700);
+    expect(approveRes.body.difference).toBe(-1000);
     expect(approveRes.body.reviewed_by).toBe('treasury-1');
     expect(approveRes.body.discrepancy_expense_id).toBeTruthy();
 
@@ -320,7 +320,7 @@ describe('Odoo-like Fast POS Interface & Shifts', () => {
     );
     expect(expenseEntry).toBeDefined();
     expect(expenseEntry?.category).toBe('عجز نقدية نقطة بيع');
-    expect(expenseEntry?.amount).toBe(700);
+    expect(expenseEntry?.amount).toBe(1000);
     expect(expenseEntry?.title).toContain('عجز نقدية وردية');
   });
 
@@ -367,7 +367,7 @@ describe('Odoo-like Fast POS Interface & Shifts', () => {
     const shiftId = openRes.body.id;
 
     // 2. Sale 1: Paid via VISA / CARD with POS Terminal Slip #
-    // 1 item @ 2500 + 14% tax = 2850 piasters (28.50 EGP)
+    // 1 item @ 2500 piasters (25.00 EGP), tax-free
     await cashier
       .post('/api/pos/checkout')
       .set(header)
@@ -378,15 +378,15 @@ describe('Odoo-like Fast POS Interface & Shifts', () => {
         lines: [{ product_id: 'pos-p1', quantity: 1, unit_price: 2500 }],
         payment: {
           method: 'CARD',
-          amount_tendered: 2850,
-          amount_paid: 2850,
+          amount_tendered: 2500,
+          amount_paid: 2500,
           reference: 'إيصال ماكينة بنك مصر #84920',
         },
       })
       .expect(201);
 
     // 3. Sale 2: Paid via INSTAPAY / BANK with reference
-    // 1 item @ 2500 + 14% tax = 2850 piasters (28.50 EGP)
+    // 1 item @ 2500 piasters (25.00 EGP), tax-free
     await cashier
       .post('/api/pos/checkout')
       .set(header)
@@ -397,14 +397,14 @@ describe('Odoo-like Fast POS Interface & Shifts', () => {
         lines: [{ product_id: 'pos-p1', quantity: 1, unit_price: 2500 }],
         payment: {
           method: 'BANK',
-          amount_tendered: 2850,
-          amount_paid: 2850,
+          amount_tendered: 2500,
+          amount_paid: 2500,
           reference: 'تحويل إنستاباي مرجع #IP-99281',
         },
       })
       .expect(201);
 
-    // 4. Sale 3: Split payment (1000 Cash + 1850 Card)
+    // 4. Sale 3: Split payment (1000 Cash + 1500 Card)
     await cashier
       .post('/api/pos/checkout')
       .set(header)
@@ -415,7 +415,7 @@ describe('Odoo-like Fast POS Interface & Shifts', () => {
         lines: [{ product_id: 'pos-p1', quantity: 1, unit_price: 2500 }],
         split_payments: [
           { method: 'CASH', amount: 1000, reference: 'نقداً مجزأ' },
-          { method: 'CARD', amount: 1850, reference: 'فيزا مجزأ إيصال #84921' },
+          { method: 'CARD', amount: 1500, reference: 'فيزا مجزأ إيصال #84921' },
         ],
       })
       .expect(201);
@@ -430,10 +430,10 @@ describe('Odoo-like Fast POS Interface & Shifts', () => {
     expect(s.opening_cash).toBe(5000);
     expect(s.cash_sales).toBe(1000); // 10.00 EGP
     expect(s.expected_cash).toBe(6000); // 5000 + 1000 = 6000
-    expect(s.card_sales).toBe(2850 + 1850); // 4700 piasters (47.00 EGP)
-    expect(s.expected_card).toBe(4700);
-    expect(s.bank_sales).toBe(2850); // 28.50 EGP (InstaPay)
-    expect(s.expected_bank).toBe(2850);
+    expect(s.card_sales).toBe(2500 + 1500); // 4000 piasters (40.00 EGP)
+    expect(s.expected_card).toBe(4000);
+    expect(s.bank_sales).toBe(2500); // 25.00 EGP (InstaPay)
+    expect(s.expected_bank).toBe(2500);
     expect(s.sales_count).toBe(3);
     expect(s.payments.length).toBe(4); // 1 card + 1 bank + 1 cash split + 1 card split
 
@@ -443,8 +443,8 @@ describe('Odoo-like Fast POS Interface & Shifts', () => {
       .set(header)
       .send({
         declared_cash: 6000,
-        declared_card: 4700,
-        declared_bank: 2850,
+        declared_card: 4000,
+        declared_bank: 2500,
         terminal_batch_number: 'BATCH-0042',
         card_slips_count: 2,
         bank_transfers_count: 1,
@@ -456,8 +456,8 @@ describe('Odoo-like Fast POS Interface & Shifts', () => {
 
     expect(submitRes.body.status).toBe('PENDING_REVIEW');
     expect(submitRes.body.cashier_declared_cash).toBe(6000);
-    expect(submitRes.body.cashier_declared_card).toBe(4700);
-    expect(submitRes.body.cashier_declared_bank).toBe(2850);
+    expect(submitRes.body.cashier_declared_card).toBe(4000);
+    expect(submitRes.body.cashier_declared_bank).toBe(2500);
     expect(submitRes.body.terminal_batch_number).toBe('BATCH-0042');
     expect(submitRes.body.card_slips_count).toBe(2);
     expect(submitRes.body.bank_transfers_count).toBe(1);
@@ -470,8 +470,8 @@ describe('Odoo-like Fast POS Interface & Shifts', () => {
       .set(header)
       .send({
         closing_cash: 6000,
-        closing_card: 4700,
-        closing_bank: 2850,
+        closing_card: 4000,
+        closing_bank: 2500,
         review_notes: 'تم فحص إيصال تسوية الماكينة وإشعارات إنستاباي ومطابقة النقدية بالمظروف',
         verification_checklist: JSON.stringify({
           terminal_batch_verified: true,
@@ -484,8 +484,8 @@ describe('Odoo-like Fast POS Interface & Shifts', () => {
 
     expect(approveRes.body.status).toBe('CLOSED');
     expect(approveRes.body.closing_cash).toBe(6000);
-    expect(approveRes.body.closing_card).toBe(4700);
-    expect(approveRes.body.closing_bank).toBe(2850);
+    expect(approveRes.body.closing_card).toBe(4000);
+    expect(approveRes.body.closing_bank).toBe(2500);
     expect(approveRes.body.difference).toBe(0);
     expect(approveRes.body.card_difference).toBe(0);
     expect(approveRes.body.bank_difference).toBe(0);

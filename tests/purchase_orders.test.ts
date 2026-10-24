@@ -63,8 +63,8 @@ describe('Pack 2.4 — Purchase Orders & Landed Costs', () => {
     expect(po.number).toContain('PO-ORD-HQ-2026-');
     expect(po.status).toBe('DRAFT');
     expect(po.subtotal).toBe(12500000); // 125,000 EGP
-    expect(po.tax).toBe(1750000); // 14% of 125,000 = 17,500 EGP
-    expect(po.total).toBe(14250000); // 142,500 EGP
+    expect(po.tax).toBe(0); // tax-free mode
+    expect(po.total).toBe(12500000); // 125,000 EGP
     expect(po.lines).toHaveLength(2);
 
     // Update PO while still draft

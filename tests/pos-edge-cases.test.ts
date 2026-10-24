@@ -209,7 +209,7 @@ describe('Phase 4.4 — POS edge cases', () => {
     const summary = await cashier.get(`/api/pos/shifts/${shiftId}/summary`).set(header).expect(200);
     expect(summary.body.refunds_count).toBe(1);
     expect(summary.body.refunds_total).toBe(ret.body.total);
-    expect(summary.body.expected_cash).toBe(10000 + 11400 - ret.body.total);
+    expect(summary.body.expected_cash).toBe(10000 + sale.body.document.total - ret.body.total);
   });
 
   it('refunds a POS sale through the cashier endpoint and nets it against the shift', async () => {

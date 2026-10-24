@@ -60,6 +60,7 @@ import type {
   Quotation,
 } from '../types';
 import { can } from '../auth';
+import { TAX_FREE, calculateTax, effectiveTaxRate } from '../config';
 import {
   BarcodeSvg,
   QrCodeSvg,
@@ -215,7 +216,9 @@ export function Documents({ type }: { type: DocType }) {
               label={sale ? 'إجمالي إشعارات الدائن المعتمدة' : 'إجمالي إشعارات المدين المعتمدة'}
               value={money(posted.reduce((s, d) => s + d.total, 0))}
               icon={<RotateCcw size={20} />}
-              foot="إجمالي قيمة المرتجعات شامل الضريبة"
+              foot={
+                TAX_FREE ? 'إجمالي قيمة المرتجعات المعتمدة' : 'إجمالي قيمة المرتجعات شامل الضريبة'
+              }
             />
             <Stat
               label="الإشعارات المعتمدة"
@@ -238,7 +241,7 @@ export function Documents({ type }: { type: DocType }) {
               label={sale ? 'إجمالي المبيعات المعتمدة' : 'إجمالي المشتريات المعتمدة'}
               value={money(posted.reduce((s, d) => s + d.total, 0))}
               icon={<ReceiptText size={20} />}
-              foot="جميع الفترات · شامل الضريبة"
+              foot={TAX_FREE ? 'جميع الفترات' : 'جميع الفترات · شامل الضريبة'}
             />
             <Stat
               label={sale ? 'المبالغ المحصّلة' : 'المبالغ المسدّدة'}
@@ -516,18 +519,18 @@ function Editor({ type, existing }: { type: DocType; existing?: Document }) {
     ],
   );
   const [taxRate, setTaxRate] = useState(
-      String((existing?.tax_rate ?? company?.tax_rate ?? 1400) / 100),
+      String(effectiveTaxRate(existing?.tax_rate ?? company?.tax_rate ?? 1400) / 100),
     ),
     [discount, setDiscount] = useState(String((existing?.discount || 0) / 100));
   useEffect(() => {
-    if (!existing && company) setTaxRate(String(company.tax_rate / 100));
+    if (!existing && company) setTaxRate(String(effectiveTaxRate(company.tax_rate) / 100));
   }, [existing, company]);
   const subtotal = lines.reduce(
       (s, l) => s + Number(l.quantity) * Math.round(Number(l.price) * 100),
       0,
     ),
     discountCents = Math.round(Number(discount) * 100),
-    tax = Math.round((Math.max(0, subtotal - discountCents) * Number(taxRate)) / 100),
+    tax = calculateTax(Math.max(0, subtotal - discountCents), Math.round(Number(taxRate) * 100)),
     total = subtotal - discountCents + tax;
   const changeLine = (key: string, patch: Partial<EditorLine>) =>
     setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
@@ -562,7 +565,7 @@ function Editor({ type, existing }: { type: DocType; existing?: Document }) {
           due_date: form.get('due_date'),
           notes: form.get('notes'),
           discount: discountCents,
-          tax_rate: Math.round(Number(taxRate) * 100),
+          tax_rate: effectiveTaxRate(Math.round(Number(taxRate) * 100)),
           lines: lines.map((l) => ({
             product_id: l.product_id,
             quantity: Number(l.quantity),
@@ -708,7 +711,11 @@ function Editor({ type, existing }: { type: DocType; existing?: Document }) {
                 <h2>
                   <Package size={18} /> بنود الفاتورة
                 </h2>
-                <p>أسعار الوحدات بالجنيه المصري، قبل الضريبة</p>
+                <p>
+                  {TAX_FREE
+                    ? 'أسعار الوحدات بالجنيه المصري'
+                    : 'أسعار الوحدات بالجنيه المصري، قبل الضريبة'}
+                </p>
               </div>
               <span className="count-chip num">{lines.length} بنود</span>
             </div>
@@ -887,7 +894,7 @@ function Editor({ type, existing }: { type: DocType; existing?: Document }) {
           </div>
           <div className="summary-body">
             <div className="summary-row">
-              <span>الإجمالي قبل الضريبة</span>
+              <span>{TAX_FREE ? 'الإجمالي الفرعي' : 'الإجمالي قبل الضريبة'}</span>
               <strong className="num">{money(subtotal, 2)}</strong>
             </div>
             <Field label="الخصم (ج.م)">
@@ -901,21 +908,25 @@ function Editor({ type, existing }: { type: DocType; existing?: Document }) {
                 onChange={(e) => setDiscount(e.target.value)}
               />
             </Field>
-            <Field label="ضريبة القيمة المضافة (%)">
-              <input
-                type="number"
-                min="0"
-                max="100"
-                step=".01"
-                required
-                value={taxRate}
-                onChange={(e) => setTaxRate(e.target.value)}
-              />
-            </Field>
-            <div className="summary-row">
-              <span>قيمة الضريبة</span>
-              <span className="num">{money(tax, 2)}</span>
-            </div>
+            {!TAX_FREE && (
+              <>
+                <Field label="ضريبة القيمة المضافة (%)">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step=".01"
+                    required
+                    value={taxRate}
+                    onChange={(e) => setTaxRate(e.target.value)}
+                  />
+                </Field>
+                <div className="summary-row">
+                  <span>قيمة الضريبة</span>
+                  <span className="num">{money(tax, 2)}</span>
+                </div>
+              </>
+            )}
             <div className="summary-total">
               <span>الإجمالي المستحق</span>
               <strong className="num">
@@ -1338,7 +1349,7 @@ export function DocumentDetail() {
             </div>
             <div className="invoice-totals">
               <div>
-                <span>الإجمالي قبل الضريبة</span>
+                <span>{TAX_FREE ? 'الإجمالي الفرعي' : 'الإجمالي قبل الضريبة'}</span>
                 <strong className="num">{money(doc.subtotal, 2)}</strong>
               </div>
               {doc.discount > 0 && (
@@ -1347,10 +1358,12 @@ export function DocumentDetail() {
                   <span className="num text-red">-{money(doc.discount, 2)}</span>
                 </div>
               )}
-              <div>
-                <span>ضريبة القيمة المضافة ({doc.tax_rate / 100}%)</span>
-                <span className="num">{money(doc.tax, 2)}</span>
-              </div>
+              {!TAX_FREE && (
+                <div>
+                  <span>ضريبة القيمة المضافة ({doc.tax_rate / 100}%)</span>
+                  <span className="num">{money(doc.tax, 2)}</span>
+                </div>
+              )}
               <div className="grand-total">
                 <span>{isReturn ? 'إجمالي المرتجع' : 'الإجمالي النهائي'}</span>
                 <strong className="num">
@@ -1789,7 +1802,7 @@ export function ReturnModal({
     const q = quantities[l.product_id] || 0;
     return acc + q * l.unit_price;
   }, 0);
-  const tax = Math.round((subtotal * (doc.tax_rate || 0)) / 10000);
+  const tax = calculateTax(subtotal, effectiveTaxRate(doc.tax_rate || 0));
   const total = subtotal + tax;
 
   const submit = (e: FormEvent<HTMLFormElement>) => {
@@ -1813,7 +1826,7 @@ export function ReturnModal({
           original_document_id: doc.id,
           date: today(),
           due_date: today(),
-          tax_rate: doc.tax_rate,
+          tax_rate: effectiveTaxRate(doc.tax_rate),
           discount: 0,
           notes: notes || `مرتجع عن الفاتورة ${doc.number}`,
           lines: returnLines,
@@ -1950,10 +1963,12 @@ export function ReturnModal({
                   <strong className="num">{totalReturnUnits} وحدة</strong>
                 </div>
                 <div>
-                  <div style={{ fontSize: '11px', color: 'var(--muted)' }}>قبل الضريبة:</div>
+                  <div style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                    {TAX_FREE ? 'الإجمالي الفرعي:' : 'قبل الضريبة:'}
+                  </div>
                   <strong className="num">{money(subtotal, 2)} ج.م</strong>
                 </div>
-                {doc.tax_rate > 0 && (
+                {!TAX_FREE && doc.tax_rate > 0 && (
                   <div>
                     <div style={{ fontSize: '11px', color: 'var(--muted)' }}>
                       الضريبة ({doc.tax_rate / 100}%):
@@ -2393,7 +2408,7 @@ function CreatePurchaseOrderModal({
   const [partyId, setPartyId] = useState(suppliers[0]?.id || '');
   const [date, setDate] = useState(today());
   const [expectedDate, setExpectedDate] = useState(dayOffset(7));
-  const [taxRate, setTaxRate] = useState(1400); // 14%
+  const [taxRate, setTaxRate] = useState(effectiveTaxRate(1400));
   const [notes, setNotes] = useState('');
   const [lines, setLines] = useState<
     Array<{ product_id: string; quantity: number; unit_price: number }>
@@ -2439,7 +2454,7 @@ function CreatePurchaseOrderModal({
   };
 
   const subtotal = lines.reduce((s, l) => s + l.quantity * l.unit_price, 0);
-  const tax = Math.round((subtotal * taxRate) / 10000);
+  const tax = calculateTax(Math.round(subtotal * 100), taxRate) / 100;
   const total = subtotal + tax;
 
   const submit = (e: FormEvent) => {
@@ -2500,12 +2515,14 @@ function CreatePurchaseOrderModal({
                 onChange={(e) => setExpectedDate(e.target.value)}
               />
             </Field>
-            <Field label="ضريبة القيمة المضافة">
-              <select value={taxRate} onChange={(e) => setTaxRate(Number(e.target.value))}>
-                <option value={1400}>14% (شامل الضريبة القياسية)</option>
-                <option value={0}>0% (معفى ضريبياً)</option>
-              </select>
-            </Field>
+            {!TAX_FREE && (
+              <Field label="ضريبة القيمة المضافة">
+                <select value={taxRate} onChange={(e) => setTaxRate(Number(e.target.value))}>
+                  <option value={1400}>14% (شامل الضريبة القياسية)</option>
+                  <option value={0}>0% (معفى ضريبياً)</option>
+                </select>
+              </Field>
+            )}
           </div>
 
           <div style={{ marginTop: '0.5rem', marginBottom: '0.5rem' }}>
@@ -2611,13 +2628,15 @@ function CreatePurchaseOrderModal({
               }}
             >
               <div>
-                قبل الضريبة:{' '}
+                {TAX_FREE ? 'الإجمالي الفرعي:' : 'قبل الضريبة:'}{' '}
                 <strong className="num">{money(Math.round(subtotal * 100), 2)} ج.م</strong>
               </div>
-              <div>
-                الضريبة ({taxRate / 100}%):{' '}
-                <strong className="num">{money(Math.round(tax * 100), 2)} ج.م</strong>
-              </div>
+              {!TAX_FREE && (
+                <div>
+                  الضريبة ({taxRate / 100}%):{' '}
+                  <strong className="num">{money(Math.round(tax * 100), 2)} ج.م</strong>
+                </div>
+              )}
               <div>
                 الإجمالي النهائي:{' '}
                 <strong className="num amount">{money(Math.round(total * 100), 2)} ج.م</strong>
@@ -2869,7 +2888,7 @@ function CreateQuotationModal({
   const [partyId, setPartyId] = useState(customers[0]?.id || '');
   const [date, setDate] = useState(today());
   const [validUntil, setValidUntil] = useState(dayOffset(30));
-  const [taxRate] = useState(1400); // 14%
+  const [taxRate] = useState(effectiveTaxRate(1400));
   const [discountPounds, setDiscountPounds] = useState(0);
   const [notes, setNotes] = useState('');
   const [lines, setLines] = useState<
@@ -2918,7 +2937,7 @@ function CreateQuotationModal({
   const subtotal = lines.reduce((s, l) => s + l.quantity * l.unit_price, 0);
   const discountVal = Math.min(subtotal, Math.max(0, discountPounds));
   const taxable = Math.max(0, subtotal - discountVal);
-  const tax = Math.round((taxable * taxRate) / 10000);
+  const tax = calculateTax(Math.round(taxable * 100), taxRate) / 100;
   const total = taxable + tax;
 
   const submit = (e: FormEvent) => {
@@ -3120,9 +3139,11 @@ function CreateQuotationModal({
                 />{' '}
                 ج.م
               </div>
-              <div>
-                ضريبة 14%: <strong className="num">{money(Math.round(tax * 100), 2)} ج.م</strong>
-              </div>
+              {!TAX_FREE && (
+                <div>
+                  ضريبة 14%: <strong className="num">{money(Math.round(tax * 100), 2)} ج.م</strong>
+                </div>
+              )}
               <div>
                 الإجمالي النهائي للعرض:{' '}
                 <strong className="num amount">{money(Math.round(total * 100), 2)} ج.م</strong>

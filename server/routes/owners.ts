@@ -4,6 +4,7 @@ import { one, run, transaction } from '../db';
 import { audit } from '../service';
 import { requirePermission } from '../rbac';
 import { companySchema } from '../validation';
+import { TAX_FREE, effectiveTaxRate } from '../../src/config';
 import {
   listOwners,
   createOwner,
@@ -39,10 +40,10 @@ ownersRouter.put('/company', requirePermission('branches:manage'), (req, res) =>
       c.email,
       c.phone,
       c.address,
-      c.tax_number,
-      c.tax_registration_number || '',
-      c.activity_code || '',
-      c.tax_rate,
+      TAX_FREE ? '' : c.tax_number,
+      TAX_FREE ? '' : c.tax_registration_number || '',
+      TAX_FREE ? '' : c.activity_code || '',
+      effectiveTaxRate(c.tax_rate),
       c.invoice_note,
       c.eta_environment || null,
       c.invoice_settings || null,

@@ -1,8 +1,45 @@
-import { all, one, run, transaction, id, now, type SQLInputValue } from './db';
+import { all, one, run, transaction, id, now } from './db';
 import { cashAccountSchema, updateCashAccountSchema, accountTransferSchema } from './validation';
 import { AppError, audit, nextNumber, requireRow, type Actor } from './service';
+import { writableBranch, type Scope } from './scope';
 import { postAccountTransferLedger } from './posting';
 import type { CashAccount, AccountTransfer, AccountStatementEntry } from '../src/types';
+
+/**
+ * Group-level accounts (`branch_id IS NULL`) are shared by every branch: they are the
+ * company's bank facilities, not another branch's cash drawer. Branch-owned accounts are
+ * only visible inside the actor's scope.
+ */
+function readableAccountSql(scope: Scope, alias = 'ca'): { sql: string; params: string[] } {
+  if (scope.ids === null) return { sql: '1=1', params: [] };
+  if (!scope.ids.length) return { sql: '0=1', params: [] };
+  const placeholders = scope.ids.map(() => '?').join(',');
+  return {
+    sql: `(${alias}.branch_id IS NULL OR ${alias}.branch_id IN (${placeholders}))`,
+    params: scope.ids,
+  };
+}
+
+/** Writes may only touch an account owned by a branch the actor is assigned to. */
+function assertAccountWritable(
+  accountId: string,
+  actor: Pick<Actor, 'id' | 'role'>,
+  scope: Scope,
+): { id: string; name: string; branch_id: string | null; active: number } {
+  const account = one<{ id: string; name: string; branch_id: string | null; active: number }>(
+    'SELECT id, name, branch_id, active FROM cash_accounts WHERE id=?',
+    accountId,
+  );
+  if (!account) throw new AppError(404, 'الحساب المالي غير موجود');
+  if (account.branch_id === null) {
+    if (actor.role !== 'ADMIN') throw new AppError(403, 'الحسابات العامة متاحة لمدير النظام فقط');
+    return account;
+  }
+  if (scope.ids !== null && !scope.ids.includes(account.branch_id)) {
+    throw new AppError(404, 'الحساب المالي غير موجود');
+  }
+  return account;
+}
 
 const ACCOUNT_BALANCE_EXPR = `
   (
@@ -37,9 +74,10 @@ const ACCOUNT_OUT_EXPR = `
   )
 `;
 
-export function listCashAccounts(branchId?: string): CashAccount[] {
-  let sql = `
-    SELECT
+export function listCashAccounts(scope: Scope): CashAccount[] {
+  const visible = readableAccountSql(scope);
+  return all<CashAccount>(
+    `SELECT
       ca.*,
       b.name AS branch_name,
       ${ACCOUNT_BALANCE_EXPR} AS balance,
@@ -47,17 +85,14 @@ export function listCashAccounts(branchId?: string): CashAccount[] {
       ${ACCOUNT_OUT_EXPR} AS total_out
     FROM cash_accounts ca
     LEFT JOIN branches b ON b.id = ca.branch_id
-  `;
-  const params: SQLInputValue[] = [];
-  if (branchId) {
-    sql += ' WHERE (ca.branch_id = ? OR ca.branch_id IS NULL)';
-    params.push(branchId);
-  }
-  sql += ' ORDER BY ca.active DESC, ca.type ASC, ca.created_at ASC';
-  return all<CashAccount>(sql, ...params);
+    WHERE ${visible.sql}
+    ORDER BY ca.active DESC, ca.type ASC, ca.created_at ASC`,
+    ...visible.params,
+  );
 }
 
-export function getCashAccount(accountId: string): CashAccount {
+export function getCashAccount(accountId: string, scope?: Scope): CashAccount {
+  const visible = scope ? readableAccountSql(scope) : { sql: '1=1', params: [] };
   const account = one<CashAccount>(
     `SELECT
       ca.*,
@@ -67,8 +102,9 @@ export function getCashAccount(accountId: string): CashAccount {
       ${ACCOUNT_OUT_EXPR} AS total_out
     FROM cash_accounts ca
     LEFT JOIN branches b ON b.id = ca.branch_id
-    WHERE ca.id = ?`,
+    WHERE ca.id = ? AND ${visible.sql}`,
     accountId,
+    ...visible.params,
   );
   return requireRow(account);
 }
@@ -158,7 +194,9 @@ export function createCashAccount(raw: unknown, actor: Actor): CashAccount {
   const accountId = id();
 
   if (input.branch_id) {
-    requireRow(one('SELECT id FROM branches WHERE id = ?', input.branch_id));
+    writableBranch(actor, input.branch_id);
+  } else if (actor.role !== 'ADMIN') {
+    throw new AppError(403, 'إنشاء حساب مالي عام متاح لمدير النظام فقط');
   }
 
   run(
@@ -183,12 +221,19 @@ export function createCashAccount(raw: unknown, actor: Actor): CashAccount {
   return getCashAccount(accountId);
 }
 
-export function updateCashAccount(accountId: string, raw: unknown, actor: Actor): CashAccount {
+export function updateCashAccount(
+  accountId: string,
+  raw: unknown,
+  actor: Actor,
+  scope: Scope,
+): CashAccount {
   const input = updateCashAccountSchema.parse(raw);
-  requireRow(one('SELECT id FROM cash_accounts WHERE id = ?', accountId));
+  assertAccountWritable(accountId, actor, scope);
 
   if (input.branch_id) {
-    requireRow(one('SELECT id FROM branches WHERE id = ?', input.branch_id));
+    writableBranch(actor, input.branch_id);
+  } else if (actor.role !== 'ADMIN') {
+    throw new AppError(403, 'تحويل الحساب إلى حساب عام متاح لمدير النظام فقط');
   }
 
   run(
@@ -210,21 +255,11 @@ export function updateCashAccount(accountId: string, raw: unknown, actor: Actor)
   return getCashAccount(accountId);
 }
 
-export function createAccountTransfer(raw: unknown, actor: Actor): AccountTransfer {
+export function createAccountTransfer(raw: unknown, actor: Actor, scope: Scope): AccountTransfer {
   const input = accountTransferSchema.parse(raw);
   return transaction(() => {
-    const fromAcc = requireRow(
-      one<{ id: string; name: string; active: number }>(
-        'SELECT id, name, active FROM cash_accounts WHERE id = ?',
-        input.from_account_id,
-      ),
-    );
-    const toAcc = requireRow(
-      one<{ id: string; name: string; active: number }>(
-        'SELECT id, name, active FROM cash_accounts WHERE id = ?',
-        input.to_account_id,
-      ),
-    );
+    const fromAcc = assertAccountWritable(input.from_account_id, actor, scope);
+    const toAcc = assertAccountWritable(input.to_account_id, actor, scope);
 
     if (!fromAcc.active) throw new AppError(409, `حساب المصدر "${fromAcc.name}" مؤرشف`);
     if (!toAcc.active) throw new AppError(409, `حساب الوجهة "${toAcc.name}" مؤرشف`);
@@ -288,9 +323,34 @@ export function createAccountTransfer(raw: unknown, actor: Actor): AccountTransf
   });
 }
 
-export function listAccountTransfers(): AccountTransfer[] {
-  return all<AccountTransfer>(`
-    SELECT
+export function listAccountTransfers(scope: Scope): AccountTransfer[] {
+  const fromSide =
+    scope.ids === null
+      ? { sql: '1=1', params: [] as string[] }
+      : scope.ids.length
+        ? {
+            sql: `fa.branch_id IN (${scope.ids.map(() => '?').join(',')})`,
+            params: scope.ids,
+          }
+        : { sql: '0=1', params: [] as string[] };
+  const toSide =
+    scope.ids === null
+      ? { sql: '1=1', params: [] as string[] }
+      : scope.ids.length
+        ? {
+            sql: `ta.branch_id IN (${scope.ids.map(() => '?').join(',')})`,
+            params: scope.ids,
+          }
+        : { sql: '0=1', params: [] as string[] };
+  const visible =
+    scope.ids === null
+      ? { sql: '1=1', params: [] as string[] }
+      : {
+          sql: `(${fromSide.sql} OR ${toSide.sql})`,
+          params: [...fromSide.params, ...toSide.params],
+        };
+  return all<AccountTransfer>(
+    `SELECT
       t.*,
       fa.name AS from_account_name,
       ta.name AS to_account_name,
@@ -299,16 +359,19 @@ export function listAccountTransfers(): AccountTransfer[] {
     JOIN cash_accounts fa ON fa.id = t.from_account_id
     JOIN cash_accounts ta ON ta.id = t.to_account_id
     JOIN users u ON u.id = t.created_by
-    ORDER BY t.date DESC, t.created_at DESC
-  `);
+    WHERE ${visible.sql}
+    ORDER BY t.date DESC, t.created_at DESC`,
+    ...visible.params,
+  );
 }
 
 export function getAccountStatement(
   accountId: string,
-  from?: string,
-  to?: string,
+  from: string | undefined,
+  to: string | undefined,
+  scope: Scope,
 ): { account: CashAccount; entries: AccountStatementEntry[] } {
-  const account = getCashAccount(accountId);
+  const account = getCashAccount(accountId, scope);
 
   interface RawTx {
     id: string;

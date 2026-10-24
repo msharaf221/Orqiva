@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import JsBarcode from 'jsbarcode';
 import QRCode from 'qrcode';
+import { TAX_FREE } from './config';
 
 export interface InvoiceQrPayload {
   sellerName: string;
@@ -74,7 +75,7 @@ export function generateInvoiceQrData(data: InvoiceQrPayload): string {
     `فاتورة: ${data.invoiceNumber}`,
     `التاريخ: ${data.invoiceDate}`,
     `الإجمالي: ${totalFormatted} ج.م`,
-    `الضريبة: ${taxFormatted} ج.م`,
+    ...(TAX_FREE ? [] : [`الضريبة: ${taxFormatted} ج.م`]),
     'نظام أوركيفا Orqiva ERP',
   ].join('\n');
 }
@@ -370,8 +371,8 @@ export function ThermalReceiptPaper({
         )}
         <p className="receipt-branch-name">فرع: {branchName}</p>
         <div className="receipt-title-box">
-          <span>فاتورة ضريبية مبسطة</span>
-          <small>SIMPLIFIED TAX INVOICE</small>
+          <span>{TAX_FREE ? 'فاتورة بيع مبسطة' : 'فاتورة ضريبية مبسطة'}</span>
+          <small>{TAX_FREE ? 'SIMPLIFIED INVOICE' : 'SIMPLIFIED TAX INVOICE'}</small>
         </div>
         <div className="receipt-cut-line" />
         <div className="receipt-meta-grid">
@@ -434,7 +435,7 @@ export function ThermalReceiptPaper({
       {/* Financial Totals */}
       <div className="receipt-totals">
         <div className="receipt-row">
-          <span>المجموع الفرعي (قبل الضريبة):</span>
+          <span>{TAX_FREE ? 'المجموع الفرعي:' : 'المجموع الفرعي (قبل الضريبة):'}</span>
           <span className="num">{formatMoney(result.document.subtotal)} ج.م</span>
         </div>
 
@@ -445,12 +446,14 @@ export function ThermalReceiptPaper({
           </div>
         )}
 
-        <div className="receipt-row">
-          <span>
-            ضريبة القيمة المضافة ({((result.document.tax_rate ?? 1400) / 100).toFixed(0)}%):
-          </span>
-          <span className="num">{formatMoney(result.document.tax)} ج.م</span>
-        </div>
+        {!TAX_FREE && (
+          <div className="receipt-row">
+            <span>
+              ضريبة القيمة المضافة ({((result.document.tax_rate ?? 1400) / 100).toFixed(0)}%):
+            </span>
+            <span className="num">{formatMoney(result.document.tax)} ج.م</span>
+          </div>
+        )}
 
         <div className="receipt-cut-line double-cut" />
 

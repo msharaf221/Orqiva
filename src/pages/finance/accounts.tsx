@@ -50,6 +50,7 @@ import type {
   Party,
 } from '../../types';
 import { useBranch, withBranch } from '../../branch';
+import { can } from '../../auth';
 import { ShiftTreasuryAuditModal, ShiftZReportModal } from './shift-audit';
 import { ChequesView } from './cheques';
 import { ReconciliationView } from './reconciliation';
@@ -786,33 +787,39 @@ export function Accounts() {
             >
               <ShieldCheck size={14} /> تسويات ورديات نقاط البيع ({shifts.length})
             </button>
-            <button
-              className={tab === 'cheques' ? 'active' : ''}
-              onClick={() => {
-                setTab('cheques');
-                setPage(1);
-              }}
-            >
-              <FileText size={14} /> أوراق القبض والدفع (الشيكات)
-            </button>
-            <button
-              className={tab === 'reconciliation' ? 'active' : ''}
-              onClick={() => {
-                setTab('reconciliation');
-                setPage(1);
-              }}
-            >
-              <TrendingUp size={14} /> التسوية والتوقع المالي
-            </button>
-            <button
-              className={tab === 'payroll' ? 'active' : ''}
-              onClick={() => {
-                setTab('payroll');
-                setPage(1);
-              }}
-            >
-              <Users size={14} /> الرواتب والأجور (HR)
-            </button>
+            {can(user, 'finance:accounts') && (
+              <button
+                className={tab === 'cheques' ? 'active' : ''}
+                onClick={() => {
+                  setTab('cheques');
+                  setPage(1);
+                }}
+              >
+                <FileText size={14} /> أوراق القبض والدفع (الشيكات)
+              </button>
+            )}
+            {can(user, 'finance:accounts') && (
+              <button
+                className={tab === 'reconciliation' ? 'active' : ''}
+                onClick={() => {
+                  setTab('reconciliation');
+                  setPage(1);
+                }}
+              >
+                <TrendingUp size={14} /> التسوية والتوقع المالي
+              </button>
+            )}
+            {can(user, 'hr:view') && (
+              <button
+                className={tab === 'payroll' ? 'active' : ''}
+                onClick={() => {
+                  setTab('payroll');
+                  setPage(1);
+                }}
+              >
+                <Users size={14} /> الرواتب والأجور (HR)
+              </button>
+            )}
           </div>
           {['accounts', 'transfers', 'shifts'].includes(tab) && (
             <div className="table-filters">

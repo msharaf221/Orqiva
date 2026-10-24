@@ -44,6 +44,10 @@ export type PermissionKey =
   | 'reports:group_overview'
   | 'eta:view'
   | 'eta:manage'
+  | 'crm:view'
+  | 'crm:manage'
+  | 'hr:view'
+  | 'hr:manage'
   | 'distribution:manage'
   | 'branches:manage'
   | 'users:manage'
@@ -1343,6 +1347,7 @@ export interface Cheque {
   party_id: string;
   party_name?: string;
   bank_name: string;
+  branch_id?: string | null;
   branch_name?: string | null;
   amount: number;
   issue_date: string;
@@ -1488,7 +1493,64 @@ export interface EmployeeAttendance {
   late_minutes: number;
   overtime_hours: number;
   notes?: string | null;
+  source?: 'MANUAL' | 'DEVICE' | 'IMPORT';
+  device_id?: string | null;
+  check_in_punch_id?: string | null;
+  check_out_punch_id?: string | null;
   created_at: string;
+}
+
+export interface AttendanceDevice {
+  id: string;
+  name: string;
+  serial_number: string;
+  model: string;
+  ip_address: string;
+  port: number;
+  branch_id: string;
+  branch_name?: string;
+  api_key_prefix: string;
+  active: number;
+  work_start: string;
+  work_end: string;
+  late_grace_minutes: number;
+  overtime_after_minutes: number;
+  last_seen_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  punches_count?: number;
+  mappings_count?: number;
+}
+
+export interface DeviceUserMapping {
+  id: string;
+  device_id: string;
+  device_user_id: string;
+  employee_id: string;
+  employee_name?: string;
+  employee_code?: string;
+  created_at: string;
+}
+
+export interface AttendancePunch {
+  id: string;
+  device_id: string;
+  device_user_id: string;
+  employee_id?: string | null;
+  employee_name?: string | null;
+  punched_at: string;
+  punch_type: 'IN' | 'OUT' | 'AUTO';
+  verify_mode: 'FINGERPRINT' | 'CARD' | 'PASSWORD' | 'FACE' | 'OTHER';
+  raw: string;
+  processed_at?: string | null;
+  created_at: string;
+}
+
+export interface UnmappedDeviceUser {
+  device_user_id: string;
+  punches_count: number;
+  first_seen: string;
+  last_seen: string;
 }
 
 // Enterprise CRM Suite
@@ -1527,6 +1589,7 @@ export interface CrmDeal {
   quotation_number?: string | null;
   status: DealStatus;
   lost_reason?: string | null;
+  closed_at?: string | null;
   notes?: string | null;
   created_at: string;
   updated_at: string;
@@ -1535,6 +1598,7 @@ export interface CrmDeal {
 
 export type ActivityType = 'CALL' | 'MEETING' | 'TASK' | 'EMAIL' | 'NOTE';
 export type ActivityStatus = 'PENDING' | 'COMPLETED' | 'CANCELLED';
+export type ActivityPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
 
 export interface CrmActivity {
   id: string;
@@ -1542,16 +1606,39 @@ export interface CrmActivity {
   deal_title?: string | null;
   party_id?: string | null;
   customer_name?: string | null;
+  branch_id: string;
   type: ActivityType;
   title: string;
   due_date: string;
   due_time?: string | null;
   assigned_to_user_id?: string | null;
   assigned_to_name?: string | null;
+  priority: ActivityPriority;
   status: ActivityStatus;
   outcome_notes?: string | null;
   completed_at?: string | null;
   created_at: string;
+  updated_at: string;
+}
+
+export interface CrmAssignee {
+  id: string;
+  name: string;
+  email: string;
+  role_name: string;
+}
+
+export interface CrmOverview {
+  open_deals: number;
+  open_value: number;
+  weighted_value: number;
+  won_value: number;
+  won_deals: number;
+  lost_deals: number;
+  win_rate: number;
+  average_deal: number;
+  pending_activities: number;
+  overdue_activities: number;
 }
 
 export interface SalesTarget {

@@ -4,7 +4,37 @@
 
 import { all, one, run, transaction, id, now } from './db';
 import { AppError } from './errors';
+import { inScope, type Scope } from './scope';
 import { CostCenter } from '../src/types';
+
+function readableBranchSql(
+  scope: Scope | undefined,
+  column: string,
+  allowGroup = false,
+): { sql: string; params: string[] } {
+  if (!scope || scope.ids === null) return { sql: '1=1', params: [] };
+  if (!scope.ids.length)
+    return allowGroup ? { sql: `${column} IS NULL`, params: [] } : { sql: '0=1', params: [] };
+  const placeholders = scope.ids.map(() => '?').join(',');
+  return {
+    sql: allowGroup
+      ? `(${column} IS NULL OR ${column} IN (${placeholders}))`
+      : `${column} IN (${placeholders})`,
+    params: scope.ids,
+  };
+}
+
+function assertBankAccountVisible(accountId: string, scope?: Scope) {
+  const account = one<{ id: string; type: string; branch_id: string | null }>(
+    'SELECT id, type, branch_id FROM cash_accounts WHERE id=?',
+    accountId,
+  );
+  if (!account) throw new AppError(404, 'الحساب البنكي غير موجود');
+  if (account.branch_id !== null && scope && !inScope(scope, account.branch_id)) {
+    throw new AppError(404, 'الحساب البنكي غير موجود');
+  }
+  return account;
+}
 
 // --- Cost Centers ---
 
@@ -62,26 +92,35 @@ export interface BankStatement {
   lines?: BankStatementLine[];
 }
 
-export function listBankStatements(cashAccountId?: string): BankStatement[] {
-  const where = cashAccountId ? 'WHERE bs.cash_account_id=?' : '';
-  const params = cashAccountId ? [cashAccountId] : [];
+export function listBankStatements(scope?: Scope, cashAccountId?: string): BankStatement[] {
+  const clauses: string[] = [];
+  const params: (string | number | null)[] = [];
+  if (cashAccountId) {
+    clauses.push('bs.cash_account_id=?');
+    params.push(cashAccountId);
+  }
+  const visible = readableBranchSql(scope, 'ca.branch_id', true);
+  clauses.push(visible.sql);
+  params.push(...visible.params);
   return all<BankStatement>(
     `SELECT bs.*, ca.name AS cash_account_name
      FROM bank_statements bs
      JOIN cash_accounts ca ON ca.id = bs.cash_account_id
-     ${where}
+     WHERE ${clauses.join(' AND ')}
      ORDER BY bs.statement_date DESC`,
     ...params,
   );
 }
 
-export function getBankStatement(id: string): BankStatement | null {
+export function getBankStatement(id: string, scope?: Scope): BankStatement | null {
+  const visible = readableBranchSql(scope, 'ca.branch_id', true);
   const stmt = one<BankStatement>(
     `SELECT bs.*, ca.name AS cash_account_name
      FROM bank_statements bs
      JOIN cash_accounts ca ON ca.id = bs.cash_account_id
-     WHERE bs.id=?`,
+     WHERE bs.id=? AND ${visible.sql}`,
     id,
+    ...visible.params,
   );
   if (!stmt) return null;
 
@@ -92,24 +131,23 @@ export function getBankStatement(id: string): BankStatement | null {
   return { ...stmt, lines };
 }
 
-export function createBankStatement(data: {
-  cash_account_id: string;
-  statement_date: string;
-  opening_balance: number;
-  closing_balance: number;
-  notes?: string;
-  lines: Array<{
-    date: string;
-    description: string;
-    reference?: string;
-    amount: number;
-  }>;
-}): BankStatement {
-  const account = one<{ id: string; type: string }>(
-    'SELECT id, type FROM cash_accounts WHERE id=?',
-    data.cash_account_id,
-  );
-  if (!account) throw new AppError(404, 'الحساب البنكي غير موجود');
+export function createBankStatement(
+  data: {
+    cash_account_id: string;
+    statement_date: string;
+    opening_balance: number;
+    closing_balance: number;
+    notes?: string;
+    lines: Array<{
+      date: string;
+      description: string;
+      reference?: string;
+      amount: number;
+    }>;
+  },
+  scope?: Scope,
+): BankStatement {
+  assertBankAccountVisible(data.cash_account_id, scope);
 
   const stmtId = id();
   const ts = now();
@@ -144,12 +182,31 @@ export function createBankStatement(data: {
   return getBankStatement(stmtId)!;
 }
 
-export function matchStatementLine(lineId: string, paymentId: string): void {
-  const line = one<BankStatementLine>('SELECT * FROM bank_statement_lines WHERE id=?', lineId);
+export function matchStatementLine(lineId: string, paymentId: string, scope?: Scope): void {
+  const line = one<BankStatementLine & { branch_id: string | null }>(
+    `SELECT bsl.*, ca.branch_id
+     FROM bank_statement_lines bsl
+     JOIN bank_statements bs ON bs.id = bsl.statement_id
+     JOIN cash_accounts ca ON ca.id = bs.cash_account_id
+     WHERE bsl.id=?`,
+    lineId,
+  );
   if (!line) throw new AppError(404, 'سطر كشف الحساب غير موجود');
+  if (line.branch_id !== null && scope && !inScope(scope, line.branch_id)) {
+    throw new AppError(404, 'سطر كشف الحساب غير موجود');
+  }
 
-  const payment = one<{ id: string }>('SELECT id FROM payments WHERE id=?', paymentId);
+  const payment = one<{ id: string; branch_id: string }>(
+    `SELECT p.id, d.branch_id
+     FROM payments p
+     JOIN documents d ON d.id = p.document_id
+     WHERE p.id=?`,
+    paymentId,
+  );
   if (!payment) throw new AppError(404, 'حركة السداد غير موجودة');
+  if (scope && !inScope(scope, payment.branch_id)) {
+    throw new AppError(404, 'حركة السداد غير موجودة');
+  }
 
   run(
     'UPDATE bank_statement_lines SET matched_payment_id=?, matched_at=? WHERE id=?',
@@ -207,10 +264,12 @@ export interface CashFlowForecast {
   };
 }
 
-export function forecastCashFlow(days: number = 30): CashFlowForecast {
+export function forecastCashFlow(days: number = 30, scope?: Scope): CashFlowForecast {
+  const accountBranch = readableBranchSql(scope, 'branch_id', true);
   // 1. Current liquid balance from active cash and bank accounts
   const accounts = all<{ id: string; initial_balance: number }>(
-    'SELECT id, initial_balance FROM cash_accounts WHERE active=1',
+    `SELECT id, initial_balance FROM cash_accounts WHERE active=1 AND ${accountBranch.sql}`,
+    ...accountBranch.params,
   );
 
   let currentCashBalance = 0;
@@ -240,6 +299,7 @@ export function forecastCashFlow(days: number = 30): CashFlowForecast {
 
   // 2. Inflows:
   // Unpaid Sales invoices due between startDate and endDate
+  const invoiceBranch = readableBranchSql(scope, 'd.branch_id');
   const receivableInvoices = all<{
     id: string;
     number: string;
@@ -251,12 +311,15 @@ export function forecastCashFlow(days: number = 30): CashFlowForecast {
      FROM documents d
      JOIN parties p ON p.id = d.party_id
      WHERE d.type='SALE' AND d.status='POSTED' AND d.paid < d.total
+       AND ${invoiceBranch.sql}
        AND d.due_date <= ?
      ORDER BY d.due_date ASC`,
+    ...invoiceBranch.params,
     endDate,
   );
 
   // Receivable cheques in portfolio due within forecast window
+  const chequeBranch = readableBranchSql(scope, 'c.branch_id');
   const receivableCheques = all<{
     id: string;
     number: string;
@@ -268,8 +331,10 @@ export function forecastCashFlow(days: number = 30): CashFlowForecast {
      FROM cheques c
      JOIN parties p ON p.id = c.party_id
      WHERE c.type='RECEIVABLE' AND c.status IN ('PORTFOLIO','DEPOSITED')
+       AND ${chequeBranch.sql}
        AND c.due_date <= ?
      ORDER BY c.due_date ASC`,
+    ...chequeBranch.params,
     endDate,
   );
 
@@ -286,8 +351,10 @@ export function forecastCashFlow(days: number = 30): CashFlowForecast {
      FROM documents d
      JOIN parties p ON p.id = d.party_id
      WHERE d.type='PURCHASE' AND d.status='POSTED' AND d.paid < d.total
+       AND ${invoiceBranch.sql}
        AND d.due_date <= ?
      ORDER BY d.due_date ASC`,
+    ...invoiceBranch.params,
     endDate,
   );
 
@@ -303,12 +370,15 @@ export function forecastCashFlow(days: number = 30): CashFlowForecast {
      FROM cheques c
      JOIN parties p ON p.id = c.party_id
      WHERE c.type='PAYABLE' AND c.status='PORTFOLIO'
+       AND ${chequeBranch.sql}
        AND c.due_date <= ?
      ORDER BY c.due_date ASC`,
+    ...chequeBranch.params,
     endDate,
   );
 
   // Confirmed Purchase Orders expected for delivery/payment
+  const poBranch = readableBranchSql(scope, 'po.branch_id');
   const purchaseOrders = all<{
     id: string;
     number: string;
@@ -320,8 +390,10 @@ export function forecastCashFlow(days: number = 30): CashFlowForecast {
      FROM purchase_orders po
      JOIN parties p ON p.id = po.party_id
      WHERE po.status IN ('CONFIRMED','PARTIALLY_RECEIVED')
+       AND ${poBranch.sql}
        AND COALESCE(po.expected_delivery_date, po.date) <= ?
      ORDER BY po.date ASC`,
+    ...poBranch.params,
     endDate,
   );
 

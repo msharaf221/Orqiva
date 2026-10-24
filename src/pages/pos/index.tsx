@@ -39,6 +39,7 @@ import { ThermalReceiptModal } from './receipt';
 import { HotkeysModal } from './hotkeys';
 import { PosReturnModal } from './return';
 import { can } from '../../auth';
+import { TAX_FREE, calculateTax, effectiveTaxRate } from '../../config';
 import { ProductForm } from '../Catalog';
 
 export function POS() {
@@ -420,14 +421,14 @@ export function POS() {
   };
 
   // Calculations
-  const taxRate = company?.tax_rate ?? 1400; // 14% = 1400 bps
+  const taxRate = effectiveTaxRate(company?.tax_rate ?? 1400);
   const subtotalCents = useMemo(
     () => cart.reduce((sum, item) => sum + item.quantity * item.unit_price, 0),
     [cart],
   );
   const effectiveDiscountCents = Math.min(discountCents, subtotalCents);
   const taxCents = useMemo(
-    () => Math.round(((subtotalCents - effectiveDiscountCents) * taxRate) / 10000),
+    () => calculateTax(subtotalCents - effectiveDiscountCents, taxRate),
     [subtotalCents, effectiveDiscountCents, taxRate],
   );
   const totalCents = subtotalCents - effectiveDiscountCents + taxCents;
@@ -690,10 +691,12 @@ export function POS() {
               </span>
             </div>
 
-            <div className="pos-summary-line">
-              <span>ضريبة القيمة المضافة ({taxRate / 100}%):</span>
-              <span>{money(taxCents)} ج.م</span>
-            </div>
+            {!TAX_FREE && (
+              <div className="pos-summary-line">
+                <span>ضريبة القيمة المضافة ({taxRate / 100}%):</span>
+                <span>{money(taxCents)} ج.م</span>
+              </div>
+            )}
 
             <div className="pos-summary-total">
               <span>الإجمالي النهائي:</span>

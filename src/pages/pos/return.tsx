@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Search, Undo2, Coins, CreditCard, Building } from 'lucide-react';
 import { api, Button, Modal, money, useAction, useToast, useDebounced } from '../../lib';
 import type { Document, ReturnableLine } from '../../types';
+import { TAX_FREE, calculateTax, effectiveTaxRate } from '../../config';
 import { playSound } from './helpers';
 
 /**
@@ -85,8 +86,8 @@ export function PosReturnModal({
     (sum, l) => sum + (quantities[l.product_id] || 0) * l.unit_price,
     0,
   );
-  const taxRate = sale?.tax_rate ?? 0;
-  const refundTax = Math.round((refundSubtotal * taxRate) / 10000);
+  const taxRate = effectiveTaxRate(sale?.tax_rate ?? 0);
+  const refundTax = calculateTax(refundSubtotal, taxRate);
   const refundTotal = refundSubtotal + refundTax;
 
   const submit = () => {
@@ -254,10 +255,12 @@ export function PosReturnModal({
             <span>قيمة الأصناف المرتجعة:</span>
             <b className="num">{money(refundSubtotal)} ج.م</b>
           </div>
-          <div>
-            <span>ضريبة القيمة المضافة:</span>
-            <b className="num">{money(refundTax)} ج.م</b>
-          </div>
+          {!TAX_FREE && (
+            <div>
+              <span>ضريبة القيمة المضافة:</span>
+              <b className="num">{money(refundTax)} ج.م</b>
+            </div>
+          )}
           <div className="pos-return-summary-total">
             <span>إجمالي المردود للعميل:</span>
             <strong className="num">{money(refundTotal)} ج.م</strong>
