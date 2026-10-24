@@ -229,6 +229,8 @@ function SelectPaymentDoc({
   );
   return (
     <Modal
+      size="lg"
+      showMaximize
       title="اختر الفاتورة لتسجيل دفعة"
       description="تظهر الفواتير المعتمدة التي لها رصيد مستحق فقط."
       onClose={onClose}

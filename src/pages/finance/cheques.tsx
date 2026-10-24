@@ -72,60 +72,71 @@ export function CreateChequeModal({
 
   return (
     <Modal
+      size="lg"
+      showMaximize
       title={type === 'RECEIVABLE' ? 'تسجيل شيك وارد (ورقة قبض)' : 'تحرير شيك صادر (ورقة دفع)'}
       description="إثبات الشيك في محفظة الأوراق المالية مع توليد القيد المحاسبي المزدوج آلياً."
       onClose={onClose}
     >
       <form onSubmit={submit}>
-        <div className="grid two" style={{ marginBottom: '12px' }}>
-          <Field label="نوع الشيك">
-            <select value={type} onChange={(e) => setType(e.target.value as ChequeType)} required>
-              <option value="RECEIVABLE">ورقة قبض (مستلم من عميل)</option>
-              <option value="PAYABLE">ورقة دفع (صادر لمورد)</option>
-            </select>
-          </Field>
-          <Field label="رقم الشيك">
-            <input name="number" placeholder="مثال: CHQ-98120" required autoFocus />
+        <div className="modal-body form-grid">
+          <div className="grid two" style={{ marginBottom: '12px' }}>
+            <Field label="نوع الشيك">
+              <select value={type} onChange={(e) => setType(e.target.value as ChequeType)} required>
+                <option value="RECEIVABLE">ورقة قبض (مستلم من عميل)</option>
+                <option value="PAYABLE">ورقة دفع (صادر لمورد)</option>
+              </select>
+            </Field>
+            <Field label="رقم الشيك">
+              <input name="number" placeholder="مثال: CHQ-98120" required autoFocus />
+            </Field>
+          </div>
+
+          <div className="grid two" style={{ marginBottom: '12px' }}>
+            <Field label={type === 'RECEIVABLE' ? 'العميل' : 'المورد'}>
+              <select name="party_id" required>
+                <option value="">اختر جهة التعامل...</option>
+                {filteredParties.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} {p.phone ? `(${p.phone})` : ''}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="المبلغ (ج.م)">
+              <input
+                name="amount"
+                type="number"
+                step="0.01"
+                min="0.01"
+                placeholder="0.00"
+                required
+              />
+            </Field>
+          </div>
+
+          <div className="grid two" style={{ marginBottom: '12px' }}>
+            <Field label="البنك المسحوب عليه">
+              <input name="bank_name" placeholder="مثال: البنك الأهلي المصري" required />
+            </Field>
+            <Field label="فرع البنك">
+              <input name="branch_name" placeholder="مثال: فرع مدينة نصر" />
+            </Field>
+          </div>
+
+          <div className="grid two" style={{ marginBottom: '12px' }}>
+            <Field label="تاريخ التحرير">
+              <input name="issue_date" type="date" defaultValue={today()} required />
+            </Field>
+            <Field label="تاريخ الاستحقاق">
+              <input name="due_date" type="date" defaultValue={today()} required />
+            </Field>
+          </div>
+
+          <Field label="ملاحظات">
+            <textarea name="notes" rows={2} placeholder="أي بيانات إضافية أو رقم الحساب..." />
           </Field>
         </div>
-
-        <div className="grid two" style={{ marginBottom: '12px' }}>
-          <Field label={type === 'RECEIVABLE' ? 'العميل' : 'المورد'}>
-            <select name="party_id" required>
-              <option value="">اختر جهة التعامل...</option>
-              {filteredParties.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} {p.phone ? `(${p.phone})` : ''}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="المبلغ (ج.م)">
-            <input name="amount" type="number" step="0.01" min="0.01" placeholder="0.00" required />
-          </Field>
-        </div>
-
-        <div className="grid two" style={{ marginBottom: '12px' }}>
-          <Field label="البنك المسحوب عليه">
-            <input name="bank_name" placeholder="مثال: البنك الأهلي المصري" required />
-          </Field>
-          <Field label="فرع البنك">
-            <input name="branch_name" placeholder="مثال: فرع مدينة نصر" />
-          </Field>
-        </div>
-
-        <div className="grid two" style={{ marginBottom: '12px' }}>
-          <Field label="تاريخ التحرير">
-            <input name="issue_date" type="date" defaultValue={today()} required />
-          </Field>
-          <Field label="تاريخ الاستحقاق">
-            <input name="due_date" type="date" defaultValue={today()} required />
-          </Field>
-        </div>
-
-        <Field label="ملاحظات">
-          <textarea name="notes" rows={2} placeholder="أي بيانات إضافية أو رقم الحساب..." />
-        </Field>
 
         <div className="modal-footer">
           <Button variant="secondary" type="button" onClick={onClose}>
@@ -170,25 +181,29 @@ export function CollectChequeModal({
 
   return (
     <Modal
+      size="md"
+      showMaximize
       title={`تحصيل الشيك #${cheque.number}`}
       description={`إيداع مبلغ ${money(cheque.amount)} ج.م في الحساب البنكي وتسوية أوراق القبض.`}
       onClose={onClose}
     >
       <form onSubmit={submit}>
-        <Field label="الحساب البنكي المستلم">
-          <select name="bank_account_id" required defaultValue={bankAccounts[0]?.id || ''}>
-            <option value="">اختر الحساب البنكي...</option>
-            {bankAccounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name} ({money(a.balance)} ج.م)
-              </option>
-            ))}
-          </select>
-        </Field>
+        <div className="modal-body form-grid">
+          <Field label="الحساب البنكي المستلم">
+            <select name="bank_account_id" required defaultValue={bankAccounts[0]?.id || ''}>
+              <option value="">اختر الحساب البنكي...</option>
+              {bankAccounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name} ({money(a.balance)} ج.م)
+                </option>
+              ))}
+            </select>
+          </Field>
 
-        <Field label="تاريخ التحصيل الفعلي">
-          <input name="collection_date" type="date" defaultValue={today()} required />
-        </Field>
+          <Field label="تاريخ التحصيل الفعلي">
+            <input name="collection_date" type="date" defaultValue={today()} required />
+          </Field>
+        </div>
 
         <div className="modal-footer">
           <Button variant="secondary" type="button" onClick={onClose}>
@@ -233,25 +248,29 @@ export function PayChequeModal({
 
   return (
     <Modal
+      size="md"
+      showMaximize
       title={`صرف الشيك #${cheque.number}`}
       description={`خصم مبلغ ${money(cheque.amount)} ج.م من الحساب البنكي وتسوية أوراق الدفع.`}
       onClose={onClose}
     >
       <form onSubmit={submit}>
-        <Field label="الحساب البنكي المسحوب منه">
-          <select name="bank_account_id" required defaultValue={bankAccounts[0]?.id || ''}>
-            <option value="">اختر الحساب البنكي...</option>
-            {bankAccounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name} ({money(a.balance)} ج.م)
-              </option>
-            ))}
-          </select>
-        </Field>
+        <div className="modal-body form-grid">
+          <Field label="الحساب البنكي المسحوب منه">
+            <select name="bank_account_id" required defaultValue={bankAccounts[0]?.id || ''}>
+              <option value="">اختر الحساب البنكي...</option>
+              {bankAccounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name} ({money(a.balance)} ج.م)
+                </option>
+              ))}
+            </select>
+          </Field>
 
-        <Field label="تاريخ الصرف الفعلي">
-          <input name="payment_date" type="date" defaultValue={today()} required />
-        </Field>
+          <Field label="تاريخ الصرف الفعلي">
+            <input name="payment_date" type="date" defaultValue={today()} required />
+          </Field>
+        </div>
 
         <div className="modal-footer">
           <Button variant="secondary" type="button" onClick={onClose}>
@@ -292,19 +311,23 @@ export function BounceChequeModal({
 
   return (
     <Modal
+      size="md"
+      showMaximize
       title={`إثبات ارتداد الشيك #${cheque.number}`}
       description={`سيتم إلغاء أثر ورقة القبض وإعادة إثبات مديونية ${money(cheque.amount)} ج.م على حساب العميل.`}
       onClose={onClose}
     >
       <form onSubmit={submit}>
-        <Field label="سبب الارتداد من البنك">
-          <input
-            name="reason"
-            defaultValue="شيك بدون رصيد كافٍ / توقيع غير مطابق"
-            required
-            autoFocus
-          />
-        </Field>
+        <div className="modal-body form-grid">
+          <Field label="سبب الارتداد من البنك">
+            <input
+              name="reason"
+              defaultValue="شيك بدون رصيد كافٍ / توقيع غير مطابق"
+              required
+              autoFocus
+            />
+          </Field>
+        </div>
 
         <div className="modal-footer">
           <Button variant="secondary" type="button" onClick={onClose}>

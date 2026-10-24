@@ -318,7 +318,8 @@ function TransferEditor({
   const ready = !products.loading && !products.error;
   return (
     <Modal
-      wide
+      size="xl"
+      showMaximize
       title={existing ? 'تعديل التحويل ' + existing.number : 'تحويل مخزون بين فرعين'}
       description="يخرج المخزون من الفرع المرسِل عند الشحن، ويدخل الفرع المستلم بعد الاستلام."
       onClose={onClose}
@@ -499,7 +500,8 @@ function TransferDetail({
   );
   return (
     <Modal
-      wide
+      size="xl"
+      showMaximize
       title={`${t.number} · ${statusLabels[t.status].label}`}
       description={`${t.from_branch_name} ← ${t.to_branch_name} · ${formatDate(t.date)}`}
       onClose={onClose}

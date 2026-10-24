@@ -342,6 +342,8 @@ export function ProductForm({
   };
   return (
     <Modal
+      size="lg"
+      showMaximize
       title={product ? 'تعديل المنتج' : quick ? 'تعريف منتج جديد (بيع سريع)' : 'إضافة منتج جديد'}
       description={
         quick
@@ -510,62 +512,76 @@ function CostHistoryModal({
   const rows = data.data || [];
 
   return (
-    <Modal title={`سجل حركة وتطور تكلفة WAC: ${product.name} (${product.sku})`} onClose={onClose}>
-      <div style={{ marginBottom: '16px', fontSize: '13px', color: 'var(--slate-600)' }}>
-        تتبع دقيق لكل حركة شراء أو بيع أو تحويل أو تسوية أثرت على متوسط التكلفة المرجح (WAC) لهذا
-        الصنف.
-      </div>
-      {data.loading ? (
-        <Loading />
-      ) : data.error ? (
-        <ErrorState message={data.error} retry={data.reload} />
-      ) : !rows.length ? (
-        <Empty
-          title="لا توجد حركات تكلفة سابقة"
-          description="لم يتم تسجيل حركات WAC لهذا الصنف بعد في هذا النطاق."
-        />
-      ) : (
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>التاريخ والوقت</th>
-                <th>الفرع</th>
-                <th>الكمية</th>
-                <th>تكلفة الحركة</th>
-                <th>المتوسط قبل</th>
-                <th>المتوسط بعد</th>
-                <th>السبب / المستند</th>
-                <th>بواسطة</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((cm) => (
-                <tr key={cm.id}>
-                  <td className="muted">{formatDate(cm.created_at, true)}</td>
-                  <td>{cm.branch_name}</td>
-                  <td>
-                    <span
-                      className={'movement-amount ' + (cm.delta_qty > 0 ? 'positive' : 'negative')}
-                      dir="ltr"
-                    >
-                      {cm.delta_qty > 0 ? '+' : ''}
-                      {cm.delta_qty}
-                    </span>
-                  </td>
-                  <td className="num">{money(cm.unit_cost, 2)}</td>
-                  <td className="num muted">{money(cm.avg_before, 2)}</td>
-                  <td className="num amount">
-                    <strong>{money(cm.avg_after, 2)}</strong>
-                  </td>
-                  <td>{cm.reason}</td>
-                  <td>{cm.user_name}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+    <Modal
+      size="xl"
+      showMaximize
+      title={`سجل حركة وتطور تكلفة WAC: ${product.name} (${product.sku})`}
+      onClose={onClose}
+    >
+      <div className="modal-body">
+        <div style={{ marginBottom: '16px', fontSize: '13px', color: 'var(--slate-600)' }}>
+          تتبع دقيق لكل حركة شراء أو بيع أو تحويل أو تسوية أثرت على متوسط التكلفة المرجح (WAC) لهذا
+          الصنف.
         </div>
-      )}
+        {data.loading ? (
+          <Loading />
+        ) : data.error ? (
+          <ErrorState message={data.error} retry={data.reload} />
+        ) : !rows.length ? (
+          <Empty
+            title="لا توجد حركات تكلفة سابقة"
+            description="لم يتم تسجيل حركات WAC لهذا الصنف بعد في هذا النطاق."
+          />
+        ) : (
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>التاريخ والوقت</th>
+                  <th>الفرع</th>
+                  <th>الكمية</th>
+                  <th>تكلفة الحركة</th>
+                  <th>المتوسط قبل</th>
+                  <th>المتوسط بعد</th>
+                  <th>السبب / المستند</th>
+                  <th>بواسطة</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((cm) => (
+                  <tr key={cm.id}>
+                    <td className="muted">{formatDate(cm.created_at, true)}</td>
+                    <td>{cm.branch_name}</td>
+                    <td>
+                      <span
+                        className={
+                          'movement-amount ' + (cm.delta_qty > 0 ? 'positive' : 'negative')
+                        }
+                        dir="ltr"
+                      >
+                        {cm.delta_qty > 0 ? '+' : ''}
+                        {cm.delta_qty}
+                      </span>
+                    </td>
+                    <td className="num">{money(cm.unit_cost, 2)}</td>
+                    <td className="num muted">{money(cm.avg_before, 2)}</td>
+                    <td className="num amount">
+                      <strong>{money(cm.avg_after, 2)}</strong>
+                    </td>
+                    <td>{cm.reason}</td>
+                    <td>{cm.user_name}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+      <div className="modal-footer" style={{ justifyContent: 'flex-end' }}>
+        <Button variant="secondary" onClick={onClose}>
+          إغلاق
+        </Button>
+      </div>
     </Modal>
   );
 }
@@ -2173,7 +2189,7 @@ function PartyStatement({ party, onClose }: { party: Party; onClose: () => void 
   );
   const docs = (data.data || []).filter((d) => d.party_id === party.id);
   return (
-    <Modal wide title="كشف الحساب" description={party.name} onClose={onClose}>
+    <Modal size="xl" showMaximize title="كشف الحساب" description={party.name} onClose={onClose}>
       <div className="modal-body">
         <div className="statement-top">
           <div>
@@ -2257,6 +2273,11 @@ function PartyStatement({ party, onClose }: { party: Party; onClose: () => void 
             </table>
           </div>
         )}
+      </div>
+      <div className="modal-footer" style={{ justifyContent: 'flex-end' }}>
+        <Button variant="secondary" onClick={onClose}>
+          إغلاق
+        </Button>
       </div>
     </Modal>
   );

@@ -62,82 +62,85 @@ export function CreateEmployeeModal({
 
   return (
     <Modal
-      wide
+      size="xl"
+      showMaximize
       title="إضافة موظف جديد وضبط الراتب"
       description="تسجيل بيانات الموظف، الراتب الأساسي والمتغير، والأجر التأميني لحساب التأمينات الاجتماعية."
       onClose={onClose}
     >
       <form onSubmit={submit}>
-        <div className="grid three" style={{ marginBottom: '12px' }}>
-          <Field label="كود الموظف">
-            <input name="code" placeholder="مثال: EMP-001" required autoFocus />
-          </Field>
-          <Field label="اسم الموظف رباعي">
-            <input name="name" placeholder="محمد أحمد علي..." required />
-          </Field>
-          <Field label="الرقم القومي (14 رقم)">
-            <input name="national_id" placeholder="295..." maxLength={14} />
-          </Field>
-        </div>
+        <div className="modal-body form-grid">
+          <div className="grid three" style={{ marginBottom: '12px' }}>
+            <Field label="كود الموظف">
+              <input name="code" placeholder="مثال: EMP-001" required autoFocus />
+            </Field>
+            <Field label="اسم الموظف رباعي">
+              <input name="name" placeholder="محمد أحمد علي..." required />
+            </Field>
+            <Field label="الرقم القومي (14 رقم)">
+              <input name="national_id" placeholder="295..." maxLength={14} />
+            </Field>
+          </div>
 
-        <div className="grid three" style={{ marginBottom: '12px' }}>
-          <Field label="المسمى الوظيفي">
-            <input name="job_title" placeholder="كاشير، محاسب، مدير فرع..." required />
-          </Field>
-          <Field label="القسم">
-            <input name="department" placeholder="المبيعات، الحسابات..." />
-          </Field>
-          <Field label="فرع العمل">
-            <select name="branch_id" required defaultValue={branches[0]?.id || ''}>
-              <option value="">اختر الفرع...</option>
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-        </div>
+          <div className="grid three" style={{ marginBottom: '12px' }}>
+            <Field label="المسمى الوظيفي">
+              <input name="job_title" placeholder="كاشير، محاسب، مدير فرع..." required />
+            </Field>
+            <Field label="القسم">
+              <input name="department" placeholder="المبيعات، الحسابات..." />
+            </Field>
+            <Field label="فرع العمل">
+              <select name="branch_id" required defaultValue={branches[0]?.id || ''}>
+                <option value="">اختر الفرع...</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
 
-        <div className="grid three" style={{ marginBottom: '12px' }}>
-          <Field label="نوع التعيين">
-            <select name="employment_type" defaultValue="FULL_TIME">
-              <option value="FULL_TIME">دوام كامل (تأمين شامل)</option>
-              <option value="PART_TIME">دوام جزئي</option>
-              <option value="CONTRACT">عقد محدد المدة</option>
-            </select>
-          </Field>
-          <Field label="رقم التأمين الاجتماعي">
-            <input name="insurance_number" placeholder="رقم المنشأة / التأمين..." />
-          </Field>
-          <Field label="تاريخ التعيين">
-            <input name="hire_date" type="date" defaultValue={today()} required />
-          </Field>
-        </div>
+          <div className="grid three" style={{ marginBottom: '12px' }}>
+            <Field label="نوع التعيين">
+              <select name="employment_type" defaultValue="FULL_TIME">
+                <option value="FULL_TIME">دوام كامل (تأمين شامل)</option>
+                <option value="PART_TIME">دوام جزئي</option>
+                <option value="CONTRACT">عقد محدد المدة</option>
+              </select>
+            </Field>
+            <Field label="رقم التأمين الاجتماعي">
+              <input name="insurance_number" placeholder="رقم المنشأة / التأمين..." />
+            </Field>
+            <Field label="تاريخ التعيين">
+              <input name="hire_date" type="date" defaultValue={today()} required />
+            </Field>
+          </div>
 
-        <div className="grid three" style={{ marginBottom: '16px' }}>
-          <Field label="الراتب الأساسي (ج.م)">
-            <input
-              name="basic_salary"
-              type="number"
-              step="0.01"
-              min="0"
-              placeholder="0.00"
-              required
-            />
-          </Field>
-          <Field label="الراتب المتغير / البدلات (ج.م)">
-            <input name="variable_salary" type="number" step="0.01" min="0" defaultValue="0" />
-          </Field>
-          <Field label="الأجر التأميني (للتأمينات 11% / 18.75%)">
-            <input
-              name="insured_salary"
-              type="number"
-              step="0.01"
-              min="0"
-              placeholder="افتراضي: الأساسي"
-            />
-          </Field>
+          <div className="grid three" style={{ marginBottom: '16px' }}>
+            <Field label="الراتب الأساسي (ج.م)">
+              <input
+                name="basic_salary"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+                required
+              />
+            </Field>
+            <Field label="الراتب المتغير / البدلات (ج.م)">
+              <input name="variable_salary" type="number" step="0.01" min="0" defaultValue="0" />
+            </Field>
+            <Field label="الأجر التأميني (للتأمينات 11% / 18.75%)">
+              <input
+                name="insured_salary"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="افتراضي: الأساسي"
+              />
+            </Field>
+          </div>
         </div>
 
         <div className="modal-footer">
@@ -181,31 +184,35 @@ export function CreateAdvanceModal({
 
   return (
     <Modal
+      size="md"
+      showMaximize
       title={`تسجيل سلفة للموظف: ${employee.name}`}
       description="سيتم إثبات السلفة وتوجيهها للاستقطاع الآلي في أقرب مسير رواتب قادم."
       onClose={onClose}
     >
       <form onSubmit={submit}>
-        <div className="grid two" style={{ marginBottom: '12px' }}>
-          <Field label="مبلغ السلفة (ج.م)">
-            <input
-              name="amount"
-              type="number"
-              step="0.01"
-              min="1"
-              placeholder="0.00"
-              required
-              autoFocus
-            />
-          </Field>
-          <Field label="تاريخ صرف السلفة">
-            <input name="date" type="date" defaultValue={today()} required />
+        <div className="modal-body form-grid">
+          <div className="grid two" style={{ marginBottom: '12px' }}>
+            <Field label="مبلغ السلفة (ج.م)">
+              <input
+                name="amount"
+                type="number"
+                step="0.01"
+                min="1"
+                placeholder="0.00"
+                required
+                autoFocus
+              />
+            </Field>
+            <Field label="تاريخ صرف السلفة">
+              <input name="date" type="date" defaultValue={today()} required />
+            </Field>
+          </div>
+
+          <Field label="ملاحظات / سبب السلفة">
+            <textarea name="notes" rows={2} placeholder="سلفة شخصية، علاج..." />
           </Field>
         </div>
-
-        <Field label="ملاحظات / سبب السلفة">
-          <textarea name="notes" rows={2} placeholder="سلفة شخصية، علاج..." />
-        </Field>
 
         <div className="modal-footer">
           <Button variant="secondary" type="button" onClick={onClose}>
@@ -250,30 +257,34 @@ export function CreatePayrollRunModal({
 
   return (
     <Modal
+      size="md"
+      showMaximize
       title="إنشاء مسير رواتب شهري"
       description="يقوم النظام باحتساب التأمينات الاجتماعية (11% موظف، 18.75% صاحب عمل)، صندوق الشهداء (0.05%)، والشرائح الضريبية التصاعدية واستقطاع السلف."
       onClose={onClose}
     >
       <form onSubmit={submit}>
-        <div className="grid two" style={{ marginBottom: '12px' }}>
-          <Field label="شهر المسير (YYYY-MM)">
-            <input name="month" type="month" defaultValue={currentMonth} required autoFocus />
-          </Field>
-          <Field label="الفرع (اختياري)">
-            <select name="branch_id">
-              <option value="">جميع الفروع (مسير شامل)</option>
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
+        <div className="modal-body form-grid">
+          <div className="grid two" style={{ marginBottom: '12px' }}>
+            <Field label="شهر المسير (YYYY-MM)">
+              <input name="month" type="month" defaultValue={currentMonth} required autoFocus />
+            </Field>
+            <Field label="الفرع (اختياري)">
+              <select name="branch_id">
+                <option value="">جميع الفروع (مسير شامل)</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+
+          <Field label="ملاحظات المسير">
+            <textarea name="notes" rows={2} placeholder="مسير رواتب شهر..." />
           </Field>
         </div>
-
-        <Field label="ملاحظات المسير">
-          <textarea name="notes" rows={2} placeholder="مسير رواتب شهر..." />
-        </Field>
 
         <div className="modal-footer">
           <Button variant="secondary" type="button" onClick={onClose}>
@@ -313,100 +324,108 @@ export function PayrollRunDetailsModal({
 
   return (
     <Modal
-      xwide
+      size="2xl"
+      showMaximize
       title={`مسير الرواتب لشهر: ${pr?.month || '—'}`}
       description="مفردات المرتبات الشاملة، حصص التأمينات الاجتماعية والشرائح الضريبية لكل موظف."
       onClose={onClose}
     >
-      {runData.loading && <Loading />}
+      {runData.loading && (
+        <div className="modal-body">
+          <Loading />
+        </div>
+      )}
       {runData.error && (
-        <ErrorState message="تعذر تحميل تفاصيل مسير الرواتب" retry={runData.reload} />
+        <div className="modal-body">
+          <ErrorState message="تعذر تحميل تفاصيل مسير الرواتب" retry={runData.reload} />
+        </div>
       )}
       {pr && (
-        <div>
-          <div className="stats-grid four" style={{ marginBottom: '16px' }}>
-            <Stat
-              label="إجمالي الأجور المستحقة (Gross)"
-              value={money(pr.total_gross)}
-              icon={<DollarSign size={20} />}
-              tone="blue"
-              foot={`أساسي: ${money(pr.total_basic)} | متغير: ${money(pr.total_variable)}`}
-            />
-            <Stat
-              label="التأمينات (موظف + صاحب عمل)"
-              value={money(pr.total_social_insurance_employee + pr.total_social_insurance_employer)}
-              icon={<Users size={20} />}
-              tone="purple"
-              foot={`موظف 11%: ${money(pr.total_social_insurance_employee)} | شركة 18.75%: ${money(pr.total_social_insurance_employer)}`}
-            />
-            <Stat
-              label="الضرائب وصندوق الشهداء"
-              value={money(pr.total_income_tax + pr.total_martyrs_fund)}
-              icon={<FileText size={20} />}
-              tone="amber"
-              foot={`ضريبة كسب عمل: ${money(pr.total_income_tax)} | شهداء: ${money(pr.total_martyrs_fund)}`}
-            />
-            <Stat
-              label="صافي الرواتب المستحقة للصرف"
-              value={money(pr.total_net)}
-              icon={<CreditCard size={20} />}
-              tone="green"
-              foot={`استقطاع سلف: ${money(pr.total_advances)} ج.م`}
-            />
-          </div>
+        <>
+          <div className="modal-body">
+            <div className="stats-grid four" style={{ marginBottom: '16px' }}>
+              <Stat
+                label="إجمالي الأجور المستحقة (Gross)"
+                value={money(pr.total_gross)}
+                icon={<DollarSign size={20} />}
+                tone="blue"
+                foot={`أساسي: ${money(pr.total_basic)} | متغير: ${money(pr.total_variable)}`}
+              />
+              <Stat
+                label="التأمينات (موظف + صاحب عمل)"
+                value={money(
+                  pr.total_social_insurance_employee + pr.total_social_insurance_employer,
+                )}
+                icon={<Users size={20} />}
+                tone="purple"
+                foot={`موظف 11%: ${money(pr.total_social_insurance_employee)} | شركة 18.75%: ${money(pr.total_social_insurance_employer)}`}
+              />
+              <Stat
+                label="الضرائب وصندوق الشهداء"
+                value={money(pr.total_income_tax + pr.total_martyrs_fund)}
+                icon={<FileText size={20} />}
+                tone="amber"
+                foot={`ضريبة كسب عمل: ${money(pr.total_income_tax)} | شهداء: ${money(pr.total_martyrs_fund)}`}
+              />
+              <Stat
+                label="صافي الرواتب المستحقة للصرف"
+                value={money(pr.total_net)}
+                icon={<CreditCard size={20} />}
+                tone="green"
+                foot={`استقطاع سلف: ${money(pr.total_advances)} ج.م`}
+              />
+            </div>
 
-          <div
-            className="table-responsive"
-            style={{ maxHeight: '380px', overflowY: 'auto', marginBottom: '16px' }}
-          >
-            <table className="table" style={{ fontSize: '12.5px' }}>
-              <thead>
-                <tr>
-                  <th>الموظف</th>
-                  <th>الوظيفة</th>
-                  <th>الأجر الأساسي</th>
-                  <th>المتغير</th>
-                  <th>الإجمالي</th>
-                  <th>تأمينات (11%)</th>
-                  <th>تأمينات شركة (18.75%)</th>
-                  <th>ضريبة الدخل</th>
-                  <th>صندوق الشهداء</th>
-                  <th>سلف مستقطعة</th>
-                  <th>صافي الراتب</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(pr.slips || []).map((s) => (
-                  <tr key={s.id}>
-                    <td>
-                      <strong>{s.employee_name}</strong>
-                      <div style={{ fontSize: '11px', color: 'var(--muted)' }}>
-                        #{s.employee_code}
-                      </div>
-                    </td>
-                    <td>{s.job_title || '—'}</td>
-                    <td>{money(s.basic_salary)}</td>
-                    <td>{money(s.variable_salary)}</td>
-                    <td>
-                      <strong>{money(s.gross_salary)}</strong>
-                    </td>
-                    <td style={{ color: '#dc2626' }}>-{money(s.social_insurance_employee)}</td>
-                    <td style={{ color: '#7c3aed' }}>{money(s.social_insurance_employer)}</td>
-                    <td style={{ color: '#dc2626' }}>-{money(s.income_tax)}</td>
-                    <td style={{ color: '#dc2626' }}>-{money(s.martyrs_fund)}</td>
-                    <td style={{ color: '#d97706' }}>
-                      {s.advances_deduction > 0 ? `-${money(s.advances_deduction)}` : '—'}
-                    </td>
-                    <td>
-                      <strong style={{ color: '#16a34a', fontSize: '13.5px' }}>
-                        {money(s.net_salary)}
-                      </strong>{' '}
-                      <small>ج.م</small>
-                    </td>
+            <div className="table-responsive" style={{ maxHeight: '420px', overflowY: 'auto' }}>
+              <table className="table" style={{ fontSize: '12.5px' }}>
+                <thead>
+                  <tr>
+                    <th>الموظف</th>
+                    <th>الوظيفة</th>
+                    <th>الأجر الأساسي</th>
+                    <th>المتغير</th>
+                    <th>الإجمالي</th>
+                    <th>تأمينات (11%)</th>
+                    <th>تأمينات شركة (18.75%)</th>
+                    <th>ضريبة الدخل</th>
+                    <th>صندوق الشهداء</th>
+                    <th>سلف مستقطعة</th>
+                    <th>صافي الراتب</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {(pr.slips || []).map((s) => (
+                    <tr key={s.id}>
+                      <td>
+                        <strong>{s.employee_name}</strong>
+                        <div style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                          #{s.employee_code}
+                        </div>
+                      </td>
+                      <td>{s.job_title || '—'}</td>
+                      <td>{money(s.basic_salary)}</td>
+                      <td>{money(s.variable_salary)}</td>
+                      <td>
+                        <strong>{money(s.gross_salary)}</strong>
+                      </td>
+                      <td style={{ color: '#dc2626' }}>-{money(s.social_insurance_employee)}</td>
+                      <td style={{ color: '#7c3aed' }}>{money(s.social_insurance_employer)}</td>
+                      <td style={{ color: '#dc2626' }}>-{money(s.income_tax)}</td>
+                      <td style={{ color: '#dc2626' }}>-{money(s.martyrs_fund)}</td>
+                      <td style={{ color: '#d97706' }}>
+                        {s.advances_deduction > 0 ? `-${money(s.advances_deduction)}` : '—'}
+                      </td>
+                      <td>
+                        <strong style={{ color: '#16a34a', fontSize: '13.5px' }}>
+                          {money(s.net_salary)}
+                        </strong>{' '}
+                        <small>ج.م</small>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           <div
@@ -429,7 +448,7 @@ export function PayrollRunDetailsModal({
               )}
             </div>
           </div>
-        </div>
+        </>
       )}
     </Modal>
   );

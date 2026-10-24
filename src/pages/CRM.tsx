@@ -83,66 +83,80 @@ export function CreateDealModal({
       onClose={onClose}
     >
       <form onSubmit={submit}>
-        <div className="grid two" style={{ marginBottom: '12px' }}>
-          <Field label="عنوان الصفقة">
-            <input name="title" placeholder="مثال: توريد معدات لشركة الأمل..." required autoFocus />
-          </Field>
-          <Field label="المرحلة في المسار">
-            <select name="stage_id" required defaultValue={stages[0]?.id || ''}>
-              {stages.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name} ({s.probability}%)
-                </option>
-              ))}
-            </select>
-          </Field>
-        </div>
+        <div className="modal-body form-grid">
+          <div className="grid two" style={{ marginBottom: '12px' }}>
+            <Field label="عنوان الصفقة">
+              <input
+                name="title"
+                placeholder="مثال: توريد معدات لشركة الأمل..."
+                required
+                autoFocus
+              />
+            </Field>
+            <Field label="المرحلة في المسار">
+              <select name="stage_id" required defaultValue={stages[0]?.id || ''}>
+                {stages.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} ({s.probability}%)
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
 
-        <div className="grid three" style={{ marginBottom: '12px' }}>
-          <Field label="اسم جهة الاتصال / العميل">
-            <input name="contact_name" placeholder="أ/ أحمد إبراهيم" required />
-          </Field>
-          <Field label="رقم الهاتف">
-            <input name="contact_phone" placeholder="010..." type="tel" />
-          </Field>
-          <Field label="البريد الإلكتروني">
-            <input name="contact_email" placeholder="client@domain.com" type="email" />
-          </Field>
-        </div>
+          <div className="grid three" style={{ marginBottom: '12px' }}>
+            <Field label="اسم جهة الاتصال / العميل">
+              <input name="contact_name" placeholder="أ/ أحمد إبراهيم" required />
+            </Field>
+            <Field label="رقم الهاتف">
+              <input name="contact_phone" placeholder="010..." type="tel" />
+            </Field>
+            <Field label="البريد الإلكتروني">
+              <input name="contact_email" placeholder="client@domain.com" type="email" />
+            </Field>
+          </div>
 
-        <div className="grid three" style={{ marginBottom: '12px' }}>
-          <Field label="القيمة المتوقعة (ج.م)">
-            <input
-              name="expected_revenue"
-              type="number"
-              step="0.01"
-              min="0"
-              placeholder="0.00"
-              required
-            />
-          </Field>
-          <Field label="احتمالية الإغلاق (%)">
-            <input name="probability" type="number" min="0" max="100" defaultValue="50" required />
-          </Field>
-          <Field label="تاريخ الإغلاق المتوقع">
-            <input name="expected_close_date" type="date" />
-          </Field>
-        </div>
+          <div className="grid three" style={{ marginBottom: '12px' }}>
+            <Field label="القيمة المتوقعة (ج.م)">
+              <input
+                name="expected_revenue"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+                required
+              />
+            </Field>
+            <Field label="احتمالية الإغلاق (%)">
+              <input
+                name="probability"
+                type="number"
+                min="0"
+                max="100"
+                defaultValue="50"
+                required
+              />
+            </Field>
+            <Field label="تاريخ الإغلاق المتوقع">
+              <input name="expected_close_date" type="date" />
+            </Field>
+          </div>
 
-        <div className="grid two" style={{ marginBottom: '12px' }}>
-          <Field label="المسؤول عن الصفقة">
-            <select name="assigned_to_user_id" defaultValue="">
-              <option value="">بدون تعيين محدد</option>
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name} ({u.role})
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="ملاحظات تفصيلية">
-            <input name="notes" placeholder="احتياجات العميل، المنافسين، شروط التوريد..." />
-          </Field>
+          <div className="grid two" style={{ marginBottom: '12px' }}>
+            <Field label="المسؤول عن الصفقة">
+              <select name="assigned_to_user_id" defaultValue="">
+                <option value="">بدون تعيين محدد</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name} ({u.role})
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="ملاحظات تفصيلية">
+              <input name="notes" placeholder="احتياجات العميل، المنافسين، شروط التوريد..." />
+            </Field>
+          </div>
         </div>
 
         <div className="modal-footer">
@@ -201,60 +215,62 @@ export function CreateActivityModal({
       onClose={onClose}
     >
       <form onSubmit={submit}>
-        <div className="grid two" style={{ marginBottom: '12px' }}>
-          <Field label="نوع النشاط">
-            <select name="type" required defaultValue="CALL">
-              <option value="CALL">مكالمة هاتفية (Call)</option>
-              <option value="MEETING">اجتماع / زيارة (Meeting)</option>
-              <option value="TASK">مهمة عمل (Task)</option>
-              <option value="EMAIL">رسالة بريد (Email)</option>
-              <option value="NOTE">ملاحظة داخلية (Note)</option>
-            </select>
-          </Field>
-          <Field label="الصفقة المرتبطة">
-            <select name="deal_id" defaultValue={defaultDealId || ''}>
-              <option value="">عام / غير مرتبطة بصفقة</option>
-              {deals.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.code} - {d.title} ({d.contact_name})
-                </option>
-              ))}
-            </select>
-          </Field>
-        </div>
+        <div className="modal-body form-grid">
+          <div className="grid two" style={{ marginBottom: '12px' }}>
+            <Field label="نوع النشاط">
+              <select name="type" required defaultValue="CALL">
+                <option value="CALL">مكالمة هاتفية (Call)</option>
+                <option value="MEETING">اجتماع / زيارة (Meeting)</option>
+                <option value="TASK">مهمة عمل (Task)</option>
+                <option value="EMAIL">رسالة بريد (Email)</option>
+                <option value="NOTE">ملاحظة داخلية (Note)</option>
+              </select>
+            </Field>
+            <Field label="الصفقة المرتبطة">
+              <select name="deal_id" defaultValue={defaultDealId || ''}>
+                <option value="">عام / غير مرتبطة بصفقة</option>
+                {deals.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.code} - {d.title} ({d.contact_name})
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
 
-        <Field label="موضوع / عنوان النشاط">
-          <input
-            name="title"
-            placeholder="مثال: الاتصال لمناقشة بنود عرض السعر الفني"
-            required
-            autoFocus
-          />
-        </Field>
+          <Field label="موضوع / عنوان النشاط">
+            <input
+              name="title"
+              placeholder="مثال: الاتصال لمناقشة بنود عرض السعر الفني"
+              required
+              autoFocus
+            />
+          </Field>
 
-        <div className="grid two" style={{ marginBottom: '12px', marginTop: '12px' }}>
-          <Field label="تاريخ التنفيذ المستهدف">
-            <input name="due_date" type="date" defaultValue={today()} required />
-          </Field>
-          <Field label="وقت التنفيذ">
-            <input name="due_time" type="time" defaultValue="11:00" />
-          </Field>
-        </div>
+          <div className="grid two" style={{ marginBottom: '12px', marginTop: '12px' }}>
+            <Field label="تاريخ التنفيذ المستهدف">
+              <input name="due_date" type="date" defaultValue={today()} required />
+            </Field>
+            <Field label="وقت التنفيذ">
+              <input name="due_time" type="time" defaultValue="11:00" />
+            </Field>
+          </div>
 
-        <div className="grid two" style={{ marginBottom: '12px' }}>
-          <Field label="المسؤول عن التنفيذ">
-            <select name="assigned_to_user_id" defaultValue="">
-              <option value="">بدون تعيين محدد</option>
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="ملاحظات وتفاصيل">
-            <input name="outcome_notes" placeholder="ملاحظات استرشادية قبل التواصل..." />
-          </Field>
+          <div className="grid two" style={{ marginBottom: '12px' }}>
+            <Field label="المسؤول عن التنفيذ">
+              <select name="assigned_to_user_id" defaultValue="">
+                <option value="">بدون تعيين محدد</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="ملاحظات وتفاصيل">
+              <input name="outcome_notes" placeholder="ملاحظات استرشادية قبل التواصل..." />
+            </Field>
+          </div>
         </div>
 
         <div className="modal-footer">
@@ -313,50 +329,52 @@ export function CreateTargetModal({
       onClose={onClose}
     >
       <form onSubmit={submit}>
-        <div className="grid two" style={{ marginBottom: '12px' }}>
-          <Field label="الموظف / مندوب المبيعات">
-            <select name="user_id" required defaultValue={users[0]?.id || ''}>
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name} ({u.role})
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="شهر المستهدف (YYYY-MM)">
-            <input name="month" type="month" defaultValue={month} required />
+        <div className="modal-body form-grid">
+          <div className="grid two" style={{ marginBottom: '12px' }}>
+            <Field label="الموظف / مندوب المبيعات">
+              <select name="user_id" required defaultValue={users[0]?.id || ''}>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name} ({u.role})
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="شهر المستهدف (YYYY-MM)">
+              <input name="month" type="month" defaultValue={month} required />
+            </Field>
+          </div>
+
+          <div className="grid two" style={{ marginBottom: '12px' }}>
+            <Field label="قيمة التارجت المستهدف (ج.م)">
+              <input
+                name="target_amount"
+                type="number"
+                step="0.01"
+                min="1"
+                placeholder="مثال: 100000"
+                required
+                autoFocus
+              />
+            </Field>
+            <Field label="نسبة العمولة (%)">
+              <input
+                name="commission_pct"
+                type="number"
+                step="0.1"
+                min="0"
+                max="100"
+                defaultValue="2.0"
+                placeholder="2.0"
+                required
+              />
+            </Field>
+          </div>
+
+          <Field label="ملاحظات">
+            <input name="notes" placeholder="شروط تحقيق التارجت، حوافز إضافية..." />
           </Field>
         </div>
-
-        <div className="grid two" style={{ marginBottom: '12px' }}>
-          <Field label="قيمة التارجت المستهدف (ج.م)">
-            <input
-              name="target_amount"
-              type="number"
-              step="0.01"
-              min="1"
-              placeholder="مثال: 100000"
-              required
-              autoFocus
-            />
-          </Field>
-          <Field label="نسبة العمولة (%)">
-            <input
-              name="commission_pct"
-              type="number"
-              step="0.1"
-              min="0"
-              max="100"
-              defaultValue="2.0"
-              placeholder="2.0"
-              required
-            />
-          </Field>
-        </div>
-
-        <Field label="ملاحظات">
-          <input name="notes" placeholder="شروط تحقيق التارجت، حوافز إضافية..." />
-        </Field>
 
         <div className="modal-footer">
           <Button variant="secondary" type="button" onClick={onClose}>
@@ -417,7 +435,7 @@ export function DealDetailModal({
       description={`كود: ${deal.code} | أنشئت في: ${formatDate(deal.created_at)}`}
       onClose={onClose}
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {/* Deal Quick Bar */}
         <div
           style={{
@@ -655,6 +673,12 @@ export function DealDetailModal({
             </div>
           )}
         </div>
+      </div>
+
+      <div className="modal-footer" style={{ justifyContent: 'flex-end' }}>
+        <Button variant="secondary" onClick={onClose}>
+          إغلاق
+        </Button>
       </div>
 
       {addingActivity && (

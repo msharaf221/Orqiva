@@ -2,77 +2,138 @@
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 100;
+  z-index: 1000;
   display: flex;
   justify-content: center;
   align-items: center;
-  background: rgba(15, 23, 42, 0.6);
-  backdrop-filter: blur(8px);
-  padding: 24px;
-  animation: fade-in 0.15s ease-out;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(10px) saturate(180%);
+  -webkit-backdrop-filter: blur(10px) saturate(180%);
+  padding: clamp(12px, 2.5vw, 24px);
+  animation: modal-fade-in 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
+
+@keyframes modal-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 .modal {
   background: #ffffff;
   width: min(560px, 100%);
   max-width: 100%;
   border-radius: 18px;
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-modal);
-  max-height: 90vh;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  box-shadow:
+    0 25px 50px -12px rgba(15, 23, 42, 0.25),
+    0 0 0 1px rgba(15, 23, 42, 0.05),
+    0 8px 16px -4px rgba(15, 23, 42, 0.08);
+  max-height: calc(100vh - 48px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  animation: slide-in 0.18s ease-out;
+  animation: modal-pop-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: center center;
 }
+
+@keyframes modal-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
 /* Modal Sizing Architecture */
 .modal-sm {
-  width: min(440px, 100%);
+  width: min(420px, 100%);
 }
 .modal-md {
-  width: min(580px, 100%);
+  width: min(560px, 100%);
 }
 .modal-lg,
 .modal-wide {
-  width: min(880px, 100%);
+  width: min(820px, 100%);
 }
 .modal-xl {
   width: min(1040px, 100%);
 }
 .modal-2xl,
 .modal-xwide {
-  width: min(1240px, 100%);
+  width: min(1280px, 100%);
 }
 .modal-full {
-  width: min(96vw, 1600px);
-  height: 94vh;
+  width: min(98vw, 1600px);
+  height: calc(100vh - 32px);
+  max-height: calc(100vh - 32px);
 }
 .modal-maximized {
-  width: 98vw !important;
-  height: 96vh !important;
-  max-height: 96vh !important;
+  width: calc(100vw - 32px) !important;
+  height: calc(100vh - 32px) !important;
+  max-height: calc(100vh - 32px) !important;
   border-radius: 14px !important;
   animation: none !important;
 }
 /* Give tall tables/reports more vertical room. */
 .modal-tall {
-  height: 90vh;
+  height: calc(100vh - 48px);
 }
 .modal > form {
   display: flex;
   flex-direction: column;
   min-height: 0;
   flex: 1 1 auto;
+  overflow: hidden;
+}
+.modal > form > .modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 22px 26px;
 }
 .modal-tall .modal-body {
   flex: 1 1 auto;
   overflow-y: auto;
 }
+
+/* Fallback for any legacy form missing .modal-body */
+.modal > form:not(:has(> .modal-body)) {
+  padding: 22px 26px 0;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.modal > form:not(:has(> .modal-body)) > .modal-footer {
+  margin-inline: -26px;
+  margin-top: 18px;
+  position: sticky;
+  bottom: 0;
+}
+
+/* Universal Child Layout & Fallback Scroll Architecture */
+.modal > *:not(.modal-heading):not(form):not(.modal-footer):not(.modal-body) {
+  padding: 22px 26px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 /* Bottom-sheet presentation on small touch viewports (Phase 5.1). */
 @media (max-width: 640px) {
   .modal-sheet {
     width: 100%;
     align-self: flex-end;
-    max-height: 85vh;
+    max-height: 90vh;
     border-radius: 18px 18px 0 0;
     animation: sheet-up 0.22s ease-out;
   }
@@ -91,103 +152,141 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 20px;
-  padding: 22px 28px 20px;
+  gap: 16px;
+  padding: 18px 24px 16px;
   border-bottom: 1px solid var(--slate-100);
   position: sticky;
   top: 0;
   background: #ffffff;
-  z-index: 2;
+  z-index: 10;
+  flex-shrink: 0;
 }
 .modal-heading h2 {
-  font-size: 22px;
-  font-weight: 800;
+  font-size: 19px;
+  font-weight: 700;
   color: var(--slate-900);
+  margin: 0;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
 }
 .modal-heading p {
-  font-size: 14.5px;
+  font-size: 13px;
   color: var(--slate-500);
-  margin-top: 4px;
-  line-height: 1.6;
+  margin-top: 3px;
+  line-height: 1.5;
 }
 .modal-heading-title {
   display: flex;
-  align-items: center;
-  gap: 14px;
+  align-items: flex-start;
+  gap: 12px;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 .modal-icon-badge {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
   background: var(--indigo-50);
   color: var(--indigo-600);
   flex-shrink: 0;
+  margin-top: 1px;
 }
 .modal-heading-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  flex-shrink: 0;
 }
 .modal-heading-actions .icon-btn,
 .modal-heading > .icon-btn {
-  background: var(--slate-100);
-  color: var(--slate-600);
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-sm);
+  background: var(--slate-50);
+  color: var(--slate-500);
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--slate-200);
+  border-radius: 8px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   transition: all 0.15s ease;
+  cursor: pointer;
 }
 .modal-heading-actions .icon-btn:hover,
 .modal-heading > .icon-btn:hover {
-  background: var(--slate-200);
-  color: var(--slate-900);
+  background: var(--slate-100);
+  color: var(--slate-800);
+  border-color: var(--slate-300);
+}
+.modal-heading-actions .icon-btn:last-child:hover,
+.modal-heading > .icon-btn:last-child:hover {
+  background: #fef2f2;
+  color: #ef4444;
+  border-color: #fecaca;
 }
 .modal-body {
-  padding: 28px;
+  padding: 22px 26px;
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--slate-200) transparent;
+}
+.modal-body::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.modal-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+.modal-body::-webkit-scrollbar-thumb {
+  background: var(--slate-200);
+  border-radius: 999px;
+}
+.modal-body::-webkit-scrollbar-thumb:hover {
+  background: var(--slate-300);
 }
 .modal-footer {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 20px 28px;
+  gap: 10px;
+  padding: 14px 24px;
   border-top: 1px solid var(--slate-100);
   background: var(--slate-50);
   flex: 0 0 auto;
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
 }
 .modal-footer .btn {
-  min-height: 48px;
-  font-size: 15px;
+  min-height: 40px;
+  font-size: 14px;
   font-weight: 600;
+  padding: 0 16px;
 }
 .confirm-body {
-  padding: 32px 28px;
+  padding: 24px 20px 20px;
   text-align: center;
 }
 .confirm-icon {
-  width: 64px;
-  height: 64px;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
   background: #fef2f2;
   color: #dc2626;
   border: 1px solid #fecaca;
   display: grid;
   place-items: center;
-  margin: 0 auto 18px;
+  margin: 0 auto 16px;
 }
 .confirm-body p {
-  font-size: 16px;
+  font-size: 15px;
   color: var(--slate-700);
-  line-height: 1.7;
-  max-width: 440px;
+  line-height: 1.6;
+  max-width: 380px;
   margin: auto;
 }
 .toast-stack {

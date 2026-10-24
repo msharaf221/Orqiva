@@ -374,11 +374,20 @@ function JournalDetailModal({ id, onClose }: { id: string; onClose: () => void }
   const debit = (data?.lines || []).reduce((s, l) => s + l.debit, 0);
   const credit = (data?.lines || []).reduce((s, l) => s + l.credit, 0);
   return (
-    <Modal title={`تفاصيل القيد ${data?.entry.number ?? ''}`} onClose={onClose} wide>
+    <Modal
+      size="xl"
+      showMaximize
+      title={`تفاصيل القيد ${data?.entry.number ?? ''}`}
+      onClose={onClose}
+    >
       {loading ? (
-        <Loading />
+        <div className="modal-body">
+          <Loading />
+        </div>
       ) : error ? (
-        <ErrorState message={error} retry={reload} />
+        <div className="modal-body">
+          <ErrorState message={error} retry={reload} />
+        </div>
       ) : data ? (
         <>
           <div className="modal-body">
@@ -435,8 +444,8 @@ function JournalDetailModal({ id, onClose }: { id: string; onClose: () => void }
               <p className="muted">تحذير: القيد غير متوازن — راجع البيانات قبل الاعتماد.</p>
             )}
           </div>
-          <div className="modal-footer">
-            <Button variant="ghost" onClick={onClose}>
+          <div className="modal-footer" style={{ justifyContent: 'flex-end' }}>
+            <Button variant="secondary" onClick={onClose}>
               إغلاق
             </Button>
           </div>
@@ -479,13 +488,16 @@ function ManualEntryModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
 
   return (
     <Modal
+      size="xl"
+      showMaximize
       title="قيد يومية يدوي"
       description="يجب أن يتساوى إجمالي المدين مع إجمالي الدائن قبل الترحيل."
       onClose={onClose}
-      wide
     >
       {accountsData.loading ? (
-        <Loading />
+        <div className="modal-body">
+          <Loading />
+        </div>
       ) : (
         <form onSubmit={submit}>
           <div className="modal-body form-grid">
@@ -1344,70 +1356,77 @@ function StatementModal({ account, onClose }: { account: ChartAccount; onClose: 
   const debit = (data?.lines || []).reduce((s, l) => s + l.debit, 0);
   const credit = (data?.lines || []).reduce((s, l) => s + l.credit, 0);
   return (
-    <Modal title={`كشف حساب ${account.code} — ${account.name}`} onClose={onClose} wide>
-      <div className="table-toolbar">
-        <div className="table-filters">
-          <label className="date-filter">
-            <span>من</span>
-            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-          </label>
-          <label className="date-filter">
-            <span>إلى</span>
-            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
-          </label>
+    <Modal
+      size="xl"
+      showMaximize
+      title={`كشف حساب ${account.code} — ${account.name}`}
+      onClose={onClose}
+    >
+      <div className="modal-body">
+        <div className="table-toolbar">
+          <div className="table-filters">
+            <label className="date-filter">
+              <span>من</span>
+              <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+            </label>
+            <label className="date-filter">
+              <span>إلى</span>
+              <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+            </label>
+          </div>
+          <Button variant="secondary" onClick={() => window.print()} className="no-print">
+            <Printer size={15} /> طباعة
+          </Button>
         </div>
-        <Button variant="secondary" onClick={() => window.print()} className="no-print">
-          <Printer size={15} /> طباعة
-        </Button>
-      </div>
-      {loading ? (
-        <Loading />
-      ) : error ? (
-        <ErrorState message={error} retry={reload} />
-      ) : !data?.lines.length ? (
-        <Empty title="لا توجد حركات" description="لم تُسجَّل حركات على هذا الحساب في الفترة." />
-      ) : (
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>التاريخ</th>
-                <th>القيد</th>
-                <th>البيان</th>
-                <th>مدين</th>
-                <th>دائن</th>
-                <th>الرصيد</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td colSpan={5}>رصيد افتتاحي</td>
-                <td className="num amount">{money(data.opening)}</td>
-              </tr>
-              {data.lines.map((l) => (
-                <tr key={l.id}>
-                  <td className="num muted">{formatDate(l.date || '', true)}</td>
-                  <td className="num">{l.entry_number}</td>
-                  <td>{l.memo}</td>
-                  <td className="num amount">{l.debit ? money(l.debit) : '—'}</td>
-                  <td className="num amount">{l.credit ? money(l.credit) : '—'}</td>
-                  <td className="num amount">{money(l.running_balance ?? 0)}</td>
+        {loading ? (
+          <Loading />
+        ) : error ? (
+          <ErrorState message={error} retry={reload} />
+        ) : !data?.lines.length ? (
+          <Empty title="لا توجد حركات" description="لم تُسجَّل حركات على هذا الحساب في الفترة." />
+        ) : (
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>التاريخ</th>
+                  <th>القيد</th>
+                  <th>البيان</th>
+                  <th>مدين</th>
+                  <th>دائن</th>
+                  <th>الرصيد</th>
                 </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr>
-                <th colSpan={3}>الإجمالي</th>
-                <th className="num amount">{money(debit)}</th>
-                <th className="num amount">{money(credit)}</th>
-                <th />
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      )}
-      <div className="modal-footer">
-        <Button variant="ghost" onClick={onClose}>
+              </thead>
+              <tbody>
+                <tr>
+                  <td colSpan={5}>رصيد افتتاحي</td>
+                  <td className="num amount">{money(data.opening)}</td>
+                </tr>
+                {data.lines.map((l) => (
+                  <tr key={l.id}>
+                    <td className="num muted">{formatDate(l.date || '', true)}</td>
+                    <td className="num">{l.entry_number}</td>
+                    <td>{l.memo}</td>
+                    <td className="num amount">{l.debit ? money(l.debit) : '—'}</td>
+                    <td className="num amount">{l.credit ? money(l.credit) : '—'}</td>
+                    <td className="num amount">{money(l.running_balance ?? 0)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <th colSpan={3}>الإجمالي</th>
+                  <th className="num amount">{money(debit)}</th>
+                  <th className="num amount">{money(credit)}</th>
+                  <th />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+      </div>
+      <div className="modal-footer" style={{ justifyContent: 'flex-end' }}>
+        <Button variant="secondary" onClick={onClose}>
           إغلاق
         </Button>
       </div>

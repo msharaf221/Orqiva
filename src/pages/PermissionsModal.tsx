@@ -269,6 +269,8 @@ export function PermissionsModal({
 
   return (
     <Modal
+      size="xl"
+      showMaximize
       title="إدارة وتخصيص صلاحيات المستخدم"
       description={`تعديل دقيق للصلاحيات الافتراضية والاستثناءات لـ: ${targetUser.name}`}
       onClose={onClose}
