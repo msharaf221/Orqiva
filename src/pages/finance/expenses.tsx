@@ -207,6 +207,8 @@ export function Expenses() {
       </section>
       {adding && (
         <Modal
+          size="md"
+          showMaximize
           title="تسجيل مصروف جديد"
           description="المصروفات المسجلة تُحتسب مباشرة في التقارير والتدفق النقدي."
           onClose={() => setAdding(false)}

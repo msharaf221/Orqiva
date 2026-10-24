@@ -706,7 +706,7 @@ function GlobalSearch({ onClose }: { onClose: () => void }) {
         .slice(0, 12)
     : [];
   return (
-    <Modal title="بحث في مساحة العمل" onClose={onClose}>
+    <Modal size="md" showMaximize={false} title="بحث في مساحة العمل" onClose={onClose}>
       <div className="modal-body">
         <SearchBox
           value={query}
@@ -755,6 +755,8 @@ function Notifications({ onClose }: { onClose: () => void }) {
   );
   return (
     <Modal
+      size="md"
+      showMaximize
       title="مركز التنبيهات"
       description="كل ما يحتاج انتباهك، في مكان واحد."
       onClose={onClose}
@@ -809,6 +811,8 @@ function Notifications({ onClose }: { onClose: () => void }) {
 function Help({ onClose }: { onClose: () => void }) {
   return (
     <Modal
+      size="lg"
+      showMaximize
       title="أهلاً بك في أوركيفا"
       description="دليلك السريع لبدء إدارة أعمالك."
       onClose={onClose}

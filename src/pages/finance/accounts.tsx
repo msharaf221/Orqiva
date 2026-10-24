@@ -380,6 +380,8 @@ export function StatementModal({
 
   return (
     <Modal
+      size="xl"
+      showMaximize
       title={`كشف حساب: ${account.name}`}
       description={`${
         account.type === 'CASH'

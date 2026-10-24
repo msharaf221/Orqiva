@@ -490,6 +490,8 @@ function UserSettings() {
       </section>
       {(adding || editing) && (
         <Modal
+          size="md"
+          showMaximize
           title={editing ? 'تعديل صلاحيات المستخدم' : 'إضافة مستخدم جديد'}
           onClose={() => {
             setAdding(false);
@@ -780,7 +782,12 @@ function RoleModal({
   };
 
   return (
-    <Modal title={role ? `تعديل الدور: ${role.name}` : 'إنشاء دور جديد'} onClose={onClose}>
+    <Modal
+      size="lg"
+      showMaximize
+      title={role ? `تعديل الدور: ${role.name}` : 'إنشاء دور جديد'}
+      onClose={onClose}
+    >
       <form onSubmit={submit}>
         <div className="modal-body form-grid">
           <Field label="اسم الدور *">

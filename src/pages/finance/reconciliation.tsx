@@ -149,124 +149,127 @@ export function CreateBankStatementModal({
 
   return (
     <Modal
-      wide
+      size="xl"
+      showMaximize
       title="تسجيل كشف حساب بنكي للمطابقة والتسوية"
       description="أدخل سطور كشف الحساب البنكي الوارد من البنك لمطابقتها مع المقبوضات والمدفوعات."
       onClose={onClose}
     >
       <form onSubmit={submit}>
-        <div className="grid three" style={{ marginBottom: '12px' }}>
-          <Field label="الحساب البنكي">
-            <select name="cash_account_id" required defaultValue={bankAccounts[0]?.id || ''}>
-              <option value="">اختر الحساب...</option>
-              {bankAccounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name} ({money(a.balance)} ج.م)
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="تاريخ كشف الحساب">
-            <input name="statement_date" type="date" defaultValue={today()} required />
-          </Field>
-          <Field label="ملاحظات">
-            <input name="notes" placeholder="كشف حساب شهر أكتوبر..." />
-          </Field>
-        </div>
-
-        <div className="grid two" style={{ marginBottom: '16px' }}>
-          <Field label="الرصيد الافتتاحي (ج.م)">
-            <input name="opening_balance" type="number" step="0.01" defaultValue="0" required />
-          </Field>
-          <Field label="الرصيد الختامي (ج.م)">
-            <input name="closing_balance" type="number" step="0.01" defaultValue="0" required />
-          </Field>
-        </div>
-
-        <div style={{ marginBottom: '16px' }}>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '8px',
-            }}
-          >
-            <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 700 }}>
-              سطور وحركات كشف الحساب البنكي
-            </h4>
-            <Button
-              type="button"
-              variant="secondary"
-              style={{ padding: '3px 8px', fontSize: '12px' }}
-              onClick={addLine}
-            >
-              <Plus size={14} /> إضافة سطر
-            </Button>
+        <div className="modal-body form-grid">
+          <div className="grid three" style={{ marginBottom: '12px' }}>
+            <Field label="الحساب البنكي">
+              <select name="cash_account_id" required defaultValue={bankAccounts[0]?.id || ''}>
+                <option value="">اختر الحساب...</option>
+                {bankAccounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name} ({money(a.balance)} ج.م)
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="تاريخ كشف الحساب">
+              <input name="statement_date" type="date" defaultValue={today()} required />
+            </Field>
+            <Field label="ملاحظات">
+              <input name="notes" placeholder="كشف حساب شهر أكتوبر..." />
+            </Field>
           </div>
 
-          <table className="table" style={{ fontSize: '13px' }}>
-            <thead>
-              <tr>
-                <th style={{ width: '130px' }}>التاريخ</th>
-                <th>البيان / الوصف</th>
-                <th style={{ width: '150px' }}>الرقم المرجعي</th>
-                <th style={{ width: '140px' }}>المبلغ (+ إيداع / - سحب)</th>
-                <th style={{ width: '50px' }}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {lines.map((l, idx) => (
-                <tr key={idx}>
-                  <td>
-                    <input
-                      type="date"
-                      value={l.date}
-                      onChange={(e) => updateLine(idx, 'date', e.target.value)}
-                      required
-                    />
-                  </td>
-                  <td>
-                    <input
-                      value={l.description}
-                      onChange={(e) => updateLine(idx, 'description', e.target.value)}
-                      placeholder="تحويل وارد، سداد شيك..."
-                      required
-                    />
-                  </td>
-                  <td>
-                    <input
-                      value={l.reference}
-                      onChange={(e) => updateLine(idx, 'reference', e.target.value)}
-                      placeholder="REF-..."
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={l.amount || ''}
-                      onChange={(e) => updateLine(idx, 'amount', parseFloat(e.target.value) || 0)}
-                      placeholder="0.00"
-                      required
-                    />
-                  </td>
-                  <td>
-                    {lines.length > 1 && (
-                      <button
-                        type="button"
-                        className="icon-btn"
-                        style={{ color: '#ef4444' }}
-                        onClick={() => removeLine(idx)}
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </td>
+          <div className="grid two" style={{ marginBottom: '16px' }}>
+            <Field label="الرصيد الافتتاحي (ج.م)">
+              <input name="opening_balance" type="number" step="0.01" defaultValue="0" required />
+            </Field>
+            <Field label="الرصيد الختامي (ج.م)">
+              <input name="closing_balance" type="number" step="0.01" defaultValue="0" required />
+            </Field>
+          </div>
+
+          <div style={{ marginBottom: '16px' }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '8px',
+              }}
+            >
+              <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 700 }}>
+                سطور وحركات كشف الحساب البنكي
+              </h4>
+              <Button
+                type="button"
+                variant="secondary"
+                style={{ padding: '3px 8px', fontSize: '12px' }}
+                onClick={addLine}
+              >
+                <Plus size={14} /> إضافة سطر
+              </Button>
+            </div>
+
+            <table className="table" style={{ fontSize: '13px' }}>
+              <thead>
+                <tr>
+                  <th style={{ width: '130px' }}>التاريخ</th>
+                  <th>البيان / الوصف</th>
+                  <th style={{ width: '150px' }}>الرقم المرجعي</th>
+                  <th style={{ width: '140px' }}>المبلغ (+ إيداع / - سحب)</th>
+                  <th style={{ width: '50px' }}></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {lines.map((l, idx) => (
+                  <tr key={idx}>
+                    <td>
+                      <input
+                        type="date"
+                        value={l.date}
+                        onChange={(e) => updateLine(idx, 'date', e.target.value)}
+                        required
+                      />
+                    </td>
+                    <td>
+                      <input
+                        value={l.description}
+                        onChange={(e) => updateLine(idx, 'description', e.target.value)}
+                        placeholder="تحويل وارد، سداد شيك..."
+                        required
+                      />
+                    </td>
+                    <td>
+                      <input
+                        value={l.reference}
+                        onChange={(e) => updateLine(idx, 'reference', e.target.value)}
+                        placeholder="REF-..."
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={l.amount || ''}
+                        onChange={(e) => updateLine(idx, 'amount', parseFloat(e.target.value) || 0)}
+                        placeholder="0.00"
+                        required
+                      />
+                    </td>
+                    <td>
+                      {lines.length > 1 && (
+                        <button
+                          type="button"
+                          className="icon-btn"
+                          style={{ color: '#ef4444' }}
+                          onClick={() => removeLine(idx)}
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         <div className="modal-footer">

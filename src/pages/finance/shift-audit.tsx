@@ -106,11 +106,12 @@ export function ShiftTreasuryAuditModal({
 
   return (
     <Modal
+      size="2xl"
+      showMaximize
+      tall
       title="مراجعة واعتماد وردية نقطة البيع بالخزنة"
       description="مطابقة إيرادات الوردية، فحص أشرطة تسوية الماكينات وإيصالات الفيزا وإنستاباي وترحيل قيود الفروقات."
       onClose={onClose}
-      xwide
-      tall
     >
       {loading ? (
         <Loading />
@@ -593,7 +594,7 @@ export function ShiftZReportModal({
       });
 
   return (
-    <Modal title="سند تسليم وردية كاشير للخزنة (Z-Report)" onClose={onClose}>
+    <Modal size="md" showMaximize title="سند تسليم وردية كاشير للخزنة (Z-Report)" onClose={onClose}>
       <div className="modal-body pos-receipt-wrapper">
         <div className="thermal-receipt" id="printable-pos-receipt">
           {/* Top Brand Header */}

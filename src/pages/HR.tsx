@@ -91,101 +91,103 @@ export function CreateEmployeeModalExtended({
       onClose={onClose}
     >
       <form onSubmit={submit}>
-        <div className="grid three" style={{ marginBottom: '12px' }}>
-          <Field label="كود الموظف">
-            <input name="code" placeholder="مثال: EMP-001" required autoFocus />
-          </Field>
-          <Field label="اسم الموظف رباعي">
-            <input name="name" placeholder="محمد أحمد علي..." required />
-          </Field>
-          <Field label="الرقم القومي (14 رقم)">
-            <input name="national_id" placeholder="295..." maxLength={14} />
-          </Field>
-        </div>
+        <div className="modal-body form-grid">
+          <div className="grid three" style={{ marginBottom: '12px' }}>
+            <Field label="كود الموظف">
+              <input name="code" placeholder="مثال: EMP-001" required autoFocus />
+            </Field>
+            <Field label="اسم الموظف رباعي">
+              <input name="name" placeholder="محمد أحمد علي..." required />
+            </Field>
+            <Field label="الرقم القومي (14 رقم)">
+              <input name="national_id" placeholder="295..." maxLength={14} />
+            </Field>
+          </div>
 
-        <div className="grid three" style={{ marginBottom: '12px' }}>
-          <Field label="المسمى الوظيفي">
-            <input name="job_title" placeholder="كاشير، محاسب، مدير فرع..." required />
-          </Field>
-          <Field label="القسم">
-            <input name="department" placeholder="المبيعات، الحسابات..." />
-          </Field>
-          <Field label="فرع العمل">
-            <select name="branch_id" required defaultValue={branches[0]?.id || ''}>
-              <option value="">اختر الفرع...</option>
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-        </div>
+          <div className="grid three" style={{ marginBottom: '12px' }}>
+            <Field label="المسمى الوظيفي">
+              <input name="job_title" placeholder="كاشير، محاسب، مدير فرع..." required />
+            </Field>
+            <Field label="القسم">
+              <input name="department" placeholder="المبيعات، الحسابات..." />
+            </Field>
+            <Field label="فرع العمل">
+              <select name="branch_id" required defaultValue={branches[0]?.id || ''}>
+                <option value="">اختر الفرع...</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
 
-        <div className="grid three" style={{ marginBottom: '12px' }}>
-          <Field label="نوع العقد">
-            <select name="employment_type" defaultValue="FULL_TIME">
-              <option value="FULL_TIME">دوام كامل (دائم)</option>
-              <option value="PART_TIME">دوام جزئي</option>
-              <option value="CONTRACT">محدد المدة (عقد سنوي)</option>
-            </select>
-          </Field>
-          <Field label="تاريخ التعيين">
-            <input name="hire_date" type="date" defaultValue={today()} required />
-          </Field>
-          <Field label="تاريخ انتهاء فترة التجربة">
-            <input name="probation_end_date" type="date" />
-          </Field>
-        </div>
+          <div className="grid three" style={{ marginBottom: '12px' }}>
+            <Field label="نوع العقد">
+              <select name="employment_type" defaultValue="FULL_TIME">
+                <option value="FULL_TIME">دوام كامل (دائم)</option>
+                <option value="PART_TIME">دوام جزئي</option>
+                <option value="CONTRACT">محدد المدة (عقد سنوي)</option>
+              </select>
+            </Field>
+            <Field label="تاريخ التعيين">
+              <input name="hire_date" type="date" defaultValue={today()} required />
+            </Field>
+            <Field label="تاريخ انتهاء فترة التجربة">
+              <input name="probation_end_date" type="date" />
+            </Field>
+          </div>
 
-        <div className="grid two" style={{ marginBottom: '12px' }}>
-          <Field label="تاريخ انتهاء العقد (إن وجد)">
-            <input name="contract_end_date" type="date" />
-          </Field>
-          <Field label="بيانات الطوارئ (الاسم ورقم الهاتف)">
-            <input name="emergency_contact" placeholder="أحمد (أخ) - 01012345678" />
-          </Field>
-        </div>
+          <div className="grid two" style={{ marginBottom: '12px' }}>
+            <Field label="تاريخ انتهاء العقد (إن وجد)">
+              <input name="contract_end_date" type="date" />
+            </Field>
+            <Field label="بيانات الطوارئ (الاسم ورقم الهاتف)">
+              <input name="emergency_contact" placeholder="أحمد (أخ) - 01012345678" />
+            </Field>
+          </div>
 
-        <div className="grid three" style={{ marginBottom: '12px' }}>
-          <Field label="الراتب الأساسي (ج.م)">
-            <input
-              name="basic_salary"
-              type="number"
-              step="0.01"
-              min="0"
-              placeholder="0.00"
-              required
-            />
-          </Field>
-          <Field label="الراتب المتغير / الحوافز (ج.م)">
-            <input
-              name="variable_salary"
-              type="number"
-              step="0.01"
-              min="0"
-              placeholder="0.00"
-              defaultValue="0.00"
-            />
-          </Field>
-          <Field label="الأجر التأميني (للتأمينات الاجتماعية)">
-            <input
-              name="insured_salary"
-              type="number"
-              step="0.01"
-              min="0"
-              placeholder="افتراضياً نفس الأساسي"
-            />
-          </Field>
-        </div>
+          <div className="grid three" style={{ marginBottom: '12px' }}>
+            <Field label="الراتب الأساسي (ج.م)">
+              <input
+                name="basic_salary"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+                required
+              />
+            </Field>
+            <Field label="الراتب المتغير / الحوافز (ج.م)">
+              <input
+                name="variable_salary"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+                defaultValue="0.00"
+              />
+            </Field>
+            <Field label="الأجر التأميني (للتأمينات الاجتماعية)">
+              <input
+                name="insured_salary"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="افتراضياً نفس الأساسي"
+              />
+            </Field>
+          </div>
 
-        <div className="grid two" style={{ marginBottom: '12px' }}>
-          <Field label="رقم الهاتف">
-            <input name="phone" placeholder="010..." type="tel" />
-          </Field>
-          <Field label="الرقم التأميني">
-            <input name="insurance_number" placeholder="مثال: 12345678" />
-          </Field>
+          <div className="grid two" style={{ marginBottom: '12px' }}>
+            <Field label="رقم الهاتف">
+              <input name="phone" placeholder="010..." type="tel" />
+            </Field>
+            <Field label="الرقم التأميني">
+              <input name="insurance_number" placeholder="مثال: 12345678" />
+            </Field>
+          </div>
         </div>
 
         <div className="modal-footer">
@@ -248,63 +250,65 @@ export function RecordAttendanceModal({
       onClose={onClose}
     >
       <form onSubmit={submit}>
-        <div className="grid two" style={{ marginBottom: '12px' }}>
-          <Field label="الموظف">
-            <select name="employee_id" required defaultValue={employees[0]?.id || ''}>
-              {employees.map((emp) => (
-                <option key={emp.id} value={emp.id}>
-                  {emp.code} - {emp.name} ({emp.job_title})
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="الفرع">
-            <select name="branch_id" defaultValue={currentBranch?.id || branches[0]?.id || ''}>
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
+        <div className="modal-body form-grid">
+          <div className="grid two" style={{ marginBottom: '12px' }}>
+            <Field label="الموظف">
+              <select name="employee_id" required defaultValue={employees[0]?.id || ''}>
+                {employees.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.code} - {emp.name} ({emp.job_title})
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="الفرع">
+              <select name="branch_id" defaultValue={currentBranch?.id || branches[0]?.id || ''}>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+
+          <div className="grid two" style={{ marginBottom: '12px' }}>
+            <Field label="التاريخ">
+              <input name="date" type="date" defaultValue={today()} required />
+            </Field>
+            <Field label="حالة الحضور">
+              <select name="status" defaultValue="PRESENT">
+                <option value="PRESENT">حاضر (Present)</option>
+                <option value="LATE">متأخر (Late)</option>
+                <option value="ABSENT">غائب بدون إذن (Absent)</option>
+                <option value="EXCUSED">غياب مبرر / مأذون (Excused)</option>
+                <option value="REST_DAY">يوم راحة أسبوعية (Rest Day)</option>
+              </select>
+            </Field>
+          </div>
+
+          <div className="grid two" style={{ marginBottom: '12px' }}>
+            <Field label="وقت الحضور">
+              <input name="check_in" type="time" defaultValue="09:00" />
+            </Field>
+            <Field label="وقت الانصراف">
+              <input name="check_out" type="time" defaultValue="17:00" />
+            </Field>
+          </div>
+
+          <div className="grid two" style={{ marginBottom: '12px' }}>
+            <Field label="دقائق التأخير (إن وجدت)">
+              <input name="late_minutes" type="number" min="0" defaultValue="0" />
+            </Field>
+            <Field label="ساعات العمل الإضافي (Overtime)">
+              <input name="overtime_hours" type="number" step="0.5" min="0" defaultValue="0" />
+            </Field>
+          </div>
+
+          <Field label="ملاحظات">
+            <input name="notes" placeholder="سبب التأخير، إذن مسبق..." />
           </Field>
         </div>
-
-        <div className="grid two" style={{ marginBottom: '12px' }}>
-          <Field label="التاريخ">
-            <input name="date" type="date" defaultValue={today()} required />
-          </Field>
-          <Field label="حالة الحضور">
-            <select name="status" defaultValue="PRESENT">
-              <option value="PRESENT">حاضر (Present)</option>
-              <option value="LATE">متأخر (Late)</option>
-              <option value="ABSENT">غائب بدون إذن (Absent)</option>
-              <option value="EXCUSED">غياب مبرر / مأذون (Excused)</option>
-              <option value="REST_DAY">يوم راحة أسبوعية (Rest Day)</option>
-            </select>
-          </Field>
-        </div>
-
-        <div className="grid two" style={{ marginBottom: '12px' }}>
-          <Field label="وقت الحضور">
-            <input name="check_in" type="time" defaultValue="09:00" />
-          </Field>
-          <Field label="وقت الانصراف">
-            <input name="check_out" type="time" defaultValue="17:00" />
-          </Field>
-        </div>
-
-        <div className="grid two" style={{ marginBottom: '12px' }}>
-          <Field label="دقائق التأخير (إن وجدت)">
-            <input name="late_minutes" type="number" min="0" defaultValue="0" />
-          </Field>
-          <Field label="ساعات العمل الإضافي (Overtime)">
-            <input name="overtime_hours" type="number" step="0.5" min="0" defaultValue="0" />
-          </Field>
-        </div>
-
-        <Field label="ملاحظات">
-          <input name="notes" placeholder="سبب التأخير، إذن مسبق..." />
-        </Field>
 
         <div className="modal-footer">
           <Button variant="secondary" type="button" onClick={onClose}>
@@ -358,39 +362,41 @@ export function CreateLeaveRequestModal({
       onClose={onClose}
     >
       <form onSubmit={submit}>
-        <div className="grid two" style={{ marginBottom: '12px' }}>
-          <Field label="الموظف">
-            <select name="employee_id" required defaultValue={employees[0]?.id || ''}>
-              {employees.map((emp) => (
-                <option key={emp.id} value={emp.id}>
-                  {emp.code} - {emp.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="نوع الإجازة">
-            <select name="leave_type_id" required defaultValue={leaveTypes[0]?.id || ''}>
-              {leaveTypes.map((lt) => (
-                <option key={lt.id} value={lt.id}>
-                  {lt.name} ({lt.days_per_year} يوم/سنة - {lt.is_paid ? 'مدفوعة' : 'غير مدفوعة'})
-                </option>
-              ))}
-            </select>
+        <div className="modal-body form-grid">
+          <div className="grid two" style={{ marginBottom: '12px' }}>
+            <Field label="الموظف">
+              <select name="employee_id" required defaultValue={employees[0]?.id || ''}>
+                {employees.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.code} - {emp.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="نوع الإجازة">
+              <select name="leave_type_id" required defaultValue={leaveTypes[0]?.id || ''}>
+                {leaveTypes.map((lt) => (
+                  <option key={lt.id} value={lt.id}>
+                    {lt.name} ({lt.days_per_year} يوم/سنة - {lt.is_paid ? 'مدفوعة' : 'غير مدفوعة'})
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+
+          <div className="grid two" style={{ marginBottom: '12px' }}>
+            <Field label="تاريخ البدء">
+              <input name="start_date" type="date" defaultValue={today()} required />
+            </Field>
+            <Field label="تاريخ الانتهاء">
+              <input name="end_date" type="date" defaultValue={today()} required />
+            </Field>
+          </div>
+
+          <Field label="سبب الإجازة">
+            <textarea name="reason" rows={2} placeholder="ظرف طارئ، إجازة سنوية..." />
           </Field>
         </div>
-
-        <div className="grid two" style={{ marginBottom: '12px' }}>
-          <Field label="تاريخ البدء">
-            <input name="start_date" type="date" defaultValue={today()} required />
-          </Field>
-          <Field label="تاريخ الانتهاء">
-            <input name="end_date" type="date" defaultValue={today()} required />
-          </Field>
-        </div>
-
-        <Field label="سبب الإجازة">
-          <textarea name="reason" rows={2} placeholder="ظرف طارئ، إجازة سنوية..." />
-        </Field>
 
         <div className="modal-footer">
           <Button variant="secondary" type="button" onClick={onClose}>

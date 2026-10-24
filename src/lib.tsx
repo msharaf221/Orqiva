@@ -440,14 +440,14 @@ export function Confirm({
   busy: boolean;
 }) {
   return (
-    <Modal title={title} onClose={onClose}>
+    <Modal title={title} onClose={onClose} size="sm" showMaximize={false}>
       <div className="confirm-body">
         <div className="confirm-icon">
-          <AlertCircle />
+          <AlertCircle size={28} />
         </div>
         <p>{description}</p>
       </div>
-      <div className="modal-footer">
+      <div className="modal-footer" style={{ justifyContent: 'center' }}>
         <Button variant="danger" busy={busy} onClick={onConfirm}>
           تأكيد العملية
         </Button>

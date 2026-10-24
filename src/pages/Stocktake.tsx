@@ -285,6 +285,8 @@ function StocktakeDetailModal({
 
   return (
     <Modal
+      size="xl"
+      showMaximize
       title={`جرد دوري ${current.number}`}
       description={`${current.branch_name} · ${STATUS_LABELS[current.status]}`}
       onClose={onClose}
