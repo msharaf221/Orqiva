@@ -35,12 +35,12 @@ test('end-to-end inventory, customer, invoice, payment and expense workflow', as
   await page.getByLabel('الكمية', { exact: true }).fill('2');
   await page.getByRole('button', { name: 'حفظ واعتماد الفاتورة' }).click();
   await expect(page.locator('.invoice-paper')).toBeVisible();
-  await expect(page.locator('.grand-total')).toContainText('2,280.00');
+  await expect(page.locator('.grand-total')).toContainText('2,000.00');
   await page.getByRole('button', { name: 'تسجيل دفعة', exact: true }).click();
   await page.getByLabel('المبلغ المدفوع (ج.م) *').fill('1000');
   await page.getByRole('button', { name: 'تأكيد تسجيل الدفعة' }).click();
   await expect(page.getByRole('dialog')).toBeHidden();
-  await expect(page.locator('.balance-row')).toContainText('1,280.00');
+  await expect(page.locator('.balance-row')).toContainText('1,000.00');
   await expect(page.getByRole('button', { name: 'إلغاء الفاتورة', exact: true })).toBeDisabled();
   await page.getByRole('link', { name: 'المخزون', exact: true }).click();
   const stockRow = page.getByRole('row').filter({ hasText: 'UI-TEST-001' });
@@ -88,6 +88,8 @@ test('all main screens load without browser exceptions', async ({ page }) => {
     ['/expenses', 'المصروفات'],
     ['/payments', 'المدفوعات والمقبوضات'],
     ['/reports', 'التقارير والتحليلات'],
+    ['/crm', 'إدارة علاقات العملاء (CRM)'],
+    ['/attendance-devices', 'أجهزة الحضور والبصمة'],
     ['/settings', 'الإعدادات'],
     ['/activity', 'سجل النشاط'],
   ]) {

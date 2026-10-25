@@ -87,7 +87,7 @@ test('posts a sale to the ledger and shows it in the journal', async ({ page }) 
       party_id: (await customer.json()).id,
       date: today,
       due_date: today,
-      tax_rate: 1400,
+      tax_rate: 0,
       discount: 0,
       notes: '',
       lines: [{ product_id: productId, quantity: 2, unit_price: 10000 }],

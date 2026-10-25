@@ -14,6 +14,7 @@ import { postPosCashMovementLedger } from './posting';
 import { businessToday } from './clock';
 import { validateReturnLines } from './returns';
 import { writableBranch, type Actor, type Scope, scopeSql } from './scope';
+import { effectiveTaxRate } from '../src/config';
 import {
   posShiftOpenSchema,
   posCashMovementSchema,
@@ -588,10 +589,11 @@ export function posCheckout(raw: unknown, actor: Actor) {
       }
     }
 
-    // Company tax rate
+    // Company tax rate (forced to zero in tax-free mode)
     const company = requireRow(
       one<{ tax_rate: number }>('SELECT tax_rate FROM company WHERE id=1'),
     );
+    const taxRate = effectiveTaxRate(company.tax_rate);
 
     // Create & Post Document
     const docData = saveDocument(
@@ -602,7 +604,7 @@ export function posCheckout(raw: unknown, actor: Actor) {
         date: input.date,
         due_date: input.date,
         discount: input.discount,
-        tax_rate: company.tax_rate,
+        tax_rate: taxRate,
         notes: input.notes || '',
         lines: input.lines,
       },
@@ -784,7 +786,7 @@ export function posReturn(raw: unknown, actor: Actor) {
         date,
         due_date: date,
         discount: 0,
-        tax_rate: original.tax_rate,
+        tax_rate: effectiveTaxRate(original.tax_rate),
         notes: input.notes || `مرتجع من نقطة البيع عن الفاتورة ${original.number}`,
         lines: returnLines,
       },

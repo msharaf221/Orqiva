@@ -9,6 +9,7 @@ import { nextNumber, saveDocument, documentDetail } from './service';
 import { purchaseOrderSchema, landedCostSchema } from './validation';
 import { getBranchCost, upsertBranchCost, insertCostMovement } from './cost';
 import { postEntry, type LedgerLineInput } from './ledger';
+import { calculateTax, effectiveTaxRate } from '../src/config';
 import type {
   PurchaseOrder,
   PurchaseOrderLine,
@@ -95,6 +96,7 @@ export function createPurchaseOrder(raw: unknown, actor: Actor): PurchaseOrder {
     const number = nextNumber(prefix, year);
 
     let subtotal = 0;
+    const taxRate = effectiveTaxRate(input.tax_rate);
     const computedLines = input.lines.map((line) => {
       const lineSubtotal = line.quantity * line.unit_price;
       subtotal += lineSubtotal;
@@ -104,12 +106,12 @@ export function createPurchaseOrder(raw: unknown, actor: Actor): PurchaseOrder {
         product_id: line.product_id,
         quantity: line.quantity,
         unit_price: line.unit_price,
-        tax_rate: line.tax_rate ?? input.tax_rate,
+        tax_rate: taxRate,
         line_total: lineSubtotal,
       };
     });
 
-    const tax = Math.round((subtotal * input.tax_rate) / 10000);
+    const tax = calculateTax(subtotal, taxRate);
     const total = subtotal + tax;
 
     run(
@@ -126,7 +128,7 @@ export function createPurchaseOrder(raw: unknown, actor: Actor): PurchaseOrder {
       input.date,
       input.expected_delivery_date ?? null,
       subtotal,
-      input.tax_rate,
+      taxRate,
       tax,
       total,
       input.notes ?? null,
@@ -169,6 +171,7 @@ export function updatePurchaseOrder(orderId: string, raw: unknown, actor: Actor)
 
   return transaction(() => {
     let subtotal = 0;
+    const taxRate = effectiveTaxRate(input.tax_rate);
     const computedLines = input.lines.map((line) => {
       const lineSubtotal = line.quantity * line.unit_price;
       subtotal += lineSubtotal;
@@ -178,12 +181,12 @@ export function updatePurchaseOrder(orderId: string, raw: unknown, actor: Actor)
         product_id: line.product_id,
         quantity: line.quantity,
         unit_price: line.unit_price,
-        tax_rate: line.tax_rate ?? input.tax_rate,
+        tax_rate: taxRate,
         line_total: lineSubtotal,
       };
     });
 
-    const tax = Math.round((subtotal * input.tax_rate) / 10000);
+    const tax = calculateTax(subtotal, taxRate);
     const total = subtotal + tax;
 
     run(
@@ -196,7 +199,7 @@ export function updatePurchaseOrder(orderId: string, raw: unknown, actor: Actor)
       input.date,
       input.expected_delivery_date ?? null,
       subtotal,
-      input.tax_rate,
+      taxRate,
       tax,
       total,
       input.notes ?? null,

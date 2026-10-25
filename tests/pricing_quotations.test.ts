@@ -157,10 +157,9 @@ describe('Phase 3: Pricing, Customer Tiers, and Quotations', () => {
     expect(quo.number).toMatch(/^QUO-\d{4}-\d{4}$/);
     expect(quo.subtotal).toBe(1600000); // 16,000 EGP
     expect(quo.discount).toBe(50000);
-    // taxable base = 1,600,000 - 50,000 = 1,550,000
-    // tax = 1,550,000 * 0.14 = 217,000
-    expect(quo.tax).toBe(217000);
-    expect(quo.total).toBe(1767000); // 17,670 EGP
+    // tax-free mode: total = 1,600,000 - 50,000 = 1,550,000
+    expect(quo.tax).toBe(0);
+    expect(quo.total).toBe(1550000); // 15,500 EGP
     expect(quo.status).toBe('DRAFT');
 
     // Confirm quotation
@@ -181,7 +180,7 @@ describe('Phase 3: Pricing, Customer Tiers, and Quotations', () => {
     expect(saleDoc.status).toBe('DRAFT');
     expect(saleDoc.party_id).toBe(customerId);
     expect(saleDoc.subtotal).toBe(1600000);
-    expect(saleDoc.total).toBe(1767000);
+    expect(saleDoc.total).toBe(1550000);
 
     const docLines = all<any>('SELECT * FROM document_lines WHERE document_id=?', saleDoc.id);
     expect(docLines).toHaveLength(1);

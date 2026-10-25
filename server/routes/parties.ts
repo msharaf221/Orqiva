@@ -16,7 +16,9 @@ partiesRouter.get('/', (req, res) => {
         COALESCE(SUM(CASE
           WHEN d.status='POSTED' AND d.type IN ('SALE','PURCHASE') THEN (d.total-d.paid)
           WHEN d.status='POSTED' AND d.type IN ('SALE_RETURN','PURCHASE_RETURN') THEN -(d.total-d.paid)
-          ELSE 0 END),0) balance,
+          ELSE 0 END),0)
+        + COALESCE((SELECT SUM(CASE WHEN pc.direction='CREDIT' THEN -pc.remaining ELSE pc.remaining END)
+                    FROM party_credits pc WHERE pc.party_id=p.id AND pc.status='OPEN'),0) balance,
         COUNT(d.id) documents_count
        FROM parties p
        LEFT JOIN documents d ON d.party_id=p.id

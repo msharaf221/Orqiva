@@ -65,6 +65,7 @@ import {
 } from '../../lib';
 import { useBranch, withBranch } from '../../branch';
 import { can } from '../../auth';
+import { TAX_FREE } from '../../config';
 import type {
   ChartAccount,
   JournalEntry,
@@ -131,7 +132,7 @@ export function Ledger() {
     'trial',
     'pnl',
     'balance-sheet',
-    'vat-return',
+    ...(TAX_FREE ? [] : ['vat-return']),
     'opening-balances',
     'settings',
   ];
@@ -157,7 +158,11 @@ export function Ledger() {
       <PageHeader
         eyebrow="قيود متوازنة، ودفتر واحد للحقيقة"
         title="دفتر الأستاذ"
-        description="كل حركة في أوركيفا تُرحَّل تلقائياً كقيد مزدوج متوازن — راجع القيود، ودليل الحسابات، وميزان المراجعة، والقوائم المالية، وإقرارات الضرائب."
+        description={
+          TAX_FREE
+            ? 'كل حركة في أوركيفا تُرحَّل تلقائياً كقيد مزدوج متوازن — راجع القيود، ودليل الحسابات، وميزان المراجعة، والقوائم المالية.'
+            : 'كل حركة في أوركيفا تُرحَّل تلقائياً كقيد مزدوج متوازن — راجع القيود، ودليل الحسابات، وميزان المراجعة، والقوائم المالية، وإقرارات الضرائب.'
+        }
       />
       <div className="table-toolbar">
         <div className="tabs">
@@ -182,12 +187,14 @@ export function Ledger() {
           >
             <span>الميزانية العمومية</span>
           </button>
-          <button
-            className={tab === 'vat-return' ? 'active' : ''}
-            onClick={() => switchTab('vat-return')}
-          >
-            <span>نموذج 10 (ض.ق.م)</span>
-          </button>
+          {!TAX_FREE && (
+            <button
+              className={tab === 'vat-return' ? 'active' : ''}
+              onClick={() => switchTab('vat-return')}
+            >
+              <span>نموذج 10 (ض.ق.م)</span>
+            </button>
+          )}
           <button
             className={tab === 'opening-balances' ? 'active' : ''}
             onClick={() => switchTab('opening-balances')}
@@ -212,7 +219,7 @@ export function Ledger() {
         <ProfitAndLossTab />
       ) : tab === 'balance-sheet' ? (
         <BalanceSheetTab />
-      ) : tab === 'vat-return' ? (
+      ) : !TAX_FREE && tab === 'vat-return' ? (
         <VatReturnTab />
       ) : tab === 'opening-balances' ? (
         <OpeningBalancesTab canManage={canManage} />

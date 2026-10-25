@@ -27,7 +27,12 @@ import { ledgerRouter } from './routes/ledger';
 import { treasuryRouter } from './routes/treasury';
 import { payrollRouter } from './routes/payroll';
 import { hrRouter } from './routes/hr';
-import { crmRouter } from './routes/crm';
+import { crmRouter } from './modules/crm/routes';
+import {
+  attendanceDevicesRouter,
+  attendanceDevicesPublicRouter,
+} from './routes/attendance_devices';
+import { runTaxFreeReset } from './tax_free_reset';
 
 import type { User } from '../src/types';
 
@@ -41,6 +46,13 @@ declare global {
 
 export const app = express();
 migrate();
+try {
+  runTaxFreeReset();
+} catch (error) {
+  // Never block boot on a partial historical recalculation: the marker stays unset and the
+  // next start retries the remaining rows. The error is logged for operators.
+  console.error('[tax-free reset]', error);
+}
 
 app.disable('x-powered-by');
 app.use(
@@ -65,7 +77,13 @@ app.use(cookieParser());
 // No CORS is enabled, so other origins cannot send the required header.
 app.use('/api', (req, res, next) => {
   res.setHeader('Cache-Control', 'no-store');
-  if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && req.get('X-Orqiva-Request') !== '1') {
+  const deviceIngest =
+    req.path === '/attendance-devices/ingest' || req.path === '/attendance-devices/ingest/csv';
+  if (
+    !['GET', 'HEAD', 'OPTIONS'].includes(req.method) &&
+    req.get('X-Orqiva-Request') !== '1' &&
+    !deviceIngest
+  ) {
     return res.status(403).json({ error: 'طلب غير موثوق' });
   }
   next();
@@ -79,6 +97,9 @@ app.get('/api/health', (_req, res) => {
 
 // Public authentication routes (login with rate limiter)
 app.use('/api/auth', publicAuthRouter);
+
+// Attendance devices authenticate with their own API key, not a browser session.
+app.use('/api/attendance-devices', attendanceDevicesPublicRouter);
 
 // Session authentication middleware for all remaining /api routes
 app.use('/api', (req, res, next) => {
@@ -127,9 +148,10 @@ app.use('/api', rbacRouter);
 app.use('/api/pos', posRouter);
 app.use('/api', etaRouter);
 app.use('/api', ledgerRouter);
-app.use('/api', treasuryRouter);
+app.use('/api/treasury', treasuryRouter);
 app.use('/api', payrollRouter);
 app.use('/api/hr', hrRouter);
+app.use('/api/attendance-devices', attendanceDevicesRouter);
 app.use('/api/crm', crmRouter);
 
 // API 404 handler

@@ -169,10 +169,10 @@ describe('Phase 4.2 — automatic posting', () => {
     await purchase(client, supplierId, productId, 10);
     await sale(client, customerId, productId, 2);
 
-    // 2 × 10000 = 20000 net, 14% VAT = 2800, total 22800; WAC 6000 → COGS 12000.
-    expect(balanceOf('AR')).toBe(22800);
+    // 2 × 10000 = 20000 net, tax-free total 20000; WAC 6000 → COGS 12000.
+    expect(balanceOf('AR')).toBe(20000);
     expect(balanceOf('SALES')).toBe(-20000);
-    expect(balanceOf('VAT_OUTPUT')).toBe(-2800);
+    expect(balanceOf('VAT_OUTPUT')).toBe(0);
     expect(balanceOf('COGS')).toBe(12000);
     expect(balanceOf('INVENTORY')).toBe(60000 - 12000);
 
@@ -205,12 +205,12 @@ describe('Phase 4.2 — automatic posting', () => {
     await client
       .post(`/api/documents/${saleId}/payments`)
       .set(header)
-      .send({ amount: 11400, method: 'CASH', date: TODAY, reference: 'تحصيل' })
+      .send({ amount: 10000, method: 'CASH', date: TODAY, reference: 'تحصيل' })
       .expect(201);
 
     // AR now carries only the unpaid difference; cash holds the collection.
-    expect(balanceOf('AR')).toBe(11400 - 11400);
-    expect(balanceOf('CASH')).toBe(11400);
+    expect(balanceOf('AR')).toBe(10000 - 10000);
+    expect(balanceOf('CASH')).toBe(10000);
   });
 
   it('reverses, never edits, when a posted document is cancelled', async () => {
@@ -1186,37 +1186,34 @@ describe('Phase 4.2 — Pack 1.2: Hierarchical Chart of Accounts Tree', () => {
       // GL Reconciliation assertion
       expect(r.summary.gl_reconciled).toBe(true);
 
-      // Sales section verification
+      // Tax-free mode: the document bases remain, every tax amount is zero.
       expect(r.sales.standard_rated_14.taxable_base).toBe(120000);
-      expect(r.sales.standard_rated_14.tax_amount).toBe(16800);
+      expect(r.sales.standard_rated_14.tax_amount).toBe(0);
       expect(r.sales.standard_rated_14.documents_count).toBe(1);
 
       expect(r.sales.returns.taxable_base).toBe(20000);
-      expect(r.sales.returns.tax_amount).toBe(2800);
+      expect(r.sales.returns.tax_amount).toBe(0);
       expect(r.sales.returns.documents_count).toBe(1);
 
-      expect(r.sales.net_taxable_sales).toBe(100000); // 120,000 - 20,000 = 100,000 (1,000 EGP)
-      expect(r.sales.net_output_tax).toBe(14000); // 16,800 - 2,800 = 14,000 (140 EGP)
+      expect(r.sales.net_taxable_sales).toBe(100000);
+      expect(r.sales.net_output_tax).toBe(0);
 
-      // Purchases section verification
       expect(r.purchases.standard_rated_14.taxable_base).toBe(100000);
-      expect(r.purchases.standard_rated_14.tax_amount).toBe(14000);
+      expect(r.purchases.standard_rated_14.tax_amount).toBe(0);
       expect(r.purchases.standard_rated_14.documents_count).toBe(1);
 
       expect(r.purchases.returns.taxable_base).toBe(20000);
-      expect(r.purchases.returns.tax_amount).toBe(2800);
+      expect(r.purchases.returns.tax_amount).toBe(0);
       expect(r.purchases.returns.documents_count).toBe(1);
 
-      expect(r.purchases.net_taxable_purchases).toBe(80000); // 100,000 - 20,000 = 80,000 (800 EGP)
-      expect(r.purchases.net_deductible_input_tax).toBe(11200); // 14,000 - 2,800 = 11,200 (112 EGP)
+      expect(r.purchases.net_taxable_purchases).toBe(80000);
+      expect(r.purchases.net_deductible_input_tax).toBe(0);
 
-      // Settlement verification: 14,000 - 11,200 = 2,800 piasters (28.00 EGP) due
-      expect(r.summary.net_tax_due).toBe(2800);
+      expect(r.summary.net_tax_due).toBe(0);
       expect(r.summary.credit_balance).toBe(0);
 
-      // Verify exact matching with GL Trial Balance
-      expect(r.summary.gl_output_tax_balance).toBe(14000);
-      expect(r.summary.gl_input_tax_balance).toBe(11200);
+      expect(r.summary.gl_output_tax_balance).toBe(0);
+      expect(r.summary.gl_input_tax_balance).toBe(0);
     });
 
     it('handles tax credit balance (excess input VAT) carry forward when purchases exceed sales', async () => {
@@ -1264,14 +1261,13 @@ describe('Phase 4.2 — Pack 1.2: Hierarchical Chart of Accounts Tree', () => {
 
       const r = res.body;
       expect(r.summary.gl_reconciled).toBe(true);
-      expect(r.sales.net_output_tax).toBe(14000);
-      expect(r.purchases.net_deductible_input_tax).toBe(28000);
+      expect(r.sales.net_output_tax).toBe(0);
+      expect(r.purchases.net_deductible_input_tax).toBe(0);
 
-      // Excess input tax = 14,000 cents carried forward to next period
       expect(r.summary.net_tax_due).toBe(0);
-      expect(r.summary.credit_balance).toBe(14000);
-      expect(r.summary.gl_output_tax_balance).toBe(14000);
-      expect(r.summary.gl_input_tax_balance).toBe(28000);
+      expect(r.summary.credit_balance).toBe(0);
+      expect(r.summary.gl_output_tax_balance).toBe(0);
+      expect(r.summary.gl_input_tax_balance).toBe(0);
     });
 
     it('generates Sales Tax Register with customer TRN, document breakdown, and ETA e-invoicing link', async () => {
@@ -1371,9 +1367,9 @@ describe('Phase 4.2 — Pack 1.2: Hierarchical Chart of Accounts Tree', () => {
       expect(saleRow.party_name).toBe('عميل مسجل بالسجل');
       expect(saleRow.party_tax_number).toBe('789-456-123');
       expect(saleRow.taxable_base).toBe(100000);
-      expect(saleRow.tax_rate).toBe(1400);
-      expect(saleRow.tax_amount).toBe(14000);
-      expect(saleRow.total_amount).toBe(114000);
+      expect(saleRow.tax_rate).toBe(0);
+      expect(saleRow.tax_amount).toBe(0);
+      expect(saleRow.total_amount).toBe(100000);
       // ETA status must be tracked (PENDING or VALID depending on outbox processor)
       expect(['PENDING', 'VALID', 'SUBMITTED', 'UNSUBMITTED']).toContain(saleRow.eta_status);
 
@@ -1381,13 +1377,13 @@ describe('Phase 4.2 — Pack 1.2: Hierarchical Chart of Accounts Tree', () => {
       const retRow = reg.rows.find((r: any) => r.type === 'SALE_RETURN');
       expect(retRow).toBeDefined();
       expect(retRow.taxable_base).toBe(-50000);
-      expect(retRow.tax_amount).toBe(-7000);
-      expect(retRow.total_amount).toBe(-57000);
+      expect(retRow.tax_amount).toBe(0);
+      expect(retRow.total_amount).toBe(-50000);
 
       // Net totals
       expect(reg.totals.taxable_base).toBe(50000);
-      expect(reg.totals.tax_amount).toBe(7000);
-      expect(reg.totals.total_amount).toBe(57000);
+      expect(reg.totals.tax_amount).toBe(0);
+      expect(reg.totals.total_amount).toBe(50000);
       expect(reg.totals.count).toBe(2);
     });
 
@@ -1440,9 +1436,9 @@ describe('Phase 4.2 — Pack 1.2: Hierarchical Chart of Accounts Tree', () => {
       expect(reg.rows[0].party_name).toBe('مورد السجل الضريبي');
       expect(reg.rows[0].party_tax_number).toBe('999-888-777');
       expect(reg.rows[0].taxable_base).toBe(60000);
-      expect(reg.rows[0].tax_amount).toBe(8400);
+      expect(reg.rows[0].tax_amount).toBe(0);
       expect(reg.totals.taxable_base).toBe(60000);
-      expect(reg.totals.tax_amount).toBe(8400);
+      expect(reg.totals.tax_amount).toBe(0);
     });
 
     it('strictly supports branch filtering and date range filtering', async () => {
@@ -1552,7 +1548,7 @@ describe('Phase 4.2 — Pack 1.2: Hierarchical Chart of Accounts Tree', () => {
         .expect(200);
 
       expect(resMainJune.body.sales.standard_rated_14.taxable_base).toBe(20000);
-      expect(resMainJune.body.sales.standard_rated_14.tax_amount).toBe(2800);
+      expect(resMainJune.body.sales.standard_rated_14.tax_amount).toBe(0);
 
       // 2. Filter June for branch 2 only
       const resB2June = await client
@@ -1561,7 +1557,7 @@ describe('Phase 4.2 — Pack 1.2: Hierarchical Chart of Accounts Tree', () => {
         .expect(200);
 
       expect(resB2June.body.sales.standard_rated_14.taxable_base).toBe(30000);
-      expect(resB2June.body.sales.standard_rated_14.tax_amount).toBe(4200);
+      expect(resB2June.body.sales.standard_rated_14.tax_amount).toBe(0);
 
       // 3. Filter June for all branches
       const resAllJune = await client
@@ -1570,7 +1566,7 @@ describe('Phase 4.2 — Pack 1.2: Hierarchical Chart of Accounts Tree', () => {
         .expect(200);
 
       expect(resAllJune.body.sales.standard_rated_14.taxable_base).toBe(50000);
-      expect(resAllJune.body.sales.standard_rated_14.tax_amount).toBe(7000);
+      expect(resAllJune.body.sales.standard_rated_14.tax_amount).toBe(0);
 
       // 4. Register date filter
       const regRes = await client

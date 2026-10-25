@@ -68,15 +68,15 @@ test('parks a POS cart and resumes it later', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
-test('shows the ETA e-invoicing panel in settings without exceptions', async ({ page }) => {
+test('hides tax and e-invoicing controls in tax-free mode', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/settings');
-  await page.getByRole('button', { name: /الفاتورة الإلكترونية/ }).click();
-  await expect(
-    page.getByRole('heading', { name: 'الفاتورة الإلكترونية (هيئة الضرائب)' }),
-  ).toBeVisible();
-  await expect(page.getByText(/الوضع التجريبي/)).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'الإعدادات', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /الفاتورة الإلكترونية/ })).toHaveCount(0);
+  await expect(page.getByLabel('الرقم الضريبي')).toHaveCount(0);
+  await expect(page.getByLabel('نسبة الضريبة الافتراضية (%)')).toHaveCount(0);
+  await expect(page.getByLabel('اسم الشركة *')).toBeVisible();
   expect(errors).toEqual([]);
 });
 

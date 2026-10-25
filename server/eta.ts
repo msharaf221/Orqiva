@@ -17,6 +17,8 @@
 
 import { all, one, run, transaction, id, now } from './db';
 import { AppError } from './errors';
+import { inScope, scopeSql, type Scope } from './scope';
+import { ETA_ENABLED } from '../src/config';
 
 /** ETA default document type names inside UBL 2.1. */
 export type EtaDocType = 'INVOICE' | 'CREDIT_NOTE' | 'DEBIT_NOTE';
@@ -83,7 +85,7 @@ const ETA_CLIENT_SECRET = process.env.ETA_CLIENT_SECRET || '';
 
 /** True when real ETA credentials exist; otherwise the pipeline runs in stub mode. */
 export function etaConfigured(): boolean {
-  return Boolean(ETA_CLIENT_ID && ETA_CLIENT_SECRET);
+  return ETA_ENABLED && Boolean(ETA_CLIENT_ID && ETA_CLIENT_SECRET);
 }
 
 /** Builds the value for the ETA TLV QR code (base64 of tag/length/value bytes). */
@@ -154,9 +156,10 @@ interface DocRow {
 }
 
 /** Assembles the UBL 2.1 JSON payload for a document from persisted rows. */
-export function buildEtaInvoice(documentId: string): EtaInvoiceJson {
+export function buildEtaInvoice(documentId: string, scope?: Scope): EtaInvoiceJson {
   const doc = one<DocRow>('SELECT * FROM documents WHERE id=?', documentId);
   if (!doc) throw new AppError(404, 'الفاتورة غير موجودة');
+  if (scope && !inScope(scope, doc.branch_id)) throw new AppError(404, 'الفاتورة غير موجودة');
   const company = one<CompanyRow>('SELECT * FROM company WHERE id=1');
   const party = one<PartyRow>(
     'SELECT name,tax_number,address FROM parties WHERE id=?',
@@ -238,9 +241,10 @@ function resolveReferenceUuid(doc: DocRow): string {
 }
 
 /** Records the ETA-spec QR payload for a posted document (read by the receipt renderer). */
-export function etaQrPayload(documentId: string): string {
+export function etaQrPayload(documentId: string, scope?: Scope): string {
   const doc = one<DocRow>('SELECT * FROM documents WHERE id=?', documentId);
   if (!doc) throw new AppError(404, 'الفاتورة غير موجودة');
+  if (scope && !inScope(scope, doc.branch_id)) throw new AppError(404, 'الفاتورة غير موجودة');
   const company = one<{ name: string; tax_number: string; tax_registration_number: string }>(
     'SELECT name, tax_number, tax_registration_number FROM company WHERE id=1',
   );
@@ -255,6 +259,8 @@ export function etaQrPayload(documentId: string): string {
 
 /** Creates the outbox row for a document, if one does not already exist. */
 export function enqueueEtaSubmission(documentId: string, actorId?: string): void {
+  // ETA depends on tax identity; tax-free mode keeps the pipeline dormant.
+  if (!ETA_ENABLED) return;
   const doc = one<DocRow>('SELECT * FROM documents WHERE id=?', documentId);
   if (!doc) throw new AppError(404, 'الفاتورة غير موجودة');
   if (!isEtaEligible(doc.type)) return;
@@ -322,12 +328,19 @@ function deliver(submission: EtaSubmission): { longId: string; response: string 
 }
 
 /** Processes due PENDING submissions, applying retry/backoff on failure. */
-export function processPendingSubmissions(limit = 20): { processed: number; succeeded: number } {
+export function processPendingSubmissions(
+  limit = 20,
+  scope?: Scope,
+): { processed: number; succeeded: number } {
+  if (!ETA_ENABLED) return { processed: 0, succeeded: 0 };
+  const visible = scopeSql('d.branch_id', scope ?? { ids: null });
   const due = all<EtaSubmission>(
-    `SELECT * FROM e_invoice_submissions
-     WHERE status='PENDING' AND next_attempt_at<=?
-     ORDER BY created_at ASC LIMIT ?`,
+    `SELECT s.* FROM e_invoice_submissions s
+     JOIN documents d ON d.id=s.document_id
+     WHERE s.status='PENDING' AND s.next_attempt_at<=? AND ${visible.sql}
+     ORDER BY s.created_at ASC LIMIT ?`,
     now(),
+    ...visible.params,
     limit,
   );
   let succeeded = 0;
@@ -390,18 +403,31 @@ export interface EtaSubmissionView extends EtaSubmission {
   party_name: string;
 }
 
-export function listSubmissions(limit = 100): EtaSubmissionView[] {
+export function listSubmissions(limit = 100, scope?: Scope): EtaSubmissionView[] {
+  const visible = scopeSql('d.branch_id', scope ?? { ids: null });
   return all<EtaSubmissionView>(
     `SELECT s.*, d.number document_number, d.total document_total, p.name party_name
      FROM e_invoice_submissions s
      JOIN documents d ON d.id=s.document_id
      JOIN parties p ON p.id=d.party_id
+     WHERE ${visible.sql}
      ORDER BY s.created_at DESC LIMIT ?`,
+    ...visible.params,
     limit,
   );
 }
 
-export function getSubmissionByDocument(documentId: string): EtaSubmission | undefined {
+export function getSubmissionByDocument(
+  documentId: string,
+  scope?: Scope,
+): EtaSubmission | undefined {
+  if (scope) {
+    const doc = one<{ branch_id: string }>(
+      'SELECT branch_id FROM documents WHERE id=?',
+      documentId,
+    );
+    if (!doc || !inScope(scope, doc.branch_id)) return undefined;
+  }
   return one<EtaSubmission>(
     'SELECT * FROM e_invoice_submissions WHERE document_id=? ORDER BY created_at DESC LIMIT 1',
     documentId,
@@ -409,12 +435,20 @@ export function getSubmissionByDocument(documentId: string): EtaSubmission | und
 }
 
 /** Retries a FAILED submission immediately (clears backoff). */
-export function retrySubmission(submissionId: string): EtaSubmission {
-  const submission = one<EtaSubmission>(
-    'SELECT * FROM e_invoice_submissions WHERE id=?',
+export function retrySubmission(submissionId: string, scope?: Scope): EtaSubmission {
+  if (!ETA_ENABLED)
+    throw new AppError(409, 'منظومة الفاتورة الإلكترونية معطّلة في وضع إلغاء الضرائب');
+  const submission = one<EtaSubmission & { branch_id?: string }>(
+    `SELECT s.*, d.branch_id
+     FROM e_invoice_submissions s
+     JOIN documents d ON d.id = s.document_id
+     WHERE s.id=?`,
     submissionId,
   );
   if (!submission) throw new AppError(404, 'طلب الإرسال غير موجود');
+  if (scope && !inScope(scope, submission.branch_id)) {
+    throw new AppError(404, 'طلب الإرسال غير موجود');
+  }
   if (submission.status === 'VALID') throw new AppError(409, 'تم قبول هذه الفاتورة بالفعل');
   run(
     `UPDATE e_invoice_submissions

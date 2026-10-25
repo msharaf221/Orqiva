@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { requirePermission } from '../rbac';
+import { scopeFor } from '../scope';
 import {
   listLeaveTypes,
   listEmployeeLeaves,
@@ -17,20 +18,23 @@ export const hrRouter = Router();
 
 // --- Leaves ---
 
-hrRouter.get('/leave-types', requirePermission('hr:view', 'finance:view'), (_req, res) => {
+hrRouter.get('/leave-types', requirePermission('hr:view'), (_req, res) => {
   res.json(listLeaveTypes());
 });
 
-hrRouter.get('/leaves', requirePermission('hr:view', 'finance:view'), (req, res) => {
-  const leaves = listEmployeeLeaves({
-    employee_id: req.query.employee_id ? String(req.query.employee_id) : undefined,
-    status: req.query.status ? String(req.query.status) : undefined,
-    branch_id: req.query.branch_id ? String(req.query.branch_id) : undefined,
-  });
+hrRouter.get('/leaves', requirePermission('hr:view'), (req, res) => {
+  const leaves = listEmployeeLeaves(
+    {
+      employee_id: req.query.employee_id ? String(req.query.employee_id) : undefined,
+      status: req.query.status ? String(req.query.status) : undefined,
+      branch_id: req.query.branch_id ? String(req.query.branch_id) : undefined,
+    },
+    scopeFor(req.user, req.query.branch_id),
+  );
   res.json(leaves);
 });
 
-hrRouter.post('/leaves', requirePermission('hr:manage', 'users:manage'), (req, res) => {
+hrRouter.post('/leaves', requirePermission('hr:manage'), (req, res) => {
   const schema = z.object({
     employee_id: z.string().min(1, 'الموظف مطلوب'),
     leave_type_id: z.string().min(1, 'نوع الإجازة مطلوب'),
@@ -39,51 +43,54 @@ hrRouter.post('/leaves', requirePermission('hr:manage', 'users:manage'), (req, r
     reason: z.string().optional(),
   });
   const parsed = schema.parse(req.body);
-  const leave = createLeaveRequest(parsed);
+  const leave = createLeaveRequest(parsed, req.user, scopeFor(req.user));
   res.status(201).json(leave);
 });
 
-hrRouter.post('/leaves/:id/approve', requirePermission('hr:manage', 'users:manage'), (req, res) => {
-  const actor = {
-    id: (req as any).user?.id || 'system',
-    name: (req as any).user?.name || 'مدير النظام',
-  };
-  const leave = updateLeaveStatus(String(req.params.id), 'APPROVED', actor, req.body.notes);
+hrRouter.post('/leaves/:id/approve', requirePermission('hr:manage'), (req, res) => {
+  const leave = updateLeaveStatus(
+    String(req.params.id),
+    'APPROVED',
+    req.user,
+    scopeFor(req.user),
+    req.body.notes,
+  );
   res.json(leave);
 });
 
-hrRouter.post('/leaves/:id/reject', requirePermission('hr:manage', 'users:manage'), (req, res) => {
-  const actor = {
-    id: (req as any).user?.id || 'system',
-    name: (req as any).user?.name || 'مدير النظام',
-  };
-  const leave = updateLeaveStatus(String(req.params.id), 'REJECTED', actor, req.body.notes);
+hrRouter.post('/leaves/:id/reject', requirePermission('hr:manage'), (req, res) => {
+  const leave = updateLeaveStatus(
+    String(req.params.id),
+    'REJECTED',
+    req.user,
+    scopeFor(req.user),
+    req.body.notes,
+  );
   res.json(leave);
 });
 
-hrRouter.get(
-  '/leaves/balance/:employeeId',
-  requirePermission('hr:view', 'finance:view'),
-  (req, res) => {
-    const year = req.query.year ? String(req.query.year) : undefined;
-    const balances = getEmployeeLeaveBalance(String(req.params.employeeId), year);
-    res.json(balances);
-  },
-);
+hrRouter.get('/leaves/balance/:employeeId', requirePermission('hr:view'), (req, res) => {
+  const year = req.query.year ? String(req.query.year) : undefined;
+  const balances = getEmployeeLeaveBalance(String(req.params.employeeId), year, scopeFor(req.user));
+  res.json(balances);
+});
 
 // --- Attendance ---
 
-hrRouter.get('/attendance', requirePermission('hr:view', 'finance:view'), (req, res) => {
-  const records = listAttendance({
-    branch_id: req.query.branch_id ? String(req.query.branch_id) : undefined,
-    date: req.query.date ? String(req.query.date) : undefined,
-    month: req.query.month ? String(req.query.month) : undefined,
-    employee_id: req.query.employee_id ? String(req.query.employee_id) : undefined,
-  });
+hrRouter.get('/attendance', requirePermission('hr:view'), (req, res) => {
+  const records = listAttendance(
+    {
+      branch_id: req.query.branch_id ? String(req.query.branch_id) : undefined,
+      date: req.query.date ? String(req.query.date) : undefined,
+      month: req.query.month ? String(req.query.month) : undefined,
+      employee_id: req.query.employee_id ? String(req.query.employee_id) : undefined,
+    },
+    scopeFor(req.user, req.query.branch_id),
+  );
   res.json(records);
 });
 
-hrRouter.post('/attendance', requirePermission('hr:manage', 'users:manage'), (req, res) => {
+hrRouter.post('/attendance', requirePermission('hr:manage'), (req, res) => {
   const schema = z.object({
     employee_id: z.string().min(1, 'الموظف مطلوب'),
     branch_id: z.string().min(1, 'الفرع مطلوب'),
@@ -96,11 +103,11 @@ hrRouter.post('/attendance', requirePermission('hr:manage', 'users:manage'), (re
     notes: z.string().optional(),
   });
   const parsed = schema.parse(req.body);
-  const att = recordAttendance(parsed);
+  const att = recordAttendance(parsed, req.user, scopeFor(req.user));
   res.status(201).json(att);
 });
 
-hrRouter.post('/attendance/batch', requirePermission('hr:manage', 'users:manage'), (req, res) => {
+hrRouter.post('/attendance/batch', requirePermission('hr:manage'), (req, res) => {
   const schema = z.object({
     records: z.array(
       z.object({
@@ -117,18 +124,18 @@ hrRouter.post('/attendance/batch', requirePermission('hr:manage', 'users:manage'
     ),
   });
   const parsed = schema.parse(req.body);
-  const result = batchRecordAttendance(parsed.records);
+  const result = batchRecordAttendance(parsed.records, req.user, scopeFor(req.user));
   res.status(201).json(result);
 });
 
-hrRouter.get(
-  '/monthly-impact/:employeeId',
-  requirePermission('hr:view', 'finance:view'),
-  (req, res) => {
-    const month = req.query.month
-      ? String(req.query.month)
-      : new Date().toISOString().substring(0, 7);
-    const impact = getMonthlyAttendanceAndLeaveImpact(String(req.params.employeeId), month);
-    res.json(impact);
-  },
-);
+hrRouter.get('/monthly-impact/:employeeId', requirePermission('hr:view'), (req, res) => {
+  const month = req.query.month
+    ? String(req.query.month)
+    : new Date().toISOString().substring(0, 7);
+  const impact = getMonthlyAttendanceAndLeaveImpact(
+    String(req.params.employeeId),
+    month,
+    scopeFor(req.user),
+  );
+  res.json(impact);
+});

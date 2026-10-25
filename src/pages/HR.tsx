@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Users,
   Plus,
@@ -8,6 +9,7 @@ import {
   CreditCard,
   CheckCircle2,
   XCircle,
+  Fingerprint,
 } from 'lucide-react';
 import {
   api,
@@ -33,6 +35,7 @@ import type {
   Branch,
 } from '../types';
 import { useBranch } from '../branch';
+import { TAX_FREE } from '../config';
 import {
   CreateAdvanceModal,
   CreatePayrollRunModal,
@@ -55,7 +58,11 @@ export function CreateEmployeeModalExtended({
     const f = new FormData(e.currentTarget);
     const basic = toCents(f.get('basic_salary'));
     const variable = toCents(f.get('variable_salary') || '0');
-    const insured = f.get('insured_salary') ? toCents(f.get('insured_salary')) : basic;
+    const insured = TAX_FREE
+      ? 0
+      : f.get('insured_salary')
+        ? toCents(f.get('insured_salary'))
+        : basic;
 
     const payload = {
       code: String(f.get('code')).trim(),
@@ -69,7 +76,9 @@ export function CreateEmployeeModalExtended({
       basic_salary: basic,
       variable_salary: variable,
       insured_salary: insured,
-      insurance_number: String(f.get('insurance_number') || '').trim() || undefined,
+      insurance_number: TAX_FREE
+        ? undefined
+        : String(f.get('insurance_number') || '').trim() || undefined,
       hire_date: String(f.get('hire_date') || today()),
       contract_end_date: String(f.get('contract_end_date') || '').trim() || undefined,
       probation_end_date: String(f.get('probation_end_date') || '').trim() || undefined,
@@ -77,7 +86,7 @@ export function CreateEmployeeModalExtended({
     };
 
     void act(async () => {
-      await api('/payroll/employees', 'POST', payload);
+      await api('/employees', 'POST', payload);
       onSaved();
     }, 'تم إضافة الموظف وعقد العمل بنجاح');
   };
@@ -87,7 +96,11 @@ export function CreateEmployeeModalExtended({
       size="xl"
       showMaximize
       title="إضافة موظف جديد وضبط عقد العمل"
-      description="تسجيل بيانات الموظف، شروط العقد، الراتب الأساسي والمتغير، وفترة التجربة والتأمينات."
+      description={
+        TAX_FREE
+          ? 'تسجيل بيانات الموظف، شروط العقد، الراتب الأساسي والمتغير، وفترة التجربة.'
+          : 'تسجيل بيانات الموظف، شروط العقد، الراتب الأساسي والمتغير، وفترة التجربة والتأمينات.'
+      }
       onClose={onClose}
     >
       <form onSubmit={submit}>
@@ -169,24 +182,28 @@ export function CreateEmployeeModalExtended({
                 defaultValue="0.00"
               />
             </Field>
-            <Field label="الأجر التأميني (للتأمينات الاجتماعية)">
-              <input
-                name="insured_salary"
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="افتراضياً نفس الأساسي"
-              />
-            </Field>
+            {!TAX_FREE && (
+              <Field label="الأجر التأميني (للتأمينات الاجتماعية)">
+                <input
+                  name="insured_salary"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="افتراضياً نفس الأساسي"
+                />
+              </Field>
+            )}
           </div>
 
           <div className="grid two" style={{ marginBottom: '12px' }}>
             <Field label="رقم الهاتف">
               <input name="phone" placeholder="010..." type="tel" />
             </Field>
-            <Field label="الرقم التأميني">
-              <input name="insurance_number" placeholder="مثال: 12345678" />
-            </Field>
+            {!TAX_FREE && (
+              <Field label="الرقم التأميني">
+                <input name="insurance_number" placeholder="مثال: 12345678" />
+              </Field>
+            )}
           </div>
         </div>
 
@@ -425,11 +442,11 @@ export function HR() {
   const [viewingRunId, setViewingRunId] = useState<string | null>(null);
 
   // Data endpoints
-  const employeesData = useData<Employee[]>('/payroll/employees');
+  const employeesData = useData<Employee[]>('/employees');
   const leaveTypesData = useData<LeaveType[]>('/hr/leave-types');
   const leavesData = useData<EmployeeLeave[]>('/hr/leaves');
   const attendanceData = useData<EmployeeAttendance[]>(`/hr/attendance?date=${selectedDate}`);
-  const payrollRunsData = useData<PayrollRun[]>('/payroll/payroll-runs');
+  const payrollRunsData = useData<PayrollRun[]>('/payroll-runs');
 
   const employees = employeesData.data || [];
   const leaveTypes = leaveTypesData.data || [];
@@ -682,9 +699,14 @@ export function HR() {
                 }}
               />
             </div>
-            <Button onClick={() => setRecordingAttendance(true)}>
-              <Plus size={16} /> تسجيل حضور لموظف
-            </Button>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <Link to="/attendance-devices" className="btn btn-secondary">
+                <Fingerprint size={16} /> أجهزة البصمة
+              </Link>
+              <Button onClick={() => setRecordingAttendance(true)}>
+                <Plus size={16} /> تسجيل حضور لموظف
+              </Button>
+            </div>
           </div>
 
           <div className="card table-card">
@@ -698,13 +720,14 @@ export function HR() {
                   <th>وقت الانصراف</th>
                   <th>دقائق التأخير</th>
                   <th>ساعات الإضافي</th>
+                  <th>المصدر</th>
                   <th>ملاحظات</th>
                 </tr>
               </thead>
               <tbody>
                 {attendanceList.length === 0 ? (
                   <tr>
-                    <td colSpan={8} style={{ textAlign: 'center', padding: '30px' }}>
+                    <td colSpan={9} style={{ textAlign: 'center', padding: '30px' }}>
                       <Empty
                         title="لا توجد سجلات حضور مسجلة لهذا التاريخ"
                         description="سجل الحضور والانصراف للموظفين لاحتساب التأخير والإضافي"
@@ -763,6 +786,15 @@ export function HR() {
                         ) : (
                           '—'
                         )}
+                      </td>
+                      <td>
+                        <span className="badge neutral">
+                          {att.source === 'DEVICE'
+                            ? 'جهاز بصمة'
+                            : att.source === 'IMPORT'
+                              ? 'ملف مستورد'
+                              : 'يدوي'}
+                        </span>
                       </td>
                       <td>
                         <small style={{ color: 'var(--slate-600)' }}>{att.notes || '—'}</small>
@@ -942,9 +974,13 @@ export function HR() {
                   <th>الشهر</th>
                   <th>الفرع</th>
                   <th>إجمالي الأجور</th>
-                  <th>تأمينات الموظف</th>
-                  <th>تأمينات الشركة</th>
-                  <th>الضرائب وصندوق الشهداء</th>
+                  {!TAX_FREE && (
+                    <>
+                      <th>تأمينات الموظف</th>
+                      <th>تأمينات الشركة</th>
+                      <th>الضرائب وصندوق الشهداء</th>
+                    </>
+                  )}
                   <th>استقطاع السلف</th>
                   <th>صافي الرواتب المستحقة</th>
                   <th>الحالة</th>
@@ -954,10 +990,17 @@ export function HR() {
               <tbody>
                 {payrollRuns.length === 0 ? (
                   <tr>
-                    <td colSpan={10} style={{ textAlign: 'center', padding: '30px' }}>
+                    <td
+                      colSpan={TAX_FREE ? 7 : 10}
+                      style={{ textAlign: 'center', padding: '30px' }}
+                    >
                       <Empty
                         title="لا توجد مسيرات رواتب مسجلة"
-                        description="أنشئ مسير رواتب شهري لحساب الرواتب والضرائب والتأمينات آلياً"
+                        description={
+                          TAX_FREE
+                            ? 'أنشئ مسير رواتب شهري لحساب الرواتب والاستقطاعات آلياً'
+                            : 'أنشئ مسير رواتب شهري لحساب الرواتب والضرائب والتأمينات آلياً'
+                        }
                       />
                     </td>
                   </tr>
@@ -969,15 +1012,19 @@ export function HR() {
                       </td>
                       <td>{r.branch_name || 'كل الفروع'}</td>
                       <td>{money(r.total_gross)}</td>
-                      <td style={{ color: '#dc2626' }}>
-                        -{money(r.total_social_insurance_employee)}
-                      </td>
-                      <td style={{ color: '#7c3aed' }}>
-                        {money(r.total_social_insurance_employer)}
-                      </td>
-                      <td style={{ color: '#dc2626' }}>
-                        -{money(r.total_income_tax + r.total_martyrs_fund)}
-                      </td>
+                      {!TAX_FREE && (
+                        <>
+                          <td style={{ color: '#dc2626' }}>
+                            -{money(r.total_social_insurance_employee)}
+                          </td>
+                          <td style={{ color: '#7c3aed' }}>
+                            {money(r.total_social_insurance_employer)}
+                          </td>
+                          <td style={{ color: '#dc2626' }}>
+                            -{money(r.total_income_tax + r.total_martyrs_fund)}
+                          </td>
+                        </>
+                      )}
                       <td style={{ color: '#d97706' }}>-{money(r.total_advances)}</td>
                       <td>
                         <strong style={{ color: '#16a34a' }}>{money(r.total_net)}</strong> ج.م

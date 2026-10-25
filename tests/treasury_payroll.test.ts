@@ -23,7 +23,7 @@ describe('Phase 4: Cheques Portfolio, Cash Flow & Cost Centers', () => {
     const partyId = cust.body.id;
 
     // 1. Receive customer cheque (50,000 EGP = 5,000,000 piasters)
-    const chequeRes = await admin.post('/api/cheques').set(header).send({
+    const chequeRes = await admin.post('/api/treasury/cheques').set(header).send({
       number: 'CHK-9001',
       type: 'RECEIVABLE',
       party_id: partyId,
@@ -50,10 +50,13 @@ describe('Phase 4: Cheques Portfolio, Cash Flow & Cost Centers', () => {
     expect(crLine.credit).toBe(5000000);
 
     // 2. Collect cheque in default bank account
-    const collectRes = await admin.post(`/api/cheques/${cheque.id}/collect`).set(header).send({
-      bank_account_id: 'acc_def_bank',
-      collection_date: '2026-11-23',
-    });
+    const collectRes = await admin
+      .post(`/api/treasury/cheques/${cheque.id}/collect`)
+      .set(header)
+      .send({
+        bank_account_id: 'acc_def_bank',
+        collection_date: '2026-11-23',
+      });
     expect(collectRes.status).toBe(200);
     expect(collectRes.body.status).toBe('COLLECTED');
 
@@ -82,7 +85,7 @@ describe('Phase 4: Cheques Portfolio, Cash Flow & Cost Centers', () => {
       address: 'الجيزة',
     });
 
-    const chk = await admin.post('/api/cheques').set(header).send({
+    const chk = await admin.post('/api/treasury/cheques').set(header).send({
       number: 'CHK-BOUNCE-1',
       type: 'RECEIVABLE',
       party_id: cust.body.id,
@@ -93,7 +96,7 @@ describe('Phase 4: Cheques Portfolio, Cash Flow & Cost Centers', () => {
     });
 
     const bounceRes = await admin
-      .post(`/api/cheques/${chk.body.id}/bounce`)
+      .post(`/api/treasury/cheques/${chk.body.id}/bounce`)
       .set(header)
       .send({ reason: 'عدم كفاية الرصيد' });
     expect(bounceRes.status).toBe(200);
@@ -114,7 +117,7 @@ describe('Phase 4: Cheques Portfolio, Cash Flow & Cost Centers', () => {
   it('projects cash flow accurately including cheques and open bills', async () => {
     const admin = await signIn('admin@test.local');
 
-    const forecastRes = await admin.get('/api/cash-flow-forecast?days=30').set(header);
+    const forecastRes = await admin.get('/api/treasury/cash-flow-forecast?days=30').set(header);
     expect(forecastRes.status).toBe(200);
     expect(forecastRes.body).toHaveProperty('currentCashBalance');
     expect(forecastRes.body).toHaveProperty('projectedInflows');
@@ -125,7 +128,7 @@ describe('Phase 4: Cheques Portfolio, Cash Flow & Cost Centers', () => {
   it('supports hierarchical cost centers creation and listing', async () => {
     const admin = await signIn('admin@test.local');
 
-    const cc1 = await admin.post('/api/cost-centers').set(header).send({
+    const cc1 = await admin.post('/api/treasury/cost-centers').set(header).send({
       code: 'CC-HQ',
       name: 'الإدارة العامة والمقر الرئيسي',
       notes: 'مركز تكلفة إداري',
@@ -133,21 +136,21 @@ describe('Phase 4: Cheques Portfolio, Cash Flow & Cost Centers', () => {
     expect(cc1.status).toBe(201);
     expect(cc1.body.code).toBe('CC-HQ');
 
-    const cc2 = await admin.post('/api/cost-centers').set(header).send({
+    const cc2 = await admin.post('/api/treasury/cost-centers').set(header).send({
       code: 'CC-MKT',
       name: 'قسم التسويق والإعلانات',
       parent_id: cc1.body.id,
     });
     expect(cc2.status).toBe(201);
 
-    const list = await admin.get('/api/cost-centers').set(header);
+    const list = await admin.get('/api/treasury/cost-centers').set(header);
     expect(list.status).toBe(200);
     expect(list.body.length).toBeGreaterThanOrEqual(2);
   });
 });
 
 describe('Phase 5: Egyptian HR & Payroll Engine', () => {
-  it('creates employees and calculates Egyptian progressive income tax & social insurance', async () => {
+  it('creates employees and calculates a tax-free payroll run', async () => {
     const admin = await signIn('admin@test.local');
 
     // Create an employee with 10,000 EGP basic salary (1,000,000 piasters)
@@ -185,14 +188,14 @@ describe('Phase 5: Egyptian HR & Payroll Engine', () => {
     const pr = runRes.body;
     expect(pr.status).toBe('DRAFT');
     expect(pr.total_gross).toBe(1200000); // 12,000 EGP
-    // Employee social insurance: 11% of 10,000 = 1,100 EGP (110,000 piasters)
-    expect(pr.total_social_insurance_employee).toBe(110000);
-    // Employer social insurance: 18.75% of 10,000 = 1,875 EGP (187,500 piasters)
-    expect(pr.total_social_insurance_employer).toBe(187500);
-    // Martyrs fund: 0.05% of 12,000 = 6 EGP (600 piasters)
-    expect(pr.total_martyrs_fund).toBe(600);
-    // Advances: 100,000 piasters
+    // Tax-free mode: insurance, income tax, and martyrs fund are all zero.
+    expect(pr.total_social_insurance_employee).toBe(0);
+    expect(pr.total_social_insurance_employer).toBe(0);
+    expect(pr.total_income_tax).toBe(0);
+    expect(pr.total_martyrs_fund).toBe(0);
+    // Advances: 100,000 piasters; net = 12,000 - 1,000 = 11,000 EGP
     expect(pr.total_advances).toBe(100000);
+    expect(pr.total_net).toBe(1100000);
 
     expect(pr.slips).toHaveLength(1);
     expect(pr.slips[0].advances_deduction).toBe(100000);
