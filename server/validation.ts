@@ -1,7 +1,11 @@
 import { z } from 'zod';
 import { TAX_FREE } from '../src/config';
 const text = (max = 200) => z.string().trim().min(1, 'هذا الحقل مطلوب').max(max);
-const optionalText = (max = 500) => z.string().trim().max(max).default('');
+const optionalText = (max = 500) =>
+  z.preprocess(
+    (v) => (v === null || v === undefined ? '' : String(v).trim()),
+    z.string().max(max).default(''),
+  );
 const id = () => z.string().trim().min(1).max(100);
 const quantity = z.number().int().min(1).max(1_000_000);
 export const money = z.number().int().min(0).max(1_000_000_000);

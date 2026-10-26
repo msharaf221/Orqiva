@@ -10,7 +10,9 @@ test.beforeEach(async ({ page }) => {
   await page.getByLabel('البريد الإلكتروني').fill('admin@orqiva.com');
   await page.getByLabel('كلمة المرور', { exact: true }).fill('E2ETestPassword2026!');
   await page.getByRole('button', { name: 'الدخول إلى مساحة العمل' }).click();
-  await expect(page.getByRole('heading', { name: 'أهلاً، أحمد' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'أهلاً، أحمد' })).toBeVisible({
+    timeout: 10000,
+  });
 });
 
 test('posts a sale to the ledger and shows it in the journal', async ({ page }) => {

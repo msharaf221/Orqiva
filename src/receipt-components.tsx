@@ -364,7 +364,7 @@ export function ThermalReceiptPaper({
       <div className="receipt-header">
         <div className="receipt-brand-badge">ORQIVA POS</div>
         <h3 className="receipt-company-title">{companyName}</h3>
-        {taxNumber && (
+        {!TAX_FREE && taxNumber && (
           <div className="receipt-tax-badge">
             <span>الرقم الضريبي: {taxNumber}</span>
           </div>

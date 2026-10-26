@@ -48,6 +48,7 @@ import {
   Status,
 } from '../lib';
 import { useBranch, withBranch } from '../branch';
+import { TAX_FREE } from '../config';
 import type {
   Product,
   Party,
@@ -2104,11 +2105,11 @@ function PartyForm({
       await api('/parties' + (party ? '/' + party.id : ''), party ? 'PUT' : 'POST', {
         type,
         name: f.get('name'),
-        email: f.get('email'),
-        phone: f.get('phone'),
-        address: f.get('address'),
-        tax_number: f.get('tax_number'),
-        notes: f.get('notes'),
+        email: (f.get('email') as string) || '',
+        phone: (f.get('phone') as string) || '',
+        address: (f.get('address') as string) || '',
+        tax_number: (f.get('tax_number') as string) || '',
+        notes: (f.get('notes') as string) || '',
       });
       onSaved();
     }, 'تم حفظ بيانات الحساب');
@@ -2159,9 +2160,11 @@ function PartyForm({
               placeholder="المدينة، المنطقة، الشارع"
             />
           </Field>
-          <Field label="الرقم الضريبي">
-            <input name="tax_number" maxLength={50} defaultValue={party?.tax_number} />
-          </Field>
+          {!TAX_FREE && (
+            <Field label="الرقم الضريبي">
+              <input name="tax_number" maxLength={50} defaultValue={party?.tax_number} />
+            </Field>
+          )}
           <Field label="ملاحظات">
             <textarea
               name="notes"

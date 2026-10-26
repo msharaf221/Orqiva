@@ -32,6 +32,7 @@ import {
   attendanceDevicesRouter,
   attendanceDevicesPublicRouter,
 } from './routes/attendance_devices';
+import { iclockRouter } from './routes/iclock';
 import { runTaxFreeReset } from './tax_free_reset';
 
 import type { User } from '../src/types';
@@ -100,6 +101,9 @@ app.use('/api/auth', publicAuthRouter);
 
 // Attendance devices authenticate with their own API key, not a browser session.
 app.use('/api/attendance-devices', attendanceDevicesPublicRouter);
+
+// ZKTeco ADMS direct hardware push protocol (no session cookie or CSRF header required)
+app.use('/iclock', iclockRouter);
 
 // Session authentication middleware for all remaining /api routes
 app.use('/api', (req, res, next) => {

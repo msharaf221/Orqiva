@@ -45,6 +45,7 @@ import {
   downloadCSV,
 } from '../lib';
 import { useBranch, withBranch } from '../branch';
+import { TAX_FREE } from '../config';
 import type { Dashboard as DashboardData, GroupOverview } from '../types';
 export function RevenueChart({ data }: { data: DashboardData['series'] }) {
   return (
@@ -131,8 +132,8 @@ export function Dashboard() {
         'ملخص-الأعمال',
         ['المؤشر', 'القيمة بالجنيه'],
         [
-          ['المبيعات قبل الضريبة', data.sales / 100],
-          ['المشتريات قبل الضريبة', data.purchases / 100],
+          [TAX_FREE ? 'المبيعات' : 'المبيعات قبل الضريبة', data.sales / 100],
+          [TAX_FREE ? 'المشتريات' : 'المشتريات قبل الضريبة', data.purchases / 100],
           ['المصروفات', data.expenses / 100],
           ['الربح التقديري', data.netProfit / 100],
           ['مستحقات العملاء — حالياً', data.receivables / 100],
@@ -220,7 +221,7 @@ export function Dashboard() {
                 value={money(data.purchases)}
                 icon={<ShoppingBag size={20} />}
                 tone="blue"
-                foot="قيمة التوريدات قبل الضريبة"
+                foot={TAX_FREE ? 'إجمالي قيمة التوريدات' : 'قيمة التوريدات قبل الضريبة'}
               />
               <Stat
                 label="المصروفات التشغيلية"
@@ -258,7 +259,9 @@ export function Dashboard() {
                   <strong className="num">
                     {money(data.sales)} <small>ج.م</small>
                   </strong>
-                  <span className="chart-summary-note">إجمالي المبيعات قبل الضريبة</span>
+                  <span className="chart-summary-note">
+                    {TAX_FREE ? 'إجمالي المبيعات' : 'إجمالي المبيعات قبل الضريبة'}
+                  </span>
                 </div>
                 <RevenueChart data={data.series} />
               </section>

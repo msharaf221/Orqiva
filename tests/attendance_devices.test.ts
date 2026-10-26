@@ -525,4 +525,57 @@ describe('generic attendance devices', () => {
       .expect(200);
     await ingest(api_key, [punch('1', '2026-06-07 10:00:00')]).expect(200);
   });
+
+  it('communicates directly with ZKTeco hardware via the ADMS IClock protocol', async () => {
+    const { device } = await createDevice('main', 'ZK-ADMS-999');
+    const employee = await createEmployee('main', 'موظف البصمة السحابية', 'EMP-ZK-99');
+    await mapUser(device.id, '99', employee);
+
+    // 1. Handshake GET /iclock/cdata
+    const handshake = await request(app)
+      .get('/iclock/cdata?SN=ZK-ADMS-999&options=all&pushver=2.4.1')
+      .expect(200);
+    expect(handshake.text).toContain('GET OPTION FROM: ZK-ADMS-999');
+    expect(handshake.text).toContain('TimeZone=2');
+    expect(handshake.text).toContain('Realtime=1');
+
+    // 2. Push ATTLOG punches via POST /iclock/cdata
+    const attlogBody = [
+      '99\t2026-06-08 08:50:00\t0\t1\t0\t0',
+      '99\t2026-06-08 17:15:00\t1\t1\t0\t0',
+    ].join('\n');
+
+    const pushRes = await request(app)
+      .post('/iclock/cdata?SN=ZK-ADMS-999&table=ATTLOG')
+      .set('Content-Type', 'text/plain')
+      .send(attlogBody)
+      .expect(200);
+    expect(pushRes.text).toBe('OK: 2');
+
+    // Attendance row was aggregated with source DEVICE
+    const att = one<{
+      check_in: string;
+      check_out: string;
+      late_minutes: number;
+      overtime_hours: number;
+      source: string;
+    }>(
+      'SELECT check_in, check_out, late_minutes, overtime_hours, source FROM employee_attendance WHERE employee_id=? AND date=?',
+      employee,
+      '2026-06-08',
+    );
+    expect(att).toBeDefined();
+    expect(att?.check_in).toBe('08:50');
+    expect(att?.check_out).toBe('17:15');
+    expect(att?.overtime_hours).toBe(0.25);
+    expect(att?.source).toBe('DEVICE');
+
+    // 3. Command polling
+    const poll = await request(app).get('/iclock/getrequest?SN=ZK-ADMS-999').expect(200);
+    expect(poll.text).toBe('OK');
+
+    // 4. Unregistered SN returns friendly message
+    const unreg = await request(app).get('/iclock/cdata?SN=ZK-UNKNOWN').expect(200);
+    expect(unreg.text).toContain('UNREGISTERED_DEVICE: ZK-UNKNOWN');
+  });
 });

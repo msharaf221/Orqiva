@@ -10,3 +10,4 @@ dist/
 coverage/
 playwright-results/
 test-results/
+.archify/

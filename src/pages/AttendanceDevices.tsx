@@ -20,6 +20,7 @@ import {
   CalendarDays,
   CheckCircle2,
   Cpu,
+  BookOpen,
 } from 'lucide-react';
 import {
   api,
@@ -50,7 +51,7 @@ import type {
   UnmappedDeviceUser,
 } from '../types';
 
-type Tab = 'devices' | 'mappings' | 'punches' | 'import' | 'simulator';
+type Tab = 'devices' | 'guide' | 'mappings' | 'punches' | 'import' | 'simulator';
 
 export function AttendanceDevices() {
   const { user } = useSession();
@@ -147,6 +148,10 @@ export function AttendanceDevices() {
           <button className={tab === 'devices' ? 'active' : ''} onClick={() => setTab('devices')}>
             <span>الأجهزة</span>
           </button>
+          <button className={tab === 'guide' ? 'active' : ''} onClick={() => setTab('guide')}>
+            <BookOpen size={15} style={{ marginLeft: '6px', verticalAlign: 'middle' }} />
+            <span>دليل ربط الجهاز</span>
+          </button>
           <button
             className={tab === 'mappings' ? 'active' : ''}
             onClick={() => setTab('mappings')}
@@ -176,7 +181,7 @@ export function AttendanceDevices() {
             <span>محاكاة بصمة</span>
           </button>
         </div>
-        {tab !== 'devices' && (
+        {tab !== 'devices' && tab !== 'guide' && (
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <span className="muted" style={{ fontSize: '12px' }}>
               الجهاز:
@@ -309,6 +314,8 @@ export function AttendanceDevices() {
             </table>
           )}
         </section>
+      ) : tab === 'guide' ? (
+        <GuideTab device={selected} />
       ) : selected ? (
         tab === 'mappings' ? (
           <MappingsTab device={selected} canManage={canManage} />
@@ -1135,4 +1142,271 @@ function verifyLabel(mode: AttendancePunch['verify_mode']) {
     default:
       return 'أخرى';
   }
+}
+
+function GuideTab({ device }: { device: AttendanceDevice | null }) {
+  const host = typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1';
+  const port =
+    typeof window !== 'undefined'
+      ? window.location.port || (window.location.protocol === 'https:' ? '443' : '80')
+      : '3000';
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+  const admsUrl = `${origin}/iclock/cdata`;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <div className="card" style={{ padding: '24px', background: 'var(--surface)' }}>
+        <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
+          <div
+            style={{
+              padding: '12px',
+              background: 'rgba(37,99,235,0.1)',
+              borderRadius: '12px',
+              color: 'var(--primary)',
+            }}
+          >
+            <Radio size={32} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <h2 style={{ fontSize: '18px', fontWeight: 700, margin: '0 0 6px' }}>
+              الطريقة الأولى: الربط المباشر التلقائي عبر ZKTeco ADMS (الخادم السحابي)
+            </h2>
+            <p
+              style={{
+                margin: '0 0 16px',
+                color: 'var(--muted)',
+                fontSize: '14px',
+                lineHeight: 1.6,
+              }}
+            >
+              هذه هي الطريقة الرسمية الموصى بها لأجهزة ZKTeco الحديثة؛ يقوم الجهاز بدفع حركات الحضور
+              في نفس اللحظة عبر بروتوكول HTTP التلقائي دون الحاجة لأي برامج وسيطة.
+            </p>
+
+            <div
+              style={{
+                background: 'var(--background)',
+                padding: '16px',
+                borderRadius: '8px',
+                border: '1px solid var(--border)',
+                marginBottom: '16px',
+              }}
+            >
+              <h4 style={{ margin: '0 0 10px', fontSize: '14px' }}>
+                خطوات الضبط من شاشة جهاز البصمة:
+              </h4>
+              <ol style={{ margin: 0, paddingRight: '20px', lineHeight: 1.8, fontSize: '13px' }}>
+                <li>اضغط على زر القائمة (Menu / M/OK) في جهاز البصمة.</li>
+                <li>
+                  انتقل إلى: <strong>الاتصال (Comm.)</strong> &larr;{' '}
+                  <strong>إعدادات خادم السحابة (Cloud Server / ADMS)</strong>.
+                </li>
+                <li>
+                  اضبط <strong>عنوان الخادم (Server Address):</strong>{' '}
+                  <code style={{ direction: 'ltr', display: 'inline-block' }}>{host}</code>
+                </li>
+                <li>
+                  اضبط <strong>منفذ الخادم (Server Port):</strong>{' '}
+                  <code style={{ direction: 'ltr', display: 'inline-block' }}>{port}</code>
+                </li>
+                <li>
+                  اضبط <strong>تفعيل اسم النطاق (Enable Domain Name):</strong>{' '}
+                  {!/^\d+\.\d+\.\d+\.\d+$/.test(host) ? 'نعم (Yes)' : 'لا (No)'}.
+                </li>
+                <li>احفظ الإعدادات؛ سيتصل الجهاز مباشرة بالنظام وسيتحول إلى «نشط» فوراً.</li>
+              </ol>
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+              <div
+                style={{
+                  background: 'var(--background)',
+                  padding: '10px 14px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border)',
+                  fontSize: '13px',
+                }}
+              >
+                <span className="muted">مسار استقبال البصمات التلقائي: </span>
+                <code style={{ direction: 'ltr', display: 'inline-block', fontWeight: 600 }}>
+                  {admsUrl}
+                </code>
+              </div>
+              {device && (
+                <div
+                  style={{
+                    background: 'var(--background)',
+                    padding: '10px 14px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border)',
+                    fontSize: '13px',
+                  }}
+                >
+                  <span className="muted">الرقم التسلسلي للجهاز المحدد: </span>
+                  <strong style={{ direction: 'ltr', display: 'inline-block' }}>
+                    {device.serial_number}
+                  </strong>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="card" style={{ padding: '24px', background: 'var(--surface)' }}>
+        <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
+          <div
+            style={{
+              padding: '12px',
+              background: 'rgba(16,185,129,0.1)',
+              borderRadius: '12px',
+              color: '#10b981',
+            }}
+          >
+            <Cpu size={32} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <h2 style={{ fontSize: '18px', fontWeight: 700, margin: '0 0 6px' }}>
+              الطريقة الثانية: سكريبت المزامنة المباشر عبر الشبكة المحلية (Local IP Bridge)
+            </h2>
+            <p
+              style={{
+                margin: '0 0 16px',
+                color: 'var(--muted)',
+                fontSize: '14px',
+                lineHeight: 1.6,
+              }}
+            >
+              إذا كان جهاز البصمة موصولاً بكابل شبكة LAN أو شبكة Wi-Fi داخل الفرع (مثلاً IP:{' '}
+              <code>{device?.ip_address || '192.168.1.201'}</code>):
+            </p>
+            <div
+              style={{
+                background: '#1e293b',
+                color: '#f8fafc',
+                padding: '16px',
+                borderRadius: '8px',
+                direction: 'ltr',
+                fontFamily: 'monospace',
+                fontSize: '13px',
+                lineHeight: 1.7,
+              }}
+            >
+              <div style={{ color: '#94a3b8' }}>
+                # 1. اختبار الاتصال بالمنفذ 4370 الخاص بجهاز البصمة
+              </div>
+              <div>
+                npm run attendance:sync -- --test --ip={device?.ip_address || '192.168.1.201'}
+              </div>
+              <br />
+              <div style={{ color: '#94a3b8' }}>
+                # 2. مزامنة ملف البصمات المستخرج من الجهاز فوراً إلى النظام
+              </div>
+              <div>
+                npm run attendance:sync -- --file=attlog.dat --sn=
+                {device?.serial_number || 'ZK-SERIAL'}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="card" style={{ padding: '24px', background: 'var(--surface)' }}>
+        <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
+          <div
+            style={{
+              padding: '12px',
+              background: 'rgba(245,158,11,0.1)',
+              borderRadius: '12px',
+              color: '#f59e0b',
+            }}
+          >
+            <Upload size={32} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <h2 style={{ fontSize: '18px', fontWeight: 700, margin: '0 0 6px' }}>
+              الطريقة الثالثة: استيراد ملف الفلاشة USB (بدون إنترنت أو شبكة)
+            </h2>
+            <p
+              style={{
+                margin: '0 0 16px',
+                color: 'var(--muted)',
+                fontSize: '14px',
+                lineHeight: 1.6,
+              }}
+            >
+              مناسبة للفروع التي لا يتوفر بها اتصال شبكي مباشر بين الجهاز والسيرفر:
+            </p>
+            <ol style={{ margin: 0, paddingRight: '20px', lineHeight: 1.8, fontSize: '13px' }}>
+              <li>ضع فلاش ميموري (USB) في المنفذ الجانبي لجهاز البصمة.</li>
+              <li>
+                من قائمة الجهاز اختر:{' '}
+                <strong>إدارة USB &larr; تنزيل سجل البصمات (Download Attlog)</strong>.
+              </li>
+              <li>
+                انتقل إلى تبويب <strong>«استيراد ملف»</strong> في هذه الصفحة، وارفع ملف{' '}
+                <code style={{ direction: 'ltr', display: 'inline-block' }}>attlog.dat</code> مباشرة
+                ليتم تجميعه آلياً في الحضور.
+              </li>
+            </ol>
+          </div>
+        </div>
+      </div>
+
+      <div className="card" style={{ padding: '24px', background: 'var(--surface)' }}>
+        <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
+          <div
+            style={{
+              padding: '12px',
+              background: 'rgba(147,51,234,0.1)',
+              borderRadius: '12px',
+              color: '#9333ea',
+            }}
+          >
+            <KeyRound size={32} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <h2 style={{ fontSize: '18px', fontWeight: 700, margin: '0 0 6px' }}>
+              الطريقة الرابعة: الربط البرمجي عبر الـ API (REST Ingestion)
+            </h2>
+            <p
+              style={{
+                margin: '0 0 16px',
+                color: 'var(--muted)',
+                fontSize: '14px',
+                lineHeight: 1.6,
+              }}
+            >
+              إذا كان لديك سكريبت خارجي أو نظام كاميرات ذكية أو بوابة وصول (Access Control):
+            </p>
+            <div
+              style={{
+                background: '#1e293b',
+                color: '#f8fafc',
+                padding: '16px',
+                borderRadius: '8px',
+                direction: 'ltr',
+                fontFamily: 'monospace',
+                fontSize: '13px',
+                lineHeight: 1.6,
+              }}
+            >
+              <div>POST {origin}/api/attendance-devices/ingest</div>
+              <div style={{ color: '#38bdf8' }}>X-Device-Key: &lt;مفتاح API الخاص بالجهاز&gt;</div>
+              <div style={{ color: '#38bdf8' }}>Content-Type: application/json</div>
+              <br />
+              <div style={{ color: '#a7f3d0' }}>
+                {`{
+  "punches": [
+    { "device_user_id": "101", "punched_at": "2026-10-26 09:00:00", "punch_type": "IN" },
+    { "device_user_id": "101", "punched_at": "2026-10-26 17:00:00", "punch_type": "OUT" }
+  ]
+}`}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }

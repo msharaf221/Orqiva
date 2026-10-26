@@ -20,6 +20,7 @@
     "test:e2e": "npm run build && playwright test",
     "test:e2e:server": "tsx tests/e2e/prepare.ts && tsx server/index.ts",
     "backup": "tsx server/backup.ts",
+    "attendance:sync": "tsx scripts/attendance-sync.ts",
     "admin:reset": "tsx server/reset-password.ts"
   },
   "dependencies": {

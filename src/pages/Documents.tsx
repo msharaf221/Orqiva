@@ -1181,7 +1181,7 @@ export function DocumentDetail() {
               <p dir="ltr">
                 {company?.phone} {company?.email ? `· ${company.email}` : ''}
               </p>
-              {company?.tax_number && (
+              {!TAX_FREE && company?.tax_number && (
                 <p className="tax-id-line">الرقم الضريبي: {company.tax_number}</p>
               )}
             </div>
@@ -1221,7 +1221,7 @@ export function DocumentDetail() {
               <h3>{doc.party_name}</h3>
               <p>{doc.party_address || '—'}</p>
               <p dir="ltr">{doc.party_phone || '—'}</p>
-              {doc.party_tax_number && <p>الرقم الضريبي: {doc.party_tax_number}</p>}
+              {!TAX_FREE && doc.party_tax_number && <p>الرقم الضريبي: {doc.party_tax_number}</p>}
               <p className="branch-tag">الفرع المُصدر: {doc.branch_name}</p>
             </div>
             <div className="invoice-dates">

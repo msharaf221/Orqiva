@@ -90,6 +90,16 @@ export function getDevice(deviceId: string, scope?: Scope): AttendanceDevice {
   return device;
 }
 
+export function getDeviceBySerial(serialNumber: string): AttendanceDevice | null {
+  if (!serialNumber) return null;
+  return (
+    one<AttendanceDevice>(
+      `${DEVICE_SELECT} WHERE d.serial_number=? AND d.active=1`,
+      serialNumber.trim(),
+    ) || null
+  );
+}
+
 export function createDevice(
   input: DeviceInput,
   actor: Actor,
@@ -614,6 +624,46 @@ function mapPunchType(value: string | undefined): PunchType {
   return 'AUTO';
 }
 
+const ADMS_LINE_RE =
+  /^\s*(\S+)\s+(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2})?)(?:\s+(\S+))?(?:\s+(\S+))?/;
+
+export function parseAdmsPunches(content: string): PunchInput[] {
+  const lines = content
+    .replace(/^\uFEFF/, '')
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const punches: PunchInput[] = [];
+  for (const line of lines) {
+    if (/^(pin|user|device_user_id|id)\b/i.test(line)) continue;
+    if (line.includes('\t') || line.includes(',') || line.includes(';')) {
+      const sep = line.includes('\t') ? '\t' : line.includes(',') ? ',' : ';';
+      const cols = line.split(sep).map((c) => c.trim());
+      if (cols.length >= 2 && cols[0] && cols[1]) {
+        punches.push({
+          device_user_id: cols[0],
+          punched_at: cols[1],
+          punch_type: mapPunchType(cols[2]),
+          verify_mode: mapVerifyMode(cols[3]),
+          raw: line,
+        });
+        continue;
+      }
+    }
+    const match = ADMS_LINE_RE.exec(line);
+    if (match) {
+      punches.push({
+        device_user_id: match[1],
+        punched_at: match[2],
+        punch_type: mapPunchType(match[3]),
+        verify_mode: mapVerifyMode(match[4]),
+        raw: line,
+      });
+    }
+  }
+  return punches;
+}
+
 export function parseCsv(csv: string): PunchInput[] {
   const lines = csv
     .replace(/^\uFEFF/, '')
@@ -622,7 +672,18 @@ export function parseCsv(csv: string): PunchInput[] {
     .filter(Boolean);
   if (!lines.length) return [];
 
-  const delimiter = lines[0].includes('\t') ? '\t' : ',';
+  const delimiter = lines[0].includes('\t')
+    ? '\t'
+    : lines[0].includes(',')
+      ? ','
+      : lines[0].includes(';')
+        ? ';'
+        : null;
+
+  if (!delimiter) {
+    return parseAdmsPunches(csv);
+  }
+
   const first = lines[0].split(delimiter).map((c) => c.trim().toLowerCase());
   const hasHeader = first.some((c) =>
     ['device_user_id', 'pin', 'user_id', 'punched_at', 'datetime', 'punch_type'].includes(c),
@@ -652,6 +713,11 @@ export function parseCsv(csv: string): PunchInput[] {
       raw: line,
     });
   }
+
+  if (punches.length === 0) {
+    return parseAdmsPunches(csv);
+  }
+
   return punches;
 }
 
