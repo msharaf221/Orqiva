@@ -9,10 +9,11 @@ FROM node:22-bookworm-slim AS runtime
 ENV NODE_ENV=production PORT=3001 DATABASE_PATH=/app/data/orqiva.db SEED_DEMO=false
 WORKDIR /app
 COPY --from=builder --chown=node:node /app/package*.json ./
+COPY --from=builder --chown=node:node /app/tsconfig.json ./tsconfig.json
 COPY --from=builder --chown=node:node /app/node_modules ./node_modules
 COPY --from=builder --chown=node:node /app/dist ./dist
 COPY --from=builder --chown=node:node /app/server ./server
-COPY --from=builder --chown=node:node /app/src/types.ts ./src/types.ts
+COPY --from=builder --chown=node:node /app/src ./src
 COPY --from=builder --chown=node:node /app/database ./database
 COPY --chown=node:node docker/entrypoint.sh ./docker/entrypoint.sh
 RUN mkdir -p /app/data /app/backups && chown -R node:node /app/data /app/backups && chmod +x /app/docker/entrypoint.sh
