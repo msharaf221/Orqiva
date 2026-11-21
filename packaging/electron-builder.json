@@ -31,5 +31,6 @@
     "enableNodeCliInspectArguments": false,
     "enableEmbeddedAsarIntegrityValidation": true,
     "onlyLoadAppFromAsar": true
-  }
+  },
+  "files": ["**/*", "!node_modules/**"]
 }
