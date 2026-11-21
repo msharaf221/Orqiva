@@ -1,0 +1,59 @@
+name: Windows installer
+
+# Builds Orqiva-Setup-<version>.exe on a Windows runner and smoke-tests it (silent install, launch,
+# health check). Run it from Actions > "Windows installer" > Run workflow.
+# Release build: add the repository secret ORQIVA_LICENSE_PUBLIC_KEY (the public key printed by
+# `npm run license -- keygen`). Without the secret the build is an OPEN test build (no license check).
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/windows-installer]
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      LICENSE_PUBLIC_KEY: ${{ secrets.ORQIVA_LICENSE_PUBLIC_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Stage app
+        shell: pwsh
+        run: |
+          if ($env:LICENSE_PUBLIC_KEY) {
+            Set-Content -NoNewline -Path packaging/license-public-key.txt -Value $env:LICENSE_PUBLIC_KEY
+            node scripts/stage-installer.mjs
+          } else {
+            Write-Host "No ORQIVA_LICENSE_PUBLIC_KEY secret: building an OPEN test build"
+            node scripts/stage-installer.mjs --open
+          }
+      - name: Build installer
+        run: npx electron-builder --win --config packaging/electron-builder.json
+      - name: Smoke test (silent install, launch, health)
+        shell: pwsh
+        run: |
+          $setup = (Get-ChildItem release/Orqiva-Setup-*.exe).FullName
+          Start-Process -FilePath $setup -ArgumentList '/S', '/D=C:\OrqivaTest' -Wait
+          $env:ORQIVA_PORT = '3099'
+          $proc = Start-Process -FilePath 'C:\OrqivaTest\Orqiva.exe' -PassThru
+          $ok = $false
+          for ($i = 0; $i -lt 60; $i++) {
+            try {
+              $r = Invoke-RestMethod -Uri 'http://127.0.0.1:3099/api/health' -TimeoutSec 2
+              if ($r.status -eq 'ok') { $ok = $true; break }
+            } catch { Start-Sleep -Seconds 1 }
+          }
+          Get-Process -Name Orqiva -ErrorAction SilentlyContinue | Stop-Process -Force
+          if (-not $ok) { throw 'Installed app did not answer /api/health' }
+          Write-Host 'Installed app is healthy'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Orqiva-Setup
+          path: release/Orqiva-Setup-*.exe
+          if-no-files-found: error

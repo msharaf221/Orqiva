@@ -11,3 +11,8 @@ coverage/
 playwright-results/
 test-results/
 .archify/
+
+build/
+release/
+packaging/license-public-key.txt
+*.pem

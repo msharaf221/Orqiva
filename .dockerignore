@@ -10,3 +10,7 @@ coverage
 playwright-results
 playwright-report
 *.db
+build
+release
+packaging/license-public-key.txt
+*.pem
