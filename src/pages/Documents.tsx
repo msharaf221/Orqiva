@@ -61,7 +61,7 @@ import type {
   Quotation,
 } from '../types';
 import { can } from '../auth';
-import { taxFree, calculateTax, effectiveTaxRate } from '../config';
+import { taxFree, calculateTax, effectiveTaxRate, taxInGross } from '../config';
 import {
   BarcodeSvg,
   QrCodeSvg,
@@ -523,6 +523,8 @@ function Editor({ type, existing }: { type: DocType; existing?: Document }) {
       String(effectiveTaxRate(existing?.tax_rate ?? company?.tax_rate ?? 1400) / 100),
     ),
     [discount, setDiscount] = useState(String((existing?.discount || 0) / 100));
+  // A saved document stores net prices, so editing it starts in exclusive mode.
+  const [inclusive, setInclusive] = useState(!existing && !!company?.prices_include_tax);
   useEffect(() => {
     if (!existing && company) setTaxRate(String(effectiveTaxRate(company.tax_rate) / 100));
   }, [existing, company]);
@@ -531,8 +533,12 @@ function Editor({ type, existing }: { type: DocType; existing?: Document }) {
       0,
     ),
     discountCents = Math.round(Number(discount) * 100),
-    tax = calculateTax(Math.max(0, subtotal - discountCents), Math.round(Number(taxRate) * 100)),
-    total = subtotal - discountCents + tax;
+    rateBp = Math.round(Number(taxRate) * 100),
+    useInclusive = inclusive && !taxFree() && type !== 'SALE_RETURN' && type !== 'PURCHASE_RETURN',
+    tax = useInclusive
+      ? taxInGross(Math.max(0, subtotal - discountCents), rateBp)
+      : calculateTax(Math.max(0, subtotal - discountCents), rateBp),
+    total = useInclusive ? subtotal - discountCents : subtotal - discountCents + tax;
   const changeLine = (key: string, patch: Partial<EditorLine>) =>
     setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   const changeBranch = (next: string) => {
@@ -567,6 +573,7 @@ function Editor({ type, existing }: { type: DocType; existing?: Document }) {
           notes: form.get('notes'),
           discount: discountCents,
           tax_rate: effectiveTaxRate(Math.round(Number(taxRate) * 100)),
+          prices_include_tax: useInclusive || undefined,
           lines: lines.map((l) => ({
             product_id: l.product_id,
             quantity: Number(l.quantity),
@@ -922,8 +929,16 @@ function Editor({ type, existing }: { type: DocType; existing?: Document }) {
                     onChange={(e) => setTaxRate(e.target.value)}
                   />
                 </Field>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={inclusive}
+                    onChange={(e) => setInclusive(e.target.checked)}
+                  />{' '}
+                  الأسعار المدخلة شاملة الضريبة
+                </label>
                 <div className="summary-row">
-                  <span>قيمة الضريبة</span>
+                  <span>{useInclusive ? 'منها قيمة الضريبة' : 'قيمة الضريبة'}</span>
                   <span className="num">{money(tax, 2)}</span>
                 </div>
               </>

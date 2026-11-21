@@ -11,7 +11,7 @@ import { resolveDefaultAccountId, assertAccountFunds, glAccountForCashAccount } 
 import { enqueueEtaSubmission, isEtaEligible } from './eta';
 import { postDocumentLedger, reverseDocumentLedger, postPaymentLedger } from './posting';
 import { recordBatchStock } from './batches';
-import { calculateTax, effectiveTaxRate } from './tax_policy';
+import { calculateTax, effectiveTaxRate, netOfGross } from './tax_policy';
 import type { Document, DocLine, Party, Payment, Branch } from '../src/types';
 
 export { AppError } from './errors';
@@ -250,15 +250,32 @@ function prepareDocument(
       expiry_date: line.expiry_date ?? null,
     };
   });
-  const subtotal = lines.reduce((s, l) => s + l.total, 0);
+  let subtotal = lines.reduce((s, l) => s + l.total, 0);
   if (input.discount > subtotal) throw new AppError(400, 'الخصم أكبر من قيمة الفاتورة');
   // Tax-free mode: the requested rate is accepted for API compatibility but never persisted.
   const taxRate = effectiveTaxRate(input.tax_rate);
-  const tax = calculateTax(subtotal - input.discount, taxRate);
-  const total = subtotal - input.discount + tax;
+  let discount = input.discount;
+  let tax: number;
+  let total: number;
+  if (input.prices_include_tax && taxRate > 0 && !input.original_document_id) {
+    // Tax-inclusive entry: the customer pays exactly the entered gross. Lines and discount are
+    // converted to net so the ledger identity total = subtotal - discount + tax still holds.
+    const gross = subtotal - input.discount;
+    for (const l of lines) {
+      l.unit_price = netOfGross(l.unit_price, taxRate);
+      l.total = l.quantity * l.unit_price;
+    }
+    subtotal = lines.reduce((s, l) => s + l.total, 0);
+    discount = Math.min(netOfGross(input.discount, taxRate), subtotal);
+    total = gross;
+    tax = Math.max(0, gross - (subtotal - discount));
+  } else {
+    tax = calculateTax(subtotal - discount, taxRate);
+    total = subtotal - discount + tax;
+  }
   if (!Number.isSafeInteger(total) || total > 1_000_000_000)
     throw new AppError(400, 'قيمة الفاتورة تتجاوز الحد المسموح (١٠ مليون جنيه)');
-  return { lines, subtotal, taxRate, tax, total };
+  return { lines, subtotal, discount, taxRate, tax, total };
 }
 
 export function saveDocument(raw: unknown, actor: Actor, existingId?: string) {
@@ -281,7 +298,7 @@ export function saveDocument(raw: unknown, actor: Actor, existingId?: string) {
         input.date,
         input.due_date,
         computed.subtotal,
-        input.discount,
+        computed.discount,
         computed.taxRate,
         computed.tax,
         computed.total,
@@ -322,7 +339,7 @@ export function saveDocument(raw: unknown, actor: Actor, existingId?: string) {
         input.date,
         input.due_date,
         computed.subtotal,
-        input.discount,
+        computed.discount,
         computed.taxRate,
         computed.tax,
         computed.total,

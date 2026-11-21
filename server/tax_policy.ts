@@ -37,3 +37,8 @@ export function effectiveTaxRate(requested: number): number {
 export function calculateTax(base: number, rate: number): number {
   return taxPolicy().vat ? Math.round((base * rate) / 10000) : 0;
 }
+
+/** Net amount (piasters) of a tax-inclusive gross amount at a basis-points rate. */
+export function netOfGross(gross: number, rate: number): number {
+  return Math.round((gross * 10000) / (10000 + rate));
+}

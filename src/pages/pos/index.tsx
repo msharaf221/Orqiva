@@ -40,7 +40,7 @@ import { ThermalReceiptModal } from './receipt';
 import { HotkeysModal } from './hotkeys';
 import { PosReturnModal } from './return';
 import { can } from '../../auth';
-import { taxFree, calculateTax, effectiveTaxRate } from '../../config';
+import { taxFree, calculateTax, effectiveTaxRate, taxInGross } from '../../config';
 import { ProductForm } from '../Catalog';
 
 export function POS() {
@@ -428,11 +428,17 @@ export function POS() {
     [cart],
   );
   const effectiveDiscountCents = Math.min(discountCents, subtotalCents);
+  const inclusive = !taxFree() && !!company?.prices_include_tax;
   const taxCents = useMemo(
-    () => calculateTax(subtotalCents - effectiveDiscountCents, taxRate),
-    [subtotalCents, effectiveDiscountCents, taxRate],
+    () =>
+      inclusive
+        ? taxInGross(subtotalCents - effectiveDiscountCents, taxRate)
+        : calculateTax(subtotalCents - effectiveDiscountCents, taxRate),
+    [subtotalCents, effectiveDiscountCents, taxRate, inclusive],
   );
-  const totalCents = subtotalCents - effectiveDiscountCents + taxCents;
+  const totalCents = inclusive
+    ? subtotalCents - effectiveDiscountCents
+    : subtotalCents - effectiveDiscountCents + taxCents;
 
   // Filter products
   const categories = useMemo(() => {

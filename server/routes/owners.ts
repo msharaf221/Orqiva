@@ -37,9 +37,10 @@ ownersRouter.put('/company', requirePermission('branches:manage'), (req, res) =>
   const vat = c.tax_mode ? c.tax_mode === 'VAT' : before.vat;
   const eta = vat && (c.eta_enabled ?? before.eta);
   const payrollTax = c.payroll_tax_enabled ?? before.payrollTax;
+  const inclusive = c.prices_include_tax;
   transaction(() => {
     run(
-      'UPDATE company SET name=?,email=?,phone=?,address=?,tax_number=?,tax_registration_number=?,activity_code=?,tax_rate=?,invoice_note=?,currency=COALESCE(?,currency),tax_mode=?,eta_enabled=?,payroll_tax_enabled=?,eta_environment=COALESCE(?,eta_environment),invoice_settings=COALESCE(?,invoice_settings) WHERE id=1',
+      'UPDATE company SET name=?,email=?,phone=?,address=?,tax_number=?,tax_registration_number=?,activity_code=?,tax_rate=?,invoice_note=?,currency=COALESCE(?,currency),tax_mode=?,eta_enabled=?,payroll_tax_enabled=?,prices_include_tax=COALESCE(?,prices_include_tax),eta_environment=COALESCE(?,eta_environment),invoice_settings=COALESCE(?,invoice_settings) WHERE id=1',
       c.name,
       c.email,
       c.phone,
@@ -53,6 +54,7 @@ ownersRouter.put('/company', requirePermission('branches:manage'), (req, res) =>
       vat ? 'VAT' : 'NONE',
       eta ? 1 : 0,
       payrollTax ? 1 : 0,
+      inclusive === undefined ? null : inclusive ? 1 : 0,
       c.eta_environment || null,
       c.invoice_settings || null,
     );

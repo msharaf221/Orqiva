@@ -138,4 +138,68 @@ describe('Per-company tax policy', () => {
     expect(taxPolicy().payrollTax).toBe(true);
     expect(taxPolicy().vat).toBe(false);
   });
+
+  describe('tax-inclusive entry', () => {
+    const vat = () =>
+      admin
+        .put('/api/company')
+        .set(header)
+        .send(body({ tax_mode: 'VAT', tax_rate: 1400 }))
+        .expect(200);
+
+    it('keeps the entered gross as the total and splits out the tax', async () => {
+      await vat();
+      const res = await admin
+        .post('/api/documents')
+        .set(header)
+        .send({ ...sale(), discount: 0, prices_include_tax: true })
+        .expect(201);
+      // 2 x 100.00 gross = 200.00 total, tax portion = 200 - 200/1.14
+      expect(res.body.total).toBe(20000);
+      expect(res.body.tax).toBe(2456);
+      expect(res.body.subtotal - res.body.discount + res.body.tax).toBe(res.body.total);
+    });
+
+    it('applies the discount to the gross and still reconciles', async () => {
+      await vat();
+      const res = await admin
+        .post('/api/documents')
+        .set(header)
+        .send({ ...sale(), discount: 1140, prices_include_tax: true })
+        .expect(201);
+      expect(res.body.total).toBe(20000 - 1140);
+      expect(res.body.subtotal - res.body.discount + res.body.tax).toBe(res.body.total);
+    });
+
+    it('stays exclusive when the flag is absent', async () => {
+      await vat();
+      const res = await admin
+        .post('/api/documents')
+        .set(header)
+        .send({ ...sale(), discount: 0 })
+        .expect(201);
+      expect(res.body.tax).toBe(2800);
+      expect(res.body.total).toBe(22800);
+    });
+
+    it('ignores the flag in tax-free mode', async () => {
+      const res = await admin
+        .post('/api/documents')
+        .set(header)
+        .send({ ...sale(), discount: 0, prices_include_tax: true })
+        .expect(201);
+      expect(res.body.tax).toBe(0);
+      expect(res.body.total).toBe(20000);
+    });
+
+    it('stores the company default for entry mode', async () => {
+      await admin
+        .put('/api/company')
+        .set(header)
+        .send(body({ tax_mode: 'VAT', prices_include_tax: true }))
+        .expect(200);
+      const c = await admin.get('/api/company').set(header).expect(200);
+      expect(c.body.prices_include_tax).toBe(1);
+    });
+  });
 });
