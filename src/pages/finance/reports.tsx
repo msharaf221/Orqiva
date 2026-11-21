@@ -27,7 +27,7 @@ import {
   downloadCSV,
 } from '../../lib';
 import { useBranch, withBranch } from '../../branch';
-import { TAX_FREE } from '../../config';
+import { taxFree } from '../../config';
 import { RevenueChart } from '../Dashboard';
 import type { Dashboard as DashboardData } from '../../types';
 
@@ -109,7 +109,7 @@ export function Reports() {
                 label="صافي المبيعات"
                 value={money(report.sales)}
                 icon={<ReceiptText size={20} />}
-                foot={TAX_FREE ? 'بعد الخصم' : 'بعد الخصم، قبل الضريبة'}
+                foot={taxFree() ? 'بعد الخصم' : 'بعد الخصم، قبل الضريبة'}
               />
               <Stat
                 label="مجمل الربح التقديري"
@@ -136,7 +136,7 @@ export function Reports() {
               <div className="card-heading">
                 <div>
                   <h2>اتجاه المبيعات والمشتريات</h2>
-                  <p>{TAX_FREE ? 'القيم بعد الخصومات' : 'القيم قبل الضريبة وبعد الخصومات'}</p>
+                  <p>{taxFree() ? 'القيم بعد الخصومات' : 'القيم قبل الضريبة وبعد الخصومات'}</p>
                 </div>
                 <div className="chart-legend">
                   <span>
@@ -216,7 +216,7 @@ export function Reports() {
                 <div>
                   <h2>المنتجات الأعلى مبيعاً</h2>
                   <p>
-                    {TAX_FREE
+                    {taxFree()
                       ? 'حسب قيمة بنود المبيعات، قبل خصم الفاتورة'
                       : 'حسب قيمة بنود المبيعات، قبل خصم الفاتورة والضريبة'}
                   </p>
@@ -268,7 +268,7 @@ export function Reports() {
               <span>
                 هذا ملخص إداري، وليس قوائم مالية محاسبية معتمدة. للحصول على القوائم المالية الرسمية
                 (قائمة الدخل، الميزانية العمومية)
-                {TAX_FREE ? (
+                {taxFree() ? (
                   <>
                     ، يرجى الانتقال إلى{' '}
                     <Link to="/ledger" style={{ textDecoration: 'underline', fontWeight: 600 }}>

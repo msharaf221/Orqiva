@@ -20,7 +20,7 @@ import {
   useData,
 } from '../lib';
 import { useBranch } from '../branch';
-import { TAX_FREE } from '../config';
+import { taxFree } from '../config';
 import type {
   Distribution,
   DistributionPreview,
@@ -551,7 +551,7 @@ function DistributionsPanel() {
               <Scale size={18} /> حاسبة التوزيع
             </h2>
             <p>
-              صافي الربح = {TAX_FREE ? 'إجمالي المبيعات' : 'المبيعات قبل الضريبة'} − تكلفة البضاعة
+              صافي الربح = {taxFree() ? 'إجمالي المبيعات' : 'المبيعات قبل الضريبة'} − تكلفة البضاعة
               المباعة − كل المصروفات (المباشرة والمشتركة). الخسارة في فرع تُخصم من أرباح الفروع
               الأخرى. اختر فترة مغلقة، مثل شهر كامل: المسودة تُجمَّد عند إنشائها، وأي تغيير لاحق في
               الفترة يلغي صلاحيتها قبل الاعتماد.

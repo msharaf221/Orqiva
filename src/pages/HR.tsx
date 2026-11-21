@@ -36,7 +36,7 @@ import type {
   Branch,
 } from '../types';
 import { useBranch } from '../branch';
-import { TAX_FREE } from '../config';
+import { payrollTaxFree } from '../config';
 import {
   CreateAdvanceModal,
   CreatePayrollRunModal,
@@ -59,7 +59,7 @@ export function CreateEmployeeModalExtended({
     const f = new FormData(e.currentTarget);
     const basic = toCents(f.get('basic_salary'));
     const variable = toCents(f.get('variable_salary') || '0');
-    const insured = TAX_FREE
+    const insured = payrollTaxFree()
       ? 0
       : f.get('insured_salary')
         ? toCents(f.get('insured_salary'))
@@ -77,7 +77,7 @@ export function CreateEmployeeModalExtended({
       basic_salary: basic,
       variable_salary: variable,
       insured_salary: insured,
-      insurance_number: TAX_FREE
+      insurance_number: payrollTaxFree()
         ? undefined
         : String(f.get('insurance_number') || '').trim() || undefined,
       hire_date: String(f.get('hire_date') || today()),
@@ -98,7 +98,7 @@ export function CreateEmployeeModalExtended({
       showMaximize
       title="إضافة موظف جديد وضبط عقد العمل"
       description={
-        TAX_FREE
+        payrollTaxFree()
           ? 'تسجيل بيانات الموظف، شروط العقد، الراتب الأساسي والمتغير، وفترة التجربة.'
           : 'تسجيل بيانات الموظف، شروط العقد، الراتب الأساسي والمتغير، وفترة التجربة والتأمينات.'
       }
@@ -183,7 +183,7 @@ export function CreateEmployeeModalExtended({
                 defaultValue="0.00"
               />
             </Field>
-            {!TAX_FREE && (
+            {!payrollTaxFree() && (
               <Field label="الأجر التأميني (للتأمينات الاجتماعية)">
                 <input
                   name="insured_salary"
@@ -200,7 +200,7 @@ export function CreateEmployeeModalExtended({
             <Field label="رقم الهاتف">
               <input name="phone" placeholder="010..." type="tel" />
             </Field>
-            {!TAX_FREE && (
+            {!payrollTaxFree() && (
               <Field label="الرقم التأميني">
                 <input name="insurance_number" placeholder="مثال: 12345678" />
               </Field>
@@ -975,7 +975,7 @@ export function HR() {
                   <th>الشهر</th>
                   <th>الفرع</th>
                   <th>إجمالي الأجور</th>
-                  {!TAX_FREE && (
+                  {!payrollTaxFree() && (
                     <>
                       <th>تأمينات الموظف</th>
                       <th>تأمينات الشركة</th>
@@ -992,13 +992,13 @@ export function HR() {
                 {payrollRuns.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={TAX_FREE ? 7 : 10}
+                      colSpan={payrollTaxFree() ? 7 : 10}
                       style={{ textAlign: 'center', padding: '30px' }}
                     >
                       <Empty
                         title="لا توجد مسيرات رواتب مسجلة"
                         description={
-                          TAX_FREE
+                          payrollTaxFree()
                             ? 'أنشئ مسير رواتب شهري لحساب الرواتب والاستقطاعات آلياً'
                             : 'أنشئ مسير رواتب شهري لحساب الرواتب والضرائب والتأمينات آلياً'
                         }
@@ -1013,7 +1013,7 @@ export function HR() {
                       </td>
                       <td>{r.branch_name || 'كل الفروع'}</td>
                       <td>{money(r.total_gross)}</td>
-                      {!TAX_FREE && (
+                      {!payrollTaxFree() && (
                         <>
                           <td style={{ color: '#dc2626' }}>
                             -{money(r.total_social_insurance_employee)}

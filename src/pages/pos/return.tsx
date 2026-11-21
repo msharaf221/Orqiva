@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Search, Undo2, Coins, CreditCard, Building } from 'lucide-react';
 import { api, Button, Modal, money, useAction, useToast, useDebounced } from '../../lib';
 import type { Document, ReturnableLine } from '../../types';
-import { TAX_FREE, calculateTax, effectiveTaxRate } from '../../config';
+import { taxFree, calculateTax, effectiveTaxRate } from '../../config';
 import { playSound } from './helpers';
 
 /**
@@ -260,7 +260,7 @@ export function PosReturnModal({
               {money(refundSubtotal)} {cur()}
             </b>
           </div>
-          {!TAX_FREE && (
+          {!taxFree() && (
             <div>
               <span>ضريبة القيمة المضافة:</span>
               <b className="num">

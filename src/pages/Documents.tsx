@@ -61,7 +61,7 @@ import type {
   Quotation,
 } from '../types';
 import { can } from '../auth';
-import { TAX_FREE, calculateTax, effectiveTaxRate } from '../config';
+import { taxFree, calculateTax, effectiveTaxRate } from '../config';
 import {
   BarcodeSvg,
   QrCodeSvg,
@@ -218,7 +218,7 @@ export function Documents({ type }: { type: DocType }) {
               value={money(posted.reduce((s, d) => s + d.total, 0))}
               icon={<RotateCcw size={20} />}
               foot={
-                TAX_FREE ? 'إجمالي قيمة المرتجعات المعتمدة' : 'إجمالي قيمة المرتجعات شامل الضريبة'
+                taxFree() ? 'إجمالي قيمة المرتجعات المعتمدة' : 'إجمالي قيمة المرتجعات شامل الضريبة'
               }
             />
             <Stat
@@ -242,7 +242,7 @@ export function Documents({ type }: { type: DocType }) {
               label={sale ? 'إجمالي المبيعات المعتمدة' : 'إجمالي المشتريات المعتمدة'}
               value={money(posted.reduce((s, d) => s + d.total, 0))}
               icon={<ReceiptText size={20} />}
-              foot={TAX_FREE ? 'جميع الفترات' : 'جميع الفترات · شامل الضريبة'}
+              foot={taxFree() ? 'جميع الفترات' : 'جميع الفترات · شامل الضريبة'}
             />
             <Stat
               label={sale ? 'المبالغ المحصّلة' : 'المبالغ المسدّدة'}
@@ -713,7 +713,7 @@ function Editor({ type, existing }: { type: DocType; existing?: Document }) {
                   <Package size={18} /> بنود الفاتورة
                 </h2>
                 <p>
-                  {TAX_FREE
+                  {taxFree()
                     ? 'أسعار الوحدات بالجنيه المصري'
                     : 'أسعار الوحدات بالجنيه المصري، قبل الضريبة'}
                 </p>
@@ -895,7 +895,7 @@ function Editor({ type, existing }: { type: DocType; existing?: Document }) {
           </div>
           <div className="summary-body">
             <div className="summary-row">
-              <span>{TAX_FREE ? 'الإجمالي الفرعي' : 'الإجمالي قبل الضريبة'}</span>
+              <span>{taxFree() ? 'الإجمالي الفرعي' : 'الإجمالي قبل الضريبة'}</span>
               <strong className="num">{money(subtotal, 2)}</strong>
             </div>
             <Field label={`الخصم (${cur()})`}>
@@ -909,7 +909,7 @@ function Editor({ type, existing }: { type: DocType; existing?: Document }) {
                 onChange={(e) => setDiscount(e.target.value)}
               />
             </Field>
-            {!TAX_FREE && (
+            {!taxFree() && (
               <>
                 <Field label="ضريبة القيمة المضافة (%)">
                   <input
@@ -1182,7 +1182,7 @@ export function DocumentDetail() {
               <p dir="ltr">
                 {company?.phone} {company?.email ? `· ${company.email}` : ''}
               </p>
-              {!TAX_FREE && company?.tax_number && (
+              {!taxFree() && company?.tax_number && (
                 <p className="tax-id-line">الرقم الضريبي: {company.tax_number}</p>
               )}
             </div>
@@ -1222,7 +1222,7 @@ export function DocumentDetail() {
               <h3>{doc.party_name}</h3>
               <p>{doc.party_address || '—'}</p>
               <p dir="ltr">{doc.party_phone || '—'}</p>
-              {!TAX_FREE && doc.party_tax_number && <p>الرقم الضريبي: {doc.party_tax_number}</p>}
+              {!taxFree() && doc.party_tax_number && <p>الرقم الضريبي: {doc.party_tax_number}</p>}
               <p className="branch-tag">الفرع المُصدر: {doc.branch_name}</p>
             </div>
             <div className="invoice-dates">
@@ -1350,7 +1350,7 @@ export function DocumentDetail() {
             </div>
             <div className="invoice-totals">
               <div>
-                <span>{TAX_FREE ? 'الإجمالي الفرعي' : 'الإجمالي قبل الضريبة'}</span>
+                <span>{taxFree() ? 'الإجمالي الفرعي' : 'الإجمالي قبل الضريبة'}</span>
                 <strong className="num">{money(doc.subtotal, 2)}</strong>
               </div>
               {doc.discount > 0 && (
@@ -1359,7 +1359,7 @@ export function DocumentDetail() {
                   <span className="num text-red">-{money(doc.discount, 2)}</span>
                 </div>
               )}
-              {!TAX_FREE && (
+              {!taxFree() && (
                 <div>
                   <span>ضريبة القيمة المضافة ({doc.tax_rate / 100}%)</span>
                   <span className="num">{money(doc.tax, 2)}</span>
@@ -1965,13 +1965,13 @@ export function ReturnModal({
                 </div>
                 <div>
                   <div style={{ fontSize: '11px', color: 'var(--muted)' }}>
-                    {TAX_FREE ? 'الإجمالي الفرعي:' : 'قبل الضريبة:'}
+                    {taxFree() ? 'الإجمالي الفرعي:' : 'قبل الضريبة:'}
                   </div>
                   <strong className="num">
                     {money(subtotal, 2)} {cur()}
                   </strong>
                 </div>
-                {!TAX_FREE && doc.tax_rate > 0 && (
+                {!taxFree() && doc.tax_rate > 0 && (
                   <div>
                     <div style={{ fontSize: '11px', color: 'var(--muted)' }}>
                       الضريبة ({doc.tax_rate / 100}%):
@@ -2524,7 +2524,7 @@ function CreatePurchaseOrderModal({
                 onChange={(e) => setExpectedDate(e.target.value)}
               />
             </Field>
-            {!TAX_FREE && (
+            {!taxFree() && (
               <Field label="ضريبة القيمة المضافة">
                 <select value={taxRate} onChange={(e) => setTaxRate(Number(e.target.value))}>
                   <option value={1400}>14% (شامل الضريبة القياسية)</option>
@@ -2637,12 +2637,12 @@ function CreatePurchaseOrderModal({
               }}
             >
               <div>
-                {TAX_FREE ? 'الإجمالي الفرعي:' : 'قبل الضريبة:'}{' '}
+                {taxFree() ? 'الإجمالي الفرعي:' : 'قبل الضريبة:'}{' '}
                 <strong className="num">
                   {money(Math.round(subtotal * 100), 2)} {cur()}
                 </strong>
               </div>
-              {!TAX_FREE && (
+              {!taxFree() && (
                 <div>
                   الضريبة ({taxRate / 100}%):{' '}
                   <strong className="num">
@@ -3156,7 +3156,7 @@ function CreateQuotationModal({
                 />{' '}
                 {cur()}
               </div>
-              {!TAX_FREE && (
+              {!taxFree() && (
                 <div>
                   ضريبة 14%:{' '}
                   <strong className="num">

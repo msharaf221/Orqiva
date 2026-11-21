@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { TAX_FREE } from '../src/config';
 const text = (max = 200) => z.string().trim().min(1, 'هذا الحقل مطلوب').max(max);
 const optionalText = (max = 500) =>
   z.preprocess(
@@ -230,12 +229,7 @@ export const documentSchema = z
     date,
     due_date: date,
     discount: money.default(0),
-    tax_rate: z
-      .number()
-      .int()
-      .min(0)
-      .max(10000)
-      .default(TAX_FREE ? 0 : 1400),
+    tax_rate: z.number().int().min(0).max(10000).default(1400),
     notes: optionalText(2000),
     lines: z
       .array(
@@ -314,13 +308,11 @@ export const companySchema = z
     tax_number: optionalText(50),
     tax_registration_number: optionalText(50),
     activity_code: optionalText(50),
-    tax_rate: z
-      .number()
-      .int()
-      .min(0)
-      .max(10000)
-      .default(TAX_FREE ? 0 : 1400),
+    tax_rate: z.number().int().min(0).max(10000).default(1400),
     invoice_note: optionalText(1000),
+    tax_mode: z.enum(['NONE', 'VAT']).optional(),
+    eta_enabled: z.boolean().optional(),
+    payroll_tax_enabled: z.boolean().optional(),
     currency: z
       .string()
       .trim()
@@ -774,12 +766,7 @@ export const quotationSchema = z
     party_id: id(),
     date,
     valid_until: date.optional().nullable(),
-    tax_rate: z
-      .number()
-      .int()
-      .min(0)
-      .max(10000)
-      .default(TAX_FREE ? 0 : 1400),
+    tax_rate: z.number().int().min(0).max(10000).default(1400),
     discount: money.default(0),
     notes: optionalText(2000),
     lines: z

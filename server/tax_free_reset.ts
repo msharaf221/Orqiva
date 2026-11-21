@@ -18,7 +18,8 @@
  */
 
 import { all, one, run, transaction, id, now } from './db';
-import { TAX_FREE, TAX_FREE_MIGRATION } from '../src/config';
+import { TAX_FREE_MIGRATION } from '../src/config';
+import { taxPolicy } from './tax_policy';
 import { closedThrough, reverseBySource } from './ledger';
 import { postDocumentLedger } from './posting';
 import { postPayrollRunLedger } from './payroll';
@@ -68,7 +69,7 @@ export function runTaxFreeReset(): TaxFreeResetReport {
     errors: [],
   };
 
-  if (!TAX_FREE || alreadyApplied()) {
+  if (taxPolicy().vat || alreadyApplied()) {
     report.skipped = true;
     return report;
   }

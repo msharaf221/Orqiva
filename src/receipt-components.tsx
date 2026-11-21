@@ -2,7 +2,7 @@ import { cur } from './currency';
 import { useEffect, useRef, useState } from 'react';
 import JsBarcode from 'jsbarcode';
 import QRCode from 'qrcode';
-import { TAX_FREE } from './config';
+import { taxFree } from './config';
 
 export interface InvoiceQrPayload {
   sellerName: string;
@@ -76,7 +76,7 @@ export function generateInvoiceQrData(data: InvoiceQrPayload): string {
     `فاتورة: ${data.invoiceNumber}`,
     `التاريخ: ${data.invoiceDate}`,
     `الإجمالي: ${totalFormatted} ${cur()}`,
-    ...(TAX_FREE ? [] : [`الضريبة: ${taxFormatted} ${cur()}`]),
+    ...(taxFree() ? [] : [`الضريبة: ${taxFormatted} ${cur()}`]),
     'نظام أوركيفا Orqiva ERP',
   ].join('\n');
 }
@@ -365,15 +365,15 @@ export function ThermalReceiptPaper({
       <div className="receipt-header">
         <div className="receipt-brand-badge">ORQIVA POS</div>
         <h3 className="receipt-company-title">{companyName}</h3>
-        {!TAX_FREE && taxNumber && (
+        {!taxFree() && taxNumber && (
           <div className="receipt-tax-badge">
             <span>الرقم الضريبي: {taxNumber}</span>
           </div>
         )}
         <p className="receipt-branch-name">فرع: {branchName}</p>
         <div className="receipt-title-box">
-          <span>{TAX_FREE ? 'فاتورة بيع مبسطة' : 'فاتورة ضريبية مبسطة'}</span>
-          <small>{TAX_FREE ? 'SIMPLIFIED INVOICE' : 'SIMPLIFIED TAX INVOICE'}</small>
+          <span>{taxFree() ? 'فاتورة بيع مبسطة' : 'فاتورة ضريبية مبسطة'}</span>
+          <small>{taxFree() ? 'SIMPLIFIED INVOICE' : 'SIMPLIFIED TAX INVOICE'}</small>
         </div>
         <div className="receipt-cut-line" />
         <div className="receipt-meta-grid">
@@ -436,7 +436,7 @@ export function ThermalReceiptPaper({
       {/* Financial Totals */}
       <div className="receipt-totals">
         <div className="receipt-row">
-          <span>{TAX_FREE ? 'المجموع الفرعي:' : 'المجموع الفرعي (قبل الضريبة):'}</span>
+          <span>{taxFree() ? 'المجموع الفرعي:' : 'المجموع الفرعي (قبل الضريبة):'}</span>
           <span className="num">
             {formatMoney(result.document.subtotal)} {cur()}
           </span>
@@ -451,7 +451,7 @@ export function ThermalReceiptPaper({
           </div>
         )}
 
-        {!TAX_FREE && (
+        {!taxFree() && (
           <div className="receipt-row">
             <span>
               ضريبة القيمة المضافة ({((result.document.tax_rate ?? 1400) / 100).toFixed(0)}%):

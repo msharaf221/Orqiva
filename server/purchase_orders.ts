@@ -10,7 +10,7 @@ import { nextNumber, saveDocument, documentDetail } from './service';
 import { purchaseOrderSchema, landedCostSchema } from './validation';
 import { getBranchCost, upsertBranchCost, insertCostMovement } from './cost';
 import { postEntry, type LedgerLineInput } from './ledger';
-import { calculateTax, effectiveTaxRate } from '../src/config';
+import { calculateTax, effectiveTaxRate } from './tax_policy';
 import type {
   PurchaseOrder,
   PurchaseOrderLine,

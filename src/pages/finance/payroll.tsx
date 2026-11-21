@@ -20,7 +20,7 @@ import {
 } from '../../lib';
 import type { Employee, PayrollRun, Branch } from '../../types';
 import { useBranch } from '../../branch';
-import { TAX_FREE } from '../../config';
+import { payrollTaxFree } from '../../config';
 
 export function CreateEmployeeModal({
   branches,
@@ -38,7 +38,7 @@ export function CreateEmployeeModal({
     const f = new FormData(e.currentTarget);
     const basic = toCents(f.get('basic_salary'));
     const variable = toCents(f.get('variable_salary') || '0');
-    const insured = TAX_FREE
+    const insured = payrollTaxFree()
       ? 0
       : f.get('insured_salary')
         ? toCents(f.get('insured_salary'))
@@ -56,7 +56,7 @@ export function CreateEmployeeModal({
       basic_salary: basic,
       variable_salary: variable,
       insured_salary: insured,
-      insurance_number: TAX_FREE
+      insurance_number: payrollTaxFree()
         ? undefined
         : String(f.get('insurance_number') || '').trim() || undefined,
       hire_date: String(f.get('hire_date') || today()),
@@ -74,7 +74,7 @@ export function CreateEmployeeModal({
       showMaximize
       title="إضافة موظف جديد وضبط الراتب"
       description={
-        TAX_FREE
+        payrollTaxFree()
           ? 'تسجيل بيانات الموظف، الراتب الأساسي والمتغير، وبيانات التعيين.'
           : 'تسجيل بيانات الموظف، الراتب الأساسي والمتغير، والأجر التأميني لحساب التأمينات الاجتماعية.'
       }
@@ -121,7 +121,7 @@ export function CreateEmployeeModal({
                 <option value="CONTRACT">عقد محدد المدة</option>
               </select>
             </Field>
-            {!TAX_FREE && (
+            {!payrollTaxFree() && (
               <Field label="رقم التأمين الاجتماعي">
                 <input name="insurance_number" placeholder="رقم المنشأة / التأمين..." />
               </Field>
@@ -145,7 +145,7 @@ export function CreateEmployeeModal({
             <Field label={`الراتب المتغير / البدلات (${cur()})`}>
               <input name="variable_salary" type="number" step="0.01" min="0" defaultValue="0" />
             </Field>
-            {!TAX_FREE && (
+            {!payrollTaxFree() && (
               <Field label="الأجر التأميني (للتأمينات 11% / 18.75%)">
                 <input
                   name="insured_salary"
@@ -270,7 +270,7 @@ export function CreatePayrollRunModal({
         await api('/payroll-runs', 'POST', payload);
         onSaved();
       },
-      TAX_FREE
+      payrollTaxFree()
         ? 'تم احتساب مسير الرواتب بنجاح'
         : 'تم احتساب مسير الرواتب والضرائب والتأمينات وفق القوانين المصرية بنجاح',
     );
@@ -282,7 +282,7 @@ export function CreatePayrollRunModal({
       showMaximize
       title="إنشاء مسير رواتب شهري"
       description={
-        TAX_FREE
+        payrollTaxFree()
           ? 'يقوم النظام باحتساب إجمالي الأجور واستقطاع السلف وخصومات الحضور تلقائياً.'
           : 'يقوم النظام باحتساب التأمينات الاجتماعية (11% موظف، 18.75% صاحب عمل)، صندوق الشهداء (0.05%)، والشرائح الضريبية التصاعدية واستقطاع السلف.'
       }
@@ -353,7 +353,7 @@ export function PayrollRunDetailsModal({
       showMaximize
       title={`مسير الرواتب لشهر: ${pr?.month || '—'}`}
       description={
-        TAX_FREE
+        payrollTaxFree()
           ? 'مفردات المرتبات الشاملة واستقطاعات السلف وخصومات الحضور لكل موظف.'
           : 'مفردات المرتبات الشاملة، حصص التأمينات الاجتماعية والشرائح الضريبية لكل موظف.'
       }
@@ -387,7 +387,7 @@ export function PayrollRunDetailsModal({
                 tone="green"
                 foot={`استقطاع سلف: ${money(pr.total_advances)} ${cur()}`}
               />
-              {!TAX_FREE && (
+              {!payrollTaxFree() && (
                 <>
                   <Stat
                     label="التأمينات (موظف + صاحب عمل)"
@@ -418,7 +418,7 @@ export function PayrollRunDetailsModal({
                     <th>الأجر الأساسي</th>
                     <th>المتغير</th>
                     <th>الإجمالي</th>
-                    {!TAX_FREE && (
+                    {!payrollTaxFree() && (
                       <>
                         <th>تأمينات (11%)</th>
                         <th>تأمينات شركة (18.75%)</th>
@@ -445,7 +445,7 @@ export function PayrollRunDetailsModal({
                       <td>
                         <strong>{money(s.gross_salary)}</strong>
                       </td>
-                      {!TAX_FREE && (
+                      {!payrollTaxFree() && (
                         <>
                           <td style={{ color: '#dc2626' }}>
                             -{money(s.social_insurance_employee)}
@@ -611,7 +611,7 @@ export function PayrollView() {
             <Empty
               title="لا توجد مسيرات رواتب منشأة"
               description={
-                TAX_FREE
+                payrollTaxFree()
                   ? 'قم بإنشاء مسير رواتب شهري لاحتساب المستحقات والاستقطاعات آلياً.'
                   : 'قم بإنشاء مسير رواتب شهري لاحتساب المستحقات والاستقطاعات والضرائب آلياً.'
               }
@@ -625,7 +625,7 @@ export function PayrollView() {
                     <th>الشهر</th>
                     <th>الفرع</th>
                     <th>إجمالي الرواتب</th>
-                    {!TAX_FREE && (
+                    {!payrollTaxFree() && (
                       <>
                         <th>تأمينات الموظفين (11%)</th>
                         <th>تأمينات الشركة (18.75%)</th>
@@ -647,7 +647,7 @@ export function PayrollView() {
                       <td>
                         {money(r.total_gross)} {cur()}
                       </td>
-                      {!TAX_FREE && (
+                      {!payrollTaxFree() && (
                         <>
                           <td>
                             {money(r.total_social_insurance_employee)} {cur()}
@@ -708,7 +708,7 @@ export function PayrollView() {
                     <th>المسمى الوظيفي والفرع</th>
                     <th>الراتب الأساسي</th>
                     <th>المتغير</th>
-                    {!TAX_FREE && <th>الأجر التأميني</th>}
+                    {!payrollTaxFree() && <th>الأجر التأميني</th>}
                     <th>تاريخ التعيين</th>
                     <th>الحالة</th>
                     <th>الإجراءات</th>
@@ -740,7 +740,7 @@ export function PayrollView() {
                       <td>
                         {money(e.variable_salary)} {cur()}
                       </td>
-                      {!TAX_FREE && (
+                      {!payrollTaxFree() && (
                         <td>
                           {money(e.insured_salary)} {cur()}
                         </td>
