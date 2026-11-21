@@ -21,6 +21,7 @@
     "test:e2e:server": "tsx tests/e2e/prepare.ts && tsx server/index.ts",
     "backup": "tsx server/backup.ts",
     "attendance:sync": "tsx scripts/attendance-sync.ts",
+    "backup:decrypt": "tsx scripts/backup-decrypt.ts",
     "license": "tsx scripts/license.ts",
     "admin:reset": "tsx server/reset-password.ts"
   },
