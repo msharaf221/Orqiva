@@ -34,7 +34,7 @@ jobs:
             node scripts/stage-installer.mjs --open
           }
       - name: Build installer
-        run: npx electron-builder --win --config packaging/electron-builder.json
+        run: npx electron-builder --win --publish never --config packaging/electron-builder.json
       - name: Smoke test (silent install, launch, health)
         shell: pwsh
         run: |

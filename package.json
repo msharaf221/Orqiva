@@ -25,8 +25,8 @@
     "license": "tsx scripts/license.ts",
     "admin:reset": "tsx server/reset-password.ts",
     "stage:installer": "node scripts/stage-installer.mjs",
-    "dist:win": "npm run build && node scripts/stage-installer.mjs && electron-builder --win --config packaging/electron-builder.json",
-    "dist:win:open": "npm run build && node scripts/stage-installer.mjs --open && electron-builder --win --config packaging/electron-builder.json",
+    "dist:win": "npm run build && node scripts/stage-installer.mjs && electron-builder --win --publish never --config packaging/electron-builder.json",
+    "dist:win:open": "npm run build && node scripts/stage-installer.mjs --open && electron-builder --win --publish never --config packaging/electron-builder.json",
     "desktop": "npm run build && node scripts/stage-installer.mjs --open && electron build/app/main.cjs"
   },
   "dependencies": {
