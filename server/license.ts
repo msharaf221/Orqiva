@@ -37,8 +37,24 @@ export interface LicenseStatus {
   expires?: string | null;
 }
 
+/**
+ * Release installers are built with the vendor public key compiled into the server bundle
+ * (esbuild `define`). In such a build the key can't be removed or swapped from outside:
+ * the environment variable and any loose key file are ignored, so deleting a file never
+ * turns the app into an open install. Dev, tests and the explicit open test build do not
+ * define it and keep reading ORQIVA_LICENSE_PUBLIC_KEY.
+ */
+declare const __ORQIVA_RELEASE_KEY__: string | undefined;
+
+function configuredKey(): string {
+  const baked = typeof __ORQIVA_RELEASE_KEY__ === 'string' ? __ORQIVA_RELEASE_KEY__ : undefined;
+  // A release build always enforces: an empty baked key is treated as an unusable key.
+  if (baked !== undefined) return baked.trim() || 'missing-release-key';
+  return (process.env.ORQIVA_LICENSE_PUBLIC_KEY ?? '').trim();
+}
+
 function publicKey(): KeyObject | null {
-  const raw = (process.env.ORQIVA_LICENSE_PUBLIC_KEY ?? '').trim();
+  const raw = configuredKey();
   if (!raw) return null;
   try {
     if (raw.includes('BEGIN')) return createPublicKey(raw.replace(/\\n/g, '\n'));
@@ -79,8 +95,7 @@ export function installedKey(): string | null {
 
 export function licenseStatus(at: Date = new Date()): LicenseStatus {
   const pub = publicKey();
-  if (!(process.env.ORQIVA_LICENSE_PUBLIC_KEY ?? '').trim())
-    return { enforced: false, state: 'open' };
+  if (!configuredKey()) return { enforced: false, state: 'open' };
   if (!pub) return { enforced: true, state: 'invalid' };
   const key = installedKey();
   if (!key) return { enforced: true, state: 'missing' };

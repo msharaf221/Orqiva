@@ -185,6 +185,31 @@ describe('License keys and add-on gating', () => {
     await admin.get('/api/company').set(header).expect(402);
   });
 
+  it('a release build with a compiled-in key ignores the environment and stays locked', () => {
+    const g = globalThis as { __ORQIVA_RELEASE_KEY__?: string };
+    g.__ORQIVA_RELEASE_KEY__ = pubB64;
+    try {
+      // Removing or blanking the env var (the old "delete the key file" bypass) changes nothing.
+      delete process.env.ORQIVA_LICENSE_PUBLIC_KEY;
+      expect(licenseStatus()).toMatchObject({ enforced: true, state: 'missing' });
+      process.env.ORQIVA_LICENSE_PUBLIC_KEY = '';
+      expect(licenseStatus().enforced).toBe(true);
+      // Pointing the env var at another key does not swap the vendor key either.
+      process.env.ORQIVA_LICENSE_PUBLIC_KEY = other.publicKey
+        .export({ type: 'spki', format: 'der' })
+        .toString('base64');
+      process.env.ORQIVA_LICENSE = issue();
+      expect(licenseStatus().state).toBe('valid');
+      process.env.ORQIVA_LICENSE = issue({}, other.privateKey);
+      expect(licenseStatus().state).toBe('invalid');
+      // An empty compiled-in key is still enforced (never open).
+      g.__ORQIVA_RELEASE_KEY__ = '';
+      expect(licenseStatus().enforced).toBe(true);
+    } finally {
+      delete g.__ORQIVA_RELEASE_KEY__;
+    }
+  });
+
   it('only admins with user management can read or install a license', async () => {
     const staff = await signIn('staff@test.local');
     await staff.get('/api/license').set(header).expect(403);
