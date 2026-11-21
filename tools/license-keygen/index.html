@@ -42,15 +42,13 @@
     <input type="text" id="customer" placeholder="مثال: شركة النور" autocomplete="off">
 
     <label>الإضافات</label>
-    <div class="row">
-      <label class="chk"><input type="checkbox" class="addon" value="crm"> CRM</label>
-      <label class="chk"><input type="checkbox" class="addon" value="loyalty"> نقاط الولاء</label>
-      <label class="chk"><input type="checkbox" class="addon" value="backup"> نسخ احتياطي</label>
+    <div class="row" id="addons">
+      <label class="chk"><input type="checkbox" class="addon" value="crm"> إدارة العملاء والصفقات (CRM)</label>
+      <label class="chk"><input type="checkbox" class="addon" value="loyalty"> نقاط ولاء العملاء</label>
+      <label class="chk"><input type="checkbox" class="addon" value="backup"> النسخ الاحتياطي المجدول والسحابي</label>
       <label class="chk"><input type="checkbox" id="all"> كل الإضافات (*)</label>
     </div>
-    <div class="hint">النسخ الاحتياطي شغال دايمًا حتى من غير ترخيص. النظام الأساسي كله شغال من غير مفتاح.</div>
-    <label for="extra">إضافات أخرى (اختياري، مفصولة بفاصلة)</label>
-    <input type="text" id="extra" class="ltr" placeholder="addon1,addon2" autocomplete="off">
+    <div class="hint">دي كل الإضافات الموجودة في النظام حاليًا. النسخ الاحتياطي شغال دايمًا حتى من غير ترخيص. "كل الإضافات" بتشمل أي إضافة هتتضاف مستقبلًا.</div>
 
     <label for="expires">تاريخ الانتهاء (اختياري)</label>
     <input type="date" id="expires" class="ltr">
@@ -126,7 +124,6 @@ $('f').addEventListener('submit', async (ev) => {
     const customer = $('customer').value.trim();
     if (!customer) throw new Error('اكتب اسم العميل');
     let addons = $('all').checked ? ['*'] : [...document.querySelectorAll('.addon:checked')].map((c) => c.value);
-    addons = addons.concat($('extra').value.split(',').map((s) => s.trim()).filter(Boolean));
     addons = [...new Set(addons)];
     const exp = $('expires').value;
     if (exp && !/^\d{4}-\d{2}-\d{2}$/.test(exp)) throw new Error('تاريخ غير صالح');
