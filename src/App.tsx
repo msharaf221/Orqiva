@@ -175,7 +175,7 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
                 <span className="preview-metric-label">مبيعات اليوم المحققة</span>
                 <div className="preview-metric-val">
                   <span className="num">٢٨,٤٥٠.٠٠</span>
-                  <span className="currency">ر.س</span>
+                  <span className="currency">ج.م</span>
                   <span className="preview-badge positive">
                     <TrendingUp size={12} /> +١٨.٤٪
                   </span>
@@ -206,7 +206,7 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
                 </div>
                 <div className="ledger-item-amount positive">
                   <span className="num">+٤,٢٥٠.٠٠</span>
-                  <small>ر.س</small>
+                  <small>ج.م</small>
                 </div>
               </div>
               <div className="preview-ledger-item">
