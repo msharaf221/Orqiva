@@ -198,11 +198,9 @@ export function createQuotation(
         li.notes || null,
       );
     }
+    if (actor) audit(actor, 'إنشاء عرض سعر', 'QUOTATION', qId, qNumber);
   });
 
-  if (actor) {
-    audit(actor, 'إنشاء عرض سعر', 'QUOTATION', qId, qNumber);
-  }
   return getQuotation(qId)!;
 }
 
@@ -216,10 +214,10 @@ export function confirmQuotation(
     throw new AppError(400, 'لا يمكن تأكيد عرض السعر إلا إذا كان مسودة');
   }
 
-  run("UPDATE quotations SET status='CONFIRMED', updated_at=? WHERE id=?", now(), quotationId);
-  if (actor) {
-    audit(actor, 'تأكيد عرض سعر', 'QUOTATION', quotationId, q.number);
-  }
+  transaction(() => {
+    run("UPDATE quotations SET status='CONFIRMED', updated_at=? WHERE id=?", now(), quotationId);
+    if (actor) audit(actor, 'تأكيد عرض سعر', 'QUOTATION', quotationId, q.number);
+  });
   return getQuotation(quotationId)!;
 }
 
@@ -233,10 +231,10 @@ export function rejectQuotation(
     throw new AppError(400, 'لا يمكن رفض عرض تم تحويله بالفعل إلى فاتورة');
   }
 
-  run("UPDATE quotations SET status='REJECTED', updated_at=? WHERE id=?", now(), quotationId);
-  if (actor) {
-    audit(actor, 'رفض عرض سعر', 'QUOTATION', quotationId, q.number);
-  }
+  transaction(() => {
+    run("UPDATE quotations SET status='REJECTED', updated_at=? WHERE id=?", now(), quotationId);
+    if (actor) audit(actor, 'رفض عرض سعر', 'QUOTATION', quotationId, q.number);
+  });
   return getQuotation(quotationId)!;
 }
 

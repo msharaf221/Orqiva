@@ -118,3 +118,10 @@ function replay<T>(stored: StoredKey, requestHash: string): IdempotentResult<T> 
     replayed: true,
   };
 }
+
+/** Deletes stored keys older than `days`. Retries never come that late, so the table stays small. */
+export function pruneIdempotencyKeys(days = 30, at: Date = new Date()): number {
+  const cutoff = new Date(at.getTime() - days * 86_400_000).toISOString();
+  const r = run('DELETE FROM idempotency_keys WHERE created_at < ?', cutoff);
+  return Number((r as { changes?: number | bigint } | undefined)?.changes ?? 0);
+}

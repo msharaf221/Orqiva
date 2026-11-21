@@ -1,3 +1,4 @@
+import { idempotentApi } from '../../idempotent-api';
 import { cur } from '../../currency';
 import { useState, type FormEvent } from 'react';
 import { Users, Plus, DollarSign, FileText, CreditCard, Eye, ShieldCheck } from 'lucide-react';
@@ -342,7 +343,7 @@ export function PayrollRunDetailsModal({
     if (!confirm('هل أنت متأكد من اعتماد مسير الرواتب وترحيل القيود المحاسبية لدفتر الأستاذ؟'))
       return;
     void act(async () => {
-      await api(`/payroll-runs/${runId}/confirm`, 'POST', {});
+      await idempotentApi(`payroll.confirm:${runId}`, `/payroll-runs/${runId}/confirm`, {});
       onConfirmed();
     }, 'تم ترحيل مسير الرواتب لدفتر الأستاذ العام بنجاح');
   };

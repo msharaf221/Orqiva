@@ -38,6 +38,10 @@ ownersRouter.put('/company', requirePermission('branches:manage'), (req, res) =>
   const eta = vat && (c.eta_enabled ?? before.eta);
   const payrollTax = c.payroll_tax_enabled ?? before.payrollTax;
   const inclusive = c.prices_include_tax;
+  // Turning VAT off must not erase the company's tax identity (needed again when VAT is back on).
+  const ident = one<{ tax_number: string; tax_registration_number: string; activity_code: string }>(
+    'SELECT tax_number, tax_registration_number, activity_code FROM company WHERE id=1',
+  );
   transaction(() => {
     run(
       'UPDATE company SET name=?,email=?,phone=?,address=?,tax_number=?,tax_registration_number=?,activity_code=?,tax_rate=?,invoice_note=?,currency=COALESCE(?,currency),tax_mode=?,eta_enabled=?,payroll_tax_enabled=?,prices_include_tax=COALESCE(?,prices_include_tax),eta_environment=COALESCE(?,eta_environment),invoice_settings=COALESCE(?,invoice_settings) WHERE id=1',
@@ -45,9 +49,11 @@ ownersRouter.put('/company', requirePermission('branches:manage'), (req, res) =>
       c.email,
       c.phone,
       c.address,
-      vat ? (c.tax_number ?? '') : '',
-      vat ? c.tax_registration_number || '' : '',
-      vat ? c.activity_code || '' : '',
+      vat ? c.tax_number : c.tax_number || (ident?.tax_number ?? ''),
+      vat
+        ? c.tax_registration_number
+        : c.tax_registration_number || (ident?.tax_registration_number ?? ''),
+      vat ? c.activity_code : c.activity_code || (ident?.activity_code ?? ''),
       vat ? (c.tax_rate ?? 1400) : 0,
       c.invoice_note,
       c.currency ?? null,

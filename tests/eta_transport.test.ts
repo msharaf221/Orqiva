@@ -143,4 +143,35 @@ describe('ETA real transport (mocked HTTP)', () => {
     await processPendingSubmissionsAsync();
     expect(calls[0].url).toBe('https://id.eta.gov.eg/connect/token');
   });
+
+  it('never sends one invoice twice when runs overlap', async () => {
+    const uuid = one<{ uuid: string }>('SELECT uuid FROM e_invoice_submissions')!.uuid;
+    submitBody = { acceptedDocuments: [{ uuid, longId: 'LONGX' }] };
+    const [a, b] = await Promise.all([
+      processPendingSubmissionsAsync(),
+      processPendingSubmissionsAsync(),
+    ]);
+    expect(a.processed + b.processed).toBe(1);
+    expect(calls.filter((c) => c.url.includes('documentsubmissions'))).toHaveLength(1);
+    expect(submission().status).toBe('VALID');
+  });
+
+  it('does not downgrade an accepted invoice on a late failure', async () => {
+    setEtaHttp(async (url) => {
+      if (url.endsWith('/connect/token'))
+        return { status: 200, text: async () => JSON.stringify({ access_token: 't' }) };
+      // Another run accepted the invoice while this request was in flight.
+      run("UPDATE e_invoice_submissions SET status='VALID' WHERE document_id=?", docId);
+      return { status: 400, text: async () => '{}' };
+    });
+    await processPendingSubmissionsAsync();
+    expect(submission().status).toBe('VALID');
+  });
+
+  it('marks a duplicate rejection as needing a manual check, not a blind retry', async () => {
+    submitBody = { rejectedDocuments: [{ error: { code: 'Duplicate', message: 'duplicated' } }] };
+    await processPendingSubmissionsAsync();
+    expect(submission().status).toBe('FAILED');
+    expect(submission().last_error).toContain('راجع حالتها');
+  });
 });
