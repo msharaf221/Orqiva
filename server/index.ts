@@ -2,6 +2,8 @@ import { app } from './app';
 import { db, one } from './db';
 import { seed } from './seed';
 import { processPendingSubmissionsAsync } from './eta';
+import { runScheduledBackup } from './modules/backup/service';
+import { isAddonEnabled } from './addons/registry';
 
 if (process.env.NODE_ENV !== 'test' && !one('SELECT id FROM users LIMIT 1')) {
   await seed(false);
@@ -29,10 +31,23 @@ if (process.env.NODE_ENV !== 'test') {
   etaTimer.unref();
 }
 
+// Backup add-on: take a daily copy when the add-on is enabled (checked hourly).
+let backupTimer: NodeJS.Timeout | undefined;
+if (process.env.NODE_ENV !== 'test') {
+  const tick = () => {
+    if (!isAddonEnabled('backup')) return;
+    runScheduledBackup().catch((error) => console.error('Backup worker error', error));
+  };
+  setTimeout(tick, 60_000).unref();
+  backupTimer = setInterval(tick, 3_600_000);
+  backupTimer.unref();
+}
+
 for (const signal of ['SIGTERM', 'SIGINT'])
   process.on(signal, () =>
     server.close(() => {
       if (etaTimer) clearInterval(etaTimer);
+      if (backupTimer) clearInterval(backupTimer);
       db.close();
       process.exit(0);
     }),

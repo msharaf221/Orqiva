@@ -16,6 +16,7 @@ import {
   ReceiptText,
   Palette,
   KeyRound,
+  DatabaseBackup,
 } from 'lucide-react';
 import {
   api,
@@ -42,6 +43,8 @@ import { InvoiceCustomizer } from './invoice-customizer';
 export function SettingsPage() {
   const { user } = useSession();
   const [tab, setTab] = useState('company');
+  const addonList = useData<{ id: string; enabled: boolean }[]>('/addons');
+  const backupOn = !!addonList.data?.find((a) => a.id === 'backup')?.enabled;
   return (
     <>
       <PageHeader
@@ -92,6 +95,15 @@ export function SettingsPage() {
               </div>
             </button>
           )}
+          {can(user, 'users:manage') && backupOn && (
+            <button onClick={() => setTab('backup')} className={tab === 'backup' ? 'active' : ''}>
+              <DatabaseBackup size={19} />
+              <div>
+                <strong>النسخ الاحتياطي</strong>
+                <small>نسخ يومية ومحلية وسحابية</small>
+              </div>
+            </button>
+          )}
           {etaEnabled() && can(user, 'eta:view') && (
             <button
               onClick={() => setTab('einvoice')}
@@ -138,6 +150,8 @@ export function SettingsPage() {
             <RolesSettings />
           ) : tab === 'license' ? (
             <LicenseSettings />
+          ) : tab === 'backup' ? (
+            <BackupSettings />
           ) : tab === 'einvoice' ? (
             <EInvoicePanel />
           ) : (
@@ -425,6 +439,59 @@ function LicenseSettings() {
         )}
       </div>
     </form>
+  );
+}
+
+interface BackupInfo {
+  backups: { name: string; size: number; created_at: string }[];
+  cloud: { configured: boolean; missing_passphrase: boolean };
+  directory: string;
+}
+function BackupSettings() {
+  const data = useData<BackupInfo>('/backup');
+  const { busy, act } = useAction();
+  const run = () =>
+    void act(async () => {
+      const r = await api<{ cloud: string; cloud_error?: string }>('/backup/run', 'POST', {});
+      data.reload();
+      if (r.cloud === 'failed')
+        throw new Error(`تمت النسخة المحلية، وفشل الرفع السحابي: ${r.cloud_error}`);
+    }, 'تم إنشاء نسخة احتياطية');
+  const info = data.data;
+  return (
+    <div className="card settings-card">
+      <div className="card-heading">
+        <div>
+          <h2>النسخ الاحتياطي</h2>
+          <p>
+            نسخة تلقائية كل 24 ساعة في: <bdi dir="ltr">{info?.directory}</bdi>
+          </p>
+        </div>
+        <DatabaseBackup size={21} />
+      </div>
+      <div className="form-card-body form-grid">
+        <p>
+          النسخ السحابي:{' '}
+          {info?.cloud.configured
+            ? 'مفعّل (نسخة مشفّرة تُرفع بعد كل نسخة)'
+            : info?.cloud.missing_passphrase
+              ? 'غير مفعّل: ناقص كلمة سر التشفير في الإعدادات'
+              : 'غير مفعّل (اختياري)'}
+        </p>
+        <button className="btn btn-primary" disabled={busy} onClick={run}>
+          <Save size={16} /> نسخة الآن
+        </button>
+        <ul>
+          {(info?.backups || []).map((b) => (
+            <li key={b.name}>
+              <a href={`/api/backup/download/${b.name}`}>{b.name}</a> ·{' '}
+              {(b.size / 1024 / 1024).toFixed(1)} MB ·{' '}
+              {new Date(b.created_at).toLocaleString('ar-EG')}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
   );
 }
 
