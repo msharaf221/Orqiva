@@ -27,7 +27,8 @@ import { ledgerRouter } from './routes/ledger';
 import { treasuryRouter } from './routes/treasury';
 import { payrollRouter } from './routes/payroll';
 import { hrRouter } from './routes/hr';
-import { crmRouter } from './modules/crm/routes';
+import { registerBuiltinAddons } from './addons';
+import { mountAddons } from './addons/registry';
 import {
   attendanceDevicesRouter,
   attendanceDevicesPublicRouter,
@@ -158,7 +159,9 @@ app.use('/api/treasury', treasuryRouter);
 app.use('/api', payrollRouter);
 app.use('/api/hr', hrRouter);
 app.use('/api/attendance-devices', attendanceDevicesRouter);
-app.use('/api/crm', crmRouter);
+// Optional add-ons (CRM, ...) are mounted by the add-on kernel.
+registerBuiltinAddons();
+mountAddons(app);
 
 // API 404 handler
 app.use('/api', (_req, res) => res.status(404).json({ error: 'المسار غير موجود' }));

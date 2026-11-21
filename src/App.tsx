@@ -378,6 +378,8 @@ type NavItem = {
   icon: typeof Package;
   adminOnly?: boolean;
   permission?: string;
+  /** Hidden when this add-on is not enabled on the installation. */
+  addon?: string;
 };
 const navigation: { label: string; items: NavItem[] }[] = [
   {
@@ -411,7 +413,13 @@ const navigation: { label: string; items: NavItem[] }[] = [
         icon: ArrowRightLeft,
         permission: 'transfers:manage',
       },
-      { to: '/crm', label: 'مسار الصفقات (CRM)', icon: Kanban, permission: 'crm:view' },
+      {
+        to: '/crm',
+        label: 'مسار الصفقات (CRM)',
+        icon: Kanban,
+        permission: 'crm:view',
+        addon: 'crm',
+      },
       { to: '/hr', label: 'الموارد البشرية (HR)', icon: Briefcase, permission: 'hr:view' },
       {
         to: '/attendance-devices',
@@ -449,6 +457,9 @@ const navigation: { label: string; items: NavItem[] }[] = [
 function Layout() {
   const { user, company, logout } = useSession();
   const { branches, loading: branchesLoading } = useBranch();
+  const addons = useData<{ id: string; enabled: boolean }[]>('/addons');
+  const addonEnabled = (id: string) =>
+    !addons.data || addons.data.find((a) => a.id === id)?.enabled !== false;
   const [mobile, setMobile] = useState(false),
     [search, setSearch] = useState(false),
     [notifications, setNotifications] = useState(false),
@@ -498,6 +509,7 @@ function Layout() {
                 .filter((item) => {
                   if (item.adminOnly && user.role !== 'ADMIN') return false;
                   if (item.permission && !can(user, item.permission)) return false;
+                  if (item.addon && !addonEnabled(item.addon)) return false;
                   return true;
                 })
                 .map((item) => (
