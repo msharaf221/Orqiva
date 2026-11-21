@@ -147,7 +147,9 @@ async function main() {
     return;
   }
 
-  console.log('يرجى تحديد إجراء: --test لاختبار الشبكة أو --file=<مسار> للرفع. استخدم --help للمزيد.');
+  console.log(
+    'يرجى تحديد إجراء: --test لاختبار الشبكة أو --file=<مسار> للرفع. استخدم --help للمزيد.',
+  );
 }
 
 void main();
