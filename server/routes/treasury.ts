@@ -125,7 +125,7 @@ treasuryRouter.post('/bank-statements', canManageTreasury, (req, res) => {
     ),
   });
   const parsed = schema.parse(req.body);
-  res.status(201).json(createBankStatement(parsed, scopeFor(req.user)));
+  res.status(201).json(createBankStatement(parsed, scopeFor(req.user), req.user));
 });
 
 treasuryRouter.get('/bank-statements/:id', canManageTreasury, (req, res) => {
@@ -137,7 +137,7 @@ treasuryRouter.get('/bank-statements/:id', canManageTreasury, (req, res) => {
 treasuryRouter.post('/bank-statements/lines/:lineId/match', canManageTreasury, (req, res) => {
   const { payment_id } = req.body;
   if (!payment_id) throw new AppError(400, 'معرف حركة السداد مطلوب');
-  matchStatementLine(String(req.params.lineId), payment_id, scopeFor(req.user));
+  matchStatementLine(String(req.params.lineId), payment_id, scopeFor(req.user), req.user);
   res.json({ ok: true });
 });
 
@@ -162,5 +162,5 @@ treasuryRouter.post('/cost-centers', canManageTreasury, (req, res) => {
     notes: z.string().optional(),
   });
   const parsed = schema.parse(req.body);
-  res.status(201).json(createCostCenter(parsed));
+  res.status(201).json(createCostCenter(parsed, req.user));
 });

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { scopeFor } from '../scope';
 import { requirePermission } from '../rbac';
 import { visibleTransfer } from '../middleware';
+import { idempotencyKey, sendIdempotent, withIdempotency } from '../idempotency';
 import {
   listTransfers,
   createTransfer,
@@ -44,7 +45,17 @@ transfersRouter.post('/:id/ship', (req, res) =>
 );
 
 transfersRouter.post('/:id/receive', (req, res) =>
-  res.json(receiveTransfer(String(req.params.id), req.body, req.user)),
+  sendIdempotent(
+    res,
+    withIdempotency(
+      req.user,
+      'transfers.receive',
+      idempotencyKey(req),
+      { id: req.params.id, ...req.body },
+      200,
+      () => receiveTransfer(String(req.params.id), req.body, req.user),
+    ),
+  ),
 );
 
 transfersRouter.post('/:id/cancel', (req, res) =>

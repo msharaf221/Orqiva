@@ -5,6 +5,7 @@ import { audit, requireRow } from '../service';
 import { admin } from '../middleware';
 import { requirePermission } from '../rbac';
 import { scopeFor, scopeSql } from '../scope';
+import { idempotencyKey, sendIdempotent, withIdempotency } from '../idempotency';
 import { listProducts, createProduct, updateProduct, adjustStock } from '../catalog';
 import { getStockValuation, getProductCostHistory } from '../cost';
 import { getProductBatches, getExpiryAlerts } from '../batches';
@@ -145,7 +146,12 @@ catalogRouter.post(
   '/stocktakes/:id/approve',
   requirePermission('inventory:stocktake_approve'),
   (req, res) => {
-    res.json(approveStocktake(String(req.params.id), req.user));
+    sendIdempotent(
+      res,
+      withIdempotency(req.user, 'stocktake.approve', idempotencyKey(req), req.params.id, 200, () =>
+        approveStocktake(String(req.params.id), req.user),
+      ),
+    );
   },
 );
 

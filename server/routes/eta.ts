@@ -47,5 +47,5 @@ etaRouter.post('/eta/process', requirePermission('eta:manage'), (req, res) => {
 
 /** Manual retry after a permanent failure. */
 etaRouter.post('/eta/submissions/:id/retry', requirePermission('eta:manage'), (req, res) => {
-  res.json(retrySubmission(String(req.params.id), scopeFor(req.user)));
+  res.json(retrySubmission(String(req.params.id), scopeFor(req.user), req.user));
 });

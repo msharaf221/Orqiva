@@ -17,7 +17,8 @@
 
 import { all, one, run, transaction, id, now } from './db';
 import { AppError } from './errors';
-import { inScope, scopeSql, type Scope } from './scope';
+import { audit } from './audit';
+import { inScope, scopeSql, type Actor, type Scope } from './scope';
 import { ETA_ENABLED } from '../src/config';
 
 /** ETA default document type names inside UBL 2.1. */
@@ -435,7 +436,11 @@ export function getSubmissionByDocument(
 }
 
 /** Retries a FAILED submission immediately (clears backoff). */
-export function retrySubmission(submissionId: string, scope?: Scope): EtaSubmission {
+export function retrySubmission(
+  submissionId: string,
+  scope?: Scope,
+  actor?: Pick<Actor, 'id' | 'name'>,
+): EtaSubmission {
   if (!ETA_ENABLED)
     throw new AppError(409, 'منظومة الفاتورة الإلكترونية معطّلة في وضع إلغاء الضرائب');
   const submission = one<EtaSubmission & { branch_id?: string }>(
@@ -458,5 +463,13 @@ export function retrySubmission(submissionId: string, scope?: Scope): EtaSubmiss
     now(),
     submissionId,
   );
+  if (actor)
+    audit(
+      actor,
+      'إعادة محاولة إرسال فاتورة إلكترونية',
+      'ETA_SUBMISSION',
+      submissionId,
+      submission.document_id,
+    );
   return one<EtaSubmission>('SELECT * FROM e_invoice_submissions WHERE id=?', submissionId)!;
 }

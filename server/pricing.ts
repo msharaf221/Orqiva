@@ -4,6 +4,8 @@
 
 import { all, one, run, transaction, id, now } from './db';
 import { AppError } from './errors';
+import { audit } from './audit';
+import type { Actor } from './scope';
 import { PriceList, PriceListItem } from '../src/types';
 
 export function listPriceLists(): PriceList[] {
@@ -29,13 +31,16 @@ export function getPriceList(id: string): (PriceList & { items: PriceListItem[] 
   return { ...pl, items };
 }
 
-export function createPriceList(data: {
-  name: string;
-  code: string;
-  discount_basis_pts?: number;
-  is_default?: boolean;
-  notes?: string;
-}): PriceList {
+export function createPriceList(
+  data: {
+    name: string;
+    code: string;
+    discount_basis_pts?: number;
+    is_default?: boolean;
+    notes?: string;
+  },
+  actor?: Pick<Actor, 'id' | 'name'>,
+): PriceList {
   const existing = one<{ id: string }>('SELECT id FROM price_lists WHERE code=?', data.code);
   if (existing) throw new AppError(400, 'كود قائمة الأسعار مستخدم بالفعل');
 
@@ -58,6 +63,7 @@ export function createPriceList(data: {
       data.notes || null,
       ts,
     );
+    if (actor) audit(actor, 'إنشاء قائمة أسعار', 'PRICE_LIST', plId, data.code);
   });
 
   return one<PriceList>('SELECT * FROM price_lists WHERE id=?', plId)!;
@@ -72,6 +78,7 @@ export function updatePriceList(
     is_default?: boolean;
     notes?: string;
   },
+  actor?: Pick<Actor, 'id' | 'name'>,
 ): PriceList {
   const current = one<PriceList>('SELECT * FROM price_lists WHERE id=?', id);
   if (!current) throw new AppError(404, 'قائمة الأسعار غير موجودة');
@@ -95,17 +102,21 @@ export function updatePriceList(
       data.notes !== undefined ? data.notes : null,
       id,
     );
+    if (actor) audit(actor, 'تعديل قائمة أسعار', 'PRICE_LIST', id, current.code);
   });
 
   return one<PriceList>('SELECT * FROM price_lists WHERE id=?', id)!;
 }
 
-export function setPriceListItem(data: {
-  price_list_id: string;
-  product_id: string;
-  min_quantity: number;
-  price: number;
-}): PriceListItem {
+export function setPriceListItem(
+  data: {
+    price_list_id: string;
+    product_id: string;
+    min_quantity: number;
+    price: number;
+  },
+  actor?: Pick<Actor, 'id' | 'name'>,
+): PriceListItem {
   const pl = one<PriceList>('SELECT id FROM price_lists WHERE id=?', data.price_list_id);
   if (!pl) throw new AppError(404, 'قائمة الأسعار غير موجودة');
 
@@ -121,6 +132,14 @@ export function setPriceListItem(data: {
 
   if (existing) {
     run('UPDATE price_list_items SET price=? WHERE id=?', data.price, existing.id);
+    if (actor)
+      audit(
+        actor,
+        'تعديل سعر بند قائمة أسعار',
+        'PRICE_LIST',
+        data.price_list_id,
+        `${data.product_id} → ${data.price}`,
+      );
     return one<PriceListItem>('SELECT * FROM price_list_items WHERE id=?', existing.id)!;
   }
 
@@ -136,20 +155,34 @@ export function setPriceListItem(data: {
     data.price,
     ts,
   );
+  if (actor)
+    audit(
+      actor,
+      'إضافة بند لقائمة أسعار',
+      'PRICE_LIST',
+      data.price_list_id,
+      `${data.product_id} → ${data.price}`,
+    );
 
   return one<PriceListItem>('SELECT * FROM price_list_items WHERE id=?', itemId)!;
 }
 
-export function deletePriceListItem(itemId: string): void {
+export function deletePriceListItem(itemId: string, actor?: Pick<Actor, 'id' | 'name'>): void {
   run('DELETE FROM price_list_items WHERE id=?', itemId);
+  if (actor) audit(actor, 'حذف بند قائمة أسعار', 'PRICE_LIST_ITEM', itemId);
 }
 
-export function assignPartyPriceList(partyId: string, priceListId: string | null): void {
+export function assignPartyPriceList(
+  partyId: string,
+  priceListId: string | null,
+  actor?: Pick<Actor, 'id' | 'name'>,
+): void {
   const party = one<{ id: string }>('SELECT id FROM parties WHERE id=?', partyId);
   if (!party) throw new AppError(404, 'العميل / الطرف غير موجود');
 
   if (!priceListId) {
     run('DELETE FROM party_price_tiers WHERE party_id=?', partyId);
+    if (actor) audit(actor, 'إزالة قائمة أسعار من طرف', 'PARTY', partyId);
     return;
   }
 
@@ -161,6 +194,7 @@ export function assignPartyPriceList(partyId: string, priceListId: string | null
     partyId,
     priceListId,
   );
+  if (actor) audit(actor, 'تعيين قائمة أسعار لطرف', 'PARTY', partyId, priceListId);
 }
 
 export function getPartyPriceList(partyId: string): PriceList | null {
