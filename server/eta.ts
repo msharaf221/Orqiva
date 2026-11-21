@@ -12,7 +12,6 @@
  *    checkout fully offline-capable while the compliance paperwork with the authority is
  *    still pending.
  *  - When `ETA_CLIENT_ID` / `ETA_CLIENT_SECRET` are set and the company environment is preprod or production, `processPendingSubmissionsAsync()` uses server/eta_client.ts (real HTTP transport).
- *    the real ETA endpoints. Only that function needs to change.
  */
 
 import { all, one, run, transaction, id, now } from './db';
