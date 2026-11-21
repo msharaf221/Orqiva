@@ -1,3 +1,4 @@
+import { cur } from '../../currency';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Search,
@@ -578,7 +579,7 @@ export function POS() {
             <div>
               <h4>الوردية ({shift.number}) تم تسليمها وبانتظار اعتماد محاسب الخزنة</h4>
               <p>
-                تم جرد وتسجيل النقدية بالدرج ({money(shift.cashier_declared_cash || 0)} ج.م)
+                تم جرد وتسجيل النقدية بالدرج ({money(shift.cashier_declared_cash || 0)} {cur()})
                 وإرسالها للمراجعة. لا يمكن تسجيل مبيعات جديدة على هذه الوردية حتى يتم اعتمادها
                 مالياً وترحيل القيود.
               </p>
@@ -626,7 +627,9 @@ export function POS() {
                     <div className="pos-cart-row-info">
                       <strong>{item.product.name}</strong>
                       <div className="pos-cart-row-meta">
-                        <span className="pos-cart-price">{money(item.unit_price)} ج.م</span>
+                        <span className="pos-cart-price">
+                          {money(item.unit_price)} {cur()}
+                        </span>
                         <span className="pos-cart-sku">{item.product.sku}</span>
                       </div>
                     </div>
@@ -659,7 +662,9 @@ export function POS() {
                     </div>
 
                     <div className="pos-cart-row-total">
-                      <b>{money(lineTotal)} ج.م</b>
+                      <b>
+                        {money(lineTotal)} {cur()}
+                      </b>
                       <button
                         type="button"
                         className="pos-cart-delete-btn"
@@ -679,7 +684,9 @@ export function POS() {
           <div className="pos-cart-summary">
             <div className="pos-summary-line">
               <span>المجموع الفرعي:</span>
-              <span>{money(subtotalCents)} ج.م</span>
+              <span>
+                {money(subtotalCents)} {cur()}
+              </span>
             </div>
 
             <div className="pos-summary-line discount">
@@ -687,20 +694,24 @@ export function POS() {
                 الخصم: {effectiveDiscountCents > 0 && <small>(تعديل)</small>}
               </span>
               <span>
-                {effectiveDiscountCents > 0 ? `-${money(effectiveDiscountCents)}` : '0.00'} ج.م
+                {effectiveDiscountCents > 0 ? `-${money(effectiveDiscountCents)}` : '0.00'} {cur()}
               </span>
             </div>
 
             {!TAX_FREE && (
               <div className="pos-summary-line">
                 <span>ضريبة القيمة المضافة ({taxRate / 100}%):</span>
-                <span>{money(taxCents)} ج.م</span>
+                <span>
+                  {money(taxCents)} {cur()}
+                </span>
               </div>
             )}
 
             <div className="pos-summary-total">
               <span>الإجمالي النهائي:</span>
-              <strong>{money(totalCents)} ج.م</strong>
+              <strong>
+                {money(totalCents)} {cur()}
+              </strong>
             </div>
 
             {/* Big Action Buttons */}
@@ -898,7 +909,9 @@ export function POS() {
                     </div>
 
                     <div className="pos-prod-footer">
-                      <strong className="pos-prod-price">{money(p.sale_price)} ج.م</strong>
+                      <strong className="pos-prod-price">
+                        {money(p.sale_price)} {cur()}
+                      </strong>
                       <span
                         className={'pos-prod-stock ' + (isOutOfStock ? 'zero' : isLow ? 'low' : '')}
                       >
@@ -1091,7 +1104,9 @@ export function POS() {
                       </small>
                     </div>
                     <div className="parked-item-meta">
-                      <span>{money(p.total)} ج.م</span>
+                      <span>
+                        {money(p.total)} {cur()}
+                      </span>
                       <div className="row-actions">
                         <Button variant="secondary" onClick={() => resumeCart(p)}>
                           استئناف

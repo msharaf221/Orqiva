@@ -1,3 +1,4 @@
+import { cur } from '../../currency';
 import { useEffect, useState } from 'react';
 import { Search, Undo2, Coins, CreditCard, Building } from 'lucide-react';
 import { api, Button, Modal, money, useAction, useToast, useDebounced } from '../../lib';
@@ -100,7 +101,7 @@ export function PosReturnModal({
         lines: chosen,
       });
       playSound(true);
-      toast(`تم تسجيل المرتجع بقيمة ${money(refundTotal)} ج.م وخصمه من الدرج.`);
+      toast(`تم تسجيل المرتجع بقيمة ${money(refundTotal)} ${cur()} وخصمه من الدرج.`);
       onDone();
     }, undefined);
   };
@@ -149,7 +150,9 @@ export function PosReturnModal({
                       {doc.party_name} · {doc.date}
                     </small>
                   </div>
-                  <span className="pos-return-sale-total">{money(doc.total)} ج.م</span>
+                  <span className="pos-return-sale-total">
+                    {money(doc.total)} {cur()}
+                  </span>
                 </button>
               ))
             )}
@@ -253,17 +256,23 @@ export function PosReturnModal({
         <div className="pos-return-summary">
           <div>
             <span>قيمة الأصناف المرتجعة:</span>
-            <b className="num">{money(refundSubtotal)} ج.م</b>
+            <b className="num">
+              {money(refundSubtotal)} {cur()}
+            </b>
           </div>
           {!TAX_FREE && (
             <div>
               <span>ضريبة القيمة المضافة:</span>
-              <b className="num">{money(refundTax)} ج.م</b>
+              <b className="num">
+                {money(refundTax)} {cur()}
+              </b>
             </div>
           )}
           <div className="pos-return-summary-total">
             <span>إجمالي المردود للعميل:</span>
-            <strong className="num">{money(refundTotal)} ج.م</strong>
+            <strong className="num">
+              {money(refundTotal)} {cur()}
+            </strong>
           </div>
         </div>
       </div>

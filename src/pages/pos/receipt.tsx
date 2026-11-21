@@ -1,3 +1,4 @@
+import { cur } from '../../currency';
 import { useEffect } from 'react';
 import { Printer } from 'lucide-react';
 import { Button, Modal, money } from '../../lib';
@@ -141,13 +142,17 @@ export function ThermalReceiptModal({
           <div className="receipt-totals">
             <div className="receipt-row">
               <span>{TAX_FREE ? 'المجموع الفرعي:' : 'المجموع الفرعي (قبل الضريبة):'}</span>
-              <span className="num">{money(result.document.subtotal)} ج.م</span>
+              <span className="num">
+                {money(result.document.subtotal)} {cur()}
+              </span>
             </div>
 
             {result.document.discount > 0 && (
               <div className="receipt-row discount-row">
                 <span>خصم الفاتورة:</span>
-                <span className="num text-red">-{money(result.document.discount)} ج.م</span>
+                <span className="num text-red">
+                  -{money(result.document.discount)} {cur()}
+                </span>
               </div>
             )}
 
@@ -156,7 +161,9 @@ export function ThermalReceiptModal({
                 <span>
                   ضريبة القيمة المضافة ({((result.document.tax_rate ?? 1400) / 100).toFixed(0)}%):
                 </span>
-                <span className="num">{money(result.document.tax)} ج.م</span>
+                <span className="num">
+                  {money(result.document.tax)} {cur()}
+                </span>
               </div>
             )}
 
@@ -164,7 +171,9 @@ export function ThermalReceiptModal({
 
             <div className="receipt-row grand-total-highlight">
               <span className="label">الإجمالي النهائي:</span>
-              <span className="num value">{money(result.document.total)} ج.م</span>
+              <span className="num value">
+                {money(result.document.total)} {cur()}
+              </span>
             </div>
 
             <div className="receipt-cut-line double-cut" />
@@ -205,7 +214,9 @@ export function ThermalReceiptModal({
                             : 'آجل'}
                       {s.reference ? ` (مرجع: ${s.reference})` : ''}:
                     </span>
-                    <span className="num">{money(s.amount)} ج.م</span>
+                    <span className="num">
+                      {money(s.amount)} {cur()}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -216,12 +227,14 @@ export function ThermalReceiptModal({
                 <div className="receipt-row">
                   <span>المبلغ المستلم (المدفوع):</span>
                   <span className="num">
-                    {money(result.payment.amount_tendered || result.document.total)} ج.م
+                    {money(result.payment.amount_tendered || result.document.total)} {cur()}
                   </span>
                 </div>
                 <div className="receipt-row change-highlight">
                   <span>المتبقي للعميل (الباقي):</span>
-                  <span className="num change-amount">{money(result.payment.change_due)} ج.م</span>
+                  <span className="num change-amount">
+                    {money(result.payment.change_due)} {cur()}
+                  </span>
                 </div>
               </>
             )}

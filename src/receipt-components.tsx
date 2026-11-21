@@ -1,3 +1,4 @@
+import { cur } from './currency';
 import { useEffect, useRef, useState } from 'react';
 import JsBarcode from 'jsbarcode';
 import QRCode from 'qrcode';
@@ -74,8 +75,8 @@ export function generateInvoiceQrData(data: InvoiceQrPayload): string {
     `مؤسسة: ${data.sellerName}`,
     `فاتورة: ${data.invoiceNumber}`,
     `التاريخ: ${data.invoiceDate}`,
-    `الإجمالي: ${totalFormatted} ج.م`,
-    ...(TAX_FREE ? [] : [`الضريبة: ${taxFormatted} ج.م`]),
+    `الإجمالي: ${totalFormatted} ${cur()}`,
+    ...(TAX_FREE ? [] : [`الضريبة: ${taxFormatted} ${cur()}`]),
     'نظام أوركيفا Orqiva ERP',
   ].join('\n');
 }
@@ -436,13 +437,17 @@ export function ThermalReceiptPaper({
       <div className="receipt-totals">
         <div className="receipt-row">
           <span>{TAX_FREE ? 'المجموع الفرعي:' : 'المجموع الفرعي (قبل الضريبة):'}</span>
-          <span className="num">{formatMoney(result.document.subtotal)} ج.م</span>
+          <span className="num">
+            {formatMoney(result.document.subtotal)} {cur()}
+          </span>
         </div>
 
         {result.document.discount > 0 && (
           <div className="receipt-row discount-row">
             <span>خصم الفاتورة:</span>
-            <span className="num text-red">-{formatMoney(result.document.discount)} ج.م</span>
+            <span className="num text-red">
+              -{formatMoney(result.document.discount)} {cur()}
+            </span>
           </div>
         )}
 
@@ -451,7 +456,9 @@ export function ThermalReceiptPaper({
             <span>
               ضريبة القيمة المضافة ({((result.document.tax_rate ?? 1400) / 100).toFixed(0)}%):
             </span>
-            <span className="num">{formatMoney(result.document.tax)} ج.م</span>
+            <span className="num">
+              {formatMoney(result.document.tax)} {cur()}
+            </span>
           </div>
         )}
 
@@ -459,7 +466,9 @@ export function ThermalReceiptPaper({
 
         <div className="receipt-row grand-total-highlight">
           <span className="label">الإجمالي النهائي:</span>
-          <span className="num value">{formatMoney(result.document.total)} ج.م</span>
+          <span className="num value">
+            {formatMoney(result.document.total)} {cur()}
+          </span>
         </div>
 
         <div className="receipt-cut-line double-cut" />
@@ -489,7 +498,9 @@ export function ThermalReceiptPaper({
                       : 'إنستاباي / محفظة'}
                   {s.reference ? ` (${s.reference})` : ''}:
                 </span>
-                <span className="num font-semibold">{formatMoney(s.amount)} ج.م</span>
+                <span className="num font-semibold">
+                  {formatMoney(s.amount)} {cur()}
+                </span>
               </div>
             ))}
           </div>
@@ -500,14 +511,14 @@ export function ThermalReceiptPaper({
             <div className="receipt-row">
               <span>المبلغ المستلم (المدفوع):</span>
               <span className="num">
-                {formatMoney(result.payment?.amount_tendered || result.document.total)} ج.م
+                {formatMoney(result.payment?.amount_tendered || result.document.total)} {cur()}
               </span>
             </div>
             {(result.payment?.change_due ?? 0) > 0 && (
               <div className="receipt-row change-highlight">
                 <span>المتبقي للعميل (الباقي):</span>
                 <span className="num change-amount">
-                  {formatMoney(result.payment?.change_due || 0)} ج.م
+                  {formatMoney(result.payment?.change_due || 0)} {cur()}
                 </span>
               </div>
             )}

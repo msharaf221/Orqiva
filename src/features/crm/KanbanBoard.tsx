@@ -1,3 +1,4 @@
+import { cur } from '../../currency';
 import { useState, type DragEvent, type KeyboardEvent } from 'react';
 import { Calendar, ChevronRight, User } from 'lucide-react';
 import { formatDate, money } from '../../lib';
@@ -62,7 +63,9 @@ export function KanbanBoard({
                 </div>
                 <div className="crm-column-summary">
                   <span>احتمالية: {stage.probability}%</span>
-                  <strong>{money(stageTotal)} ج.م</strong>
+                  <strong>
+                    {money(stageTotal)} {cur()}
+                  </strong>
                 </div>
               </div>
 
@@ -119,7 +122,9 @@ export function KanbanBoard({
                         <DealStatusBadge status={deal.status} probability={deal.probability} />
                       </div>
 
-                      <div className="crm-deal-amount">{money(deal.expected_revenue)} ج.م</div>
+                      <div className="crm-deal-amount">
+                        {money(deal.expected_revenue)} {cur()}
+                      </div>
 
                       <div className="crm-deal-meta">
                         <span className="crm-deal-meta-item">

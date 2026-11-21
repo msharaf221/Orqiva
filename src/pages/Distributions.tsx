@@ -1,3 +1,4 @@
+import { cur } from '../currency';
 import { useEffect, useState, type FormEvent } from 'react';
 import { AlertTriangle, HandCoins, Plus, Scale, Users, Wallet } from 'lucide-react';
 import {
@@ -146,7 +147,7 @@ function OwnersPanel() {
                   <td className="num">{money(o.declared, 2)}</td>
                   <td className="num">{money(o.paid, 2)}</td>
                   <td className="num amount">
-                    {money(o.due, 2)} <small>ج.م</small>
+                    {money(o.due, 2)} <small>{cur()}</small>
                   </td>
                   <td className="row-actions">
                     <Button variant="ghost" onClick={() => setLedgerFor(o)}>
@@ -322,7 +323,7 @@ function EntryForm({
               <option value="WITHDRAWAL">مسحوب شخصي</option>
             </select>
           </Field>
-          <Field label="المبلغ (ج.م) *">
+          <Field label={`المبلغ (${cur()}) *`}>
             <input name="amount" required type="number" min="0.01" step="0.01" dir="ltr" />
           </Field>
           <div className="form-row">
@@ -351,7 +352,7 @@ function EntryForm({
                   <option key={a.id} value={a.id}>
                     {a.name} (
                     {a.type === 'CASH' ? 'خزينة' : a.type === 'BANK' ? 'حساب بنكي' : 'محفظة'}) —
-                    الرصيد: {money(a.balance, 2)} ج.م
+                    الرصيد: {money(a.balance, 2)} {cur()}
                   </option>
                 ))}
             </select>
@@ -432,7 +433,7 @@ function LedgerModal({ owner, onClose }: { owner: Owner; onClose: () => void }) 
                         className={'num ' + (e.kind === 'CONTRIBUTION' ? 'positive' : 'negative')}
                       >
                         {e.kind === 'CONTRIBUTION' ? '+' : '−'}
-                        {money(e.amount, 2)} <small>ج.م</small>
+                        {money(e.amount, 2)} <small>{cur()}</small>
                       </td>
                       <td className="muted">{e.notes || '—'}</td>
                     </tr>
@@ -460,7 +461,7 @@ function LedgerModal({ owner, onClose }: { owner: Owner; onClose: () => void }) 
                         </span>
                       </td>
                       <td className="num amount">
-                        {money(d.amount, 2)} <small>ج.م</small>
+                        {money(d.amount, 2)} <small>{cur()}</small>
                       </td>
                       <td className="num muted">مدفوع {money(d.paid, 2)}</td>
                     </tr>
@@ -591,25 +592,25 @@ function DistributionsPanel() {
               <div>
                 <span>صافي ربح المجموعة</span>
                 <strong className={'num ' + (preview.netProfit < 0 ? 'negative' : '')}>
-                  {money(preview.netProfit, 2)} <small>ج.م</small>
+                  {money(preview.netProfit, 2)} <small>{cur()}</small>
                 </strong>
               </div>
               <div>
                 <span>الاحتياطي</span>
                 <strong className="num">
-                  {money(preview.reserve, 2)} <small>ج.م</small>
+                  {money(preview.reserve, 2)} <small>{cur()}</small>
                 </strong>
               </div>
               <div className="calc-distributable">
                 <span>القابل للتوزيع</span>
                 <strong className="num">
-                  {money(preview.distributable, 2)} <small>ج.م</small>
+                  {money(preview.distributable, 2)} <small>{cur()}</small>
                 </strong>
               </div>
               <div>
                 <span>السيولة المتاحة الآن</span>
                 <strong className="num">
-                  {money(preview.cashAvailable, 2)} <small>ج.م</small>
+                  {money(preview.cashAvailable, 2)} <small>{cur()}</small>
                 </strong>
               </div>
             </div>
@@ -625,7 +626,7 @@ function DistributionsPanel() {
                 <Scale size={18} />
                 <span>
                   {preview.netProfit < 0
-                    ? `المجموعة متكبدة خسارة صافية قدرها ${money(-preview.netProfit, 2)} ج.م في هذه الفترة، والخسائر تُخصم قبل أي توزيع، فلا توجد أرباح تُوزَّع الآن.`
+                    ? `المجموعة متكبدة خسارة صافية قدرها ${money(-preview.netProfit, 2)} ${cur()} في هذه الفترة، والخسائر تُخصم قبل أي توزيع، فلا توجد أرباح تُوزَّع الآن.`
                     : 'لا توجد أرباح قابلة للتوزيع في هذه الفترة بعد احتجاز الاحتياطي.'}
                 </span>
               </div>
@@ -633,8 +634,8 @@ function DistributionsPanel() {
             {preview.uncovered > 0 && (
               <div className="warning-banner">
                 <AlertTriangle size={16} /> القابل للتوزيع يتجاوز السيولة الحالية بمقدار{' '}
-                <b className="num">{money(preview.uncovered, 2)}</b> ج.م. الأرباح موجودة في المبيعات
-                غير المحصّلة أو المخزون؛ ستُصرف عند تحصيلها، ولا يُصرف أكثر من السيولة.
+                <b className="num">{money(preview.uncovered, 2)}</b> {cur()}. الأرباح موجودة في
+                المبيعات غير المحصّلة أو المخزون؛ ستُصرف عند تحصيلها، ولا يُصرف أكثر من السيولة.
               </div>
             )}
             {preview.shareTotal !== 10000 && (
@@ -685,7 +686,9 @@ function DistributionsPanel() {
                     {l.owner_name}{' '}
                     <small className="muted">({(l.share_bps / 100).toFixed(2)}٪)</small>
                   </span>
-                  <strong className="num">{money(l.amount, 2)} ج.م</strong>
+                  <strong className="num">
+                    {money(l.amount, 2)} {cur()}
+                  </strong>
                 </div>
               ))}
             </div>
@@ -745,10 +748,10 @@ function DistributionsPanel() {
                       </span>
                     </td>
                     <td className="num amount">
-                      {money(d.distributable, 2)} <small>ج.م</small>
+                      {money(d.distributable, 2)} <small>{cur()}</small>
                     </td>
                     <td className="num">
-                      {money(d.paid_total, 2)} <small>ج.م</small>
+                      {money(d.paid_total, 2)} <small>{cur()}</small>
                     </td>
                   </tr>
                 ))}
@@ -812,19 +815,27 @@ function DistributionDetail({
         <div className="calc-summary compact">
           <div>
             <span>صافي الربح</span>
-            <strong className="num">{money(d.net_profit, 2)} ج.م</strong>
+            <strong className="num">
+              {money(d.net_profit, 2)} {cur()}
+            </strong>
           </div>
           <div>
             <span>الاحتياطي</span>
-            <strong className="num">{money(d.reserve_amount, 2)} ج.م</strong>
+            <strong className="num">
+              {money(d.reserve_amount, 2)} {cur()}
+            </strong>
           </div>
           <div className="calc-distributable">
             <span>القابل للتوزيع</span>
-            <strong className="num">{money(d.distributable, 2)} ج.م</strong>
+            <strong className="num">
+              {money(d.distributable, 2)} {cur()}
+            </strong>
           </div>
           <div>
             <span>المصروف حتى الآن</span>
-            <strong className="num">{money(paidTotal, 2)} ج.م</strong>
+            <strong className="num">
+              {money(paidTotal, 2)} {cur()}
+            </strong>
           </div>
         </div>
         <div className="table-scroll">
@@ -880,7 +891,9 @@ function DistributionDetail({
                     <td>{p.owner_name}</td>
                     <td className="muted">{formatDate(p.date, true)}</td>
                     <td>{methods[p.method]}</td>
-                    <td className="num negative">−{money(p.amount, 2)} ج.م</td>
+                    <td className="num negative">
+                      −{money(p.amount, 2)} {cur()}
+                    </td>
                     <td className="muted">{p.reference || '—'}</td>
                   </tr>
                 ))}
@@ -1015,12 +1028,12 @@ function PayForm({
   return (
     <Modal
       title={`صرف لـ ${line.owner_name}`}
-      description={`المتبقي ${piastresToEgp(remaining)} ج.م. لا يُصرف أكثر من السيولة المتاحة.`}
+      description={`المتبقي ${piastresToEgp(remaining)} ${cur()}. لا يُصرف أكثر من السيولة المتاحة.`}
       onClose={onClose}
     >
       <form onSubmit={submit}>
         <div className="modal-body form-grid">
-          <Field label="المبلغ (ج.م) *">
+          <Field label={`المبلغ (${cur()}) *`}>
             <input
               name="amount"
               required
@@ -1058,7 +1071,7 @@ function PayForm({
                   <option key={a.id} value={a.id}>
                     {a.name} (
                     {a.type === 'CASH' ? 'خزينة' : a.type === 'BANK' ? 'حساب بنكي' : 'محفظة'}) —
-                    الرصيد: {money(a.balance, 2)} ج.م
+                    الرصيد: {money(a.balance, 2)} {cur()}
                   </option>
                 ))}
             </select>

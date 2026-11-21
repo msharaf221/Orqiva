@@ -1,3 +1,4 @@
+import { cur, setActiveCurrency } from './currency';
 import { lazy, Suspense, useEffect, useState, type FormEvent } from 'react';
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -341,6 +342,15 @@ export function App() {
 function Authenticated({ user, onLogout }: { user: User; onLogout: () => void }) {
   const company = useData<Company>('/company');
   useDensity();
+  // The currency label must be set before any amount renders.
+  setActiveCurrency(company.data?.currency);
+  if (!company.data && company.loading)
+    return (
+      <div className="boot">
+        <Brand />
+        <Loading />
+      </div>
+    );
   return (
     <SessionContext.Provider
       value={{
@@ -720,7 +730,7 @@ function GlobalSearch({ onClose }: { onClose: () => void }) {
           })),
           ...[...sales, ...purchases].map((d) => ({
             name: d.number,
-            sub: d.party_name + ' · ' + money(d.total) + ' ج.م',
+            sub: d.party_name + ' · ' + money(d.total) + ' ' + cur() + '',
             url: `/${d.type === 'SALE' ? 'sales' : 'purchases'}/${d.id}`,
           })),
         ]),

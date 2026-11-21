@@ -321,6 +321,11 @@ export const companySchema = z
       .max(10000)
       .default(TAX_FREE ? 0 : 1400),
     invoice_note: optionalText(1000),
+    currency: z
+      .string()
+      .trim()
+      .regex(/^[A-Z]{3}$/, 'رمز العملة يجب أن يكون 3 أحرف كبيرة مثل EGP')
+      .optional(),
     eta_environment: z.enum(['stub', 'preprod', 'production']).default('stub').optional(),
     invoice_settings: z.string().optional(),
   })

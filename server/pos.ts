@@ -1,5 +1,6 @@
 import { all, one, run, transaction, id, now } from './db';
 import { AppError } from './errors';
+import { currencyLabel } from './currency';
 import {
   audit,
   nextNumber,
@@ -139,7 +140,7 @@ export function addCashMovement(shiftId: string, raw: unknown, actor: Actor): Po
       input.type === 'IN' ? 'إيداع نقدي بالوردية' : 'سحب نقدي من الوردية',
       'POS_SHIFT',
       shiftId,
-      `${input.amount / 100} ج.م - ${input.reason}`,
+      `${input.amount / 100} ${currencyLabel()} - ${input.reason}`,
     );
 
     // Ledger: a drawer movement changes cash and its balancing account.
@@ -855,7 +856,7 @@ export function parkSale(raw: unknown, actor: Actor): PosParkedSale {
       'تعليق بيع في نقطة البيع',
       'POS_PARKED',
       parkedId,
-      input.label || `${total / 100} ج.م`,
+      input.label || `${total / 100} ${currencyLabel()}`,
     );
     return requireRow(
       one<PosParkedSale>(

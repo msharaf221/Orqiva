@@ -1,3 +1,4 @@
+import { cur } from '../../currency';
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, Download, ArrowUpRight, ArrowDownLeft, CreditCard, ArrowLeft } from 'lucide-react';
@@ -169,7 +170,7 @@ export function Payments() {
                       </td>
                       <td className="muted">{formatDate(p.date, true)}</td>
                       <td className="num amount">
-                        {money(p.amount, 2)} <small>ج.م</small>
+                        {money(p.amount, 2)} <small>{cur()}</small>
                       </td>
                       <td>
                         <div>{methods[p.method]}</div>
@@ -265,7 +266,7 @@ function SelectPaymentDoc({
                   <span>{d.party_name}</span>
                 </div>
                 <b className="num">
-                  {money(d.total - d.paid, 2)} <small>ج.م</small>
+                  {money(d.total - d.paid, 2)} <small>{cur()}</small>
                 </b>
                 <ArrowLeft size={16} />
               </button>

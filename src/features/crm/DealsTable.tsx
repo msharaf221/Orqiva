@@ -1,3 +1,4 @@
+import { cur } from '../../currency';
 import { Pencil } from 'lucide-react';
 import { Button, Empty, formatDate, money } from '../../lib';
 import type { CrmDeal } from '../../types';
@@ -81,7 +82,9 @@ export function DealsTable({
               </td>
               {showBranch && <td>{deal.branch_name || '—'}</td>}
               <td>
-                <strong>{money(deal.expected_revenue)} ج.م</strong>
+                <strong>
+                  {money(deal.expected_revenue)} {cur()}
+                </strong>
               </td>
               <td>{deal.probability}%</td>
               <td>{deal.expected_close_date ? formatDate(deal.expected_close_date) : '—'}</td>

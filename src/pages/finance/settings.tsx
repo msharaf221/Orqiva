@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { CURRENCIES } from '../../currency';
 import { can } from '../../auth';
 import { Link } from 'react-router-dom';
 import {
@@ -161,8 +162,11 @@ function CompanySettings() {
               eta_environment: f.get('eta_environment'),
             }),
         invoice_note: f.get('invoice_note'),
+        currency: f.get('currency'),
       });
       refreshCompany();
+      // Every amount on screen carries the currency label, so reload to repaint it.
+      if (f.get('currency') !== company?.currency) window.location.reload();
     }, 'تم حفظ إعدادات الشركة');
   };
   if (!company) return <Loading />;
@@ -251,9 +255,15 @@ function CompanySettings() {
         )}
         <Field
           label="العملة الأساسية"
-          hint="هذه النسخة تعمل بالجنيه المصري لتجنب خلط العملات في التقارير."
+          hint="الافتراضي الجنيه المصري. تغيير العملة يغيّر الرمز المعروض فقط ولا يحوّل الأرصدة، فاختارها قبل إدخال البيانات."
         >
-          <input disabled value="الجنيه المصري — EGP" />
+          <select name="currency" defaultValue={company.currency} disabled={!admin}>
+            {CURRENCIES.map((c) => (
+              <option key={c.code} value={c.code}>
+                {c.name} — {c.code}
+              </option>
+            ))}
+          </select>
         </Field>
         <Field label="ملاحظة أسفل الفاتورة">
           <textarea

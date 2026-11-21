@@ -1,5 +1,6 @@
 import { all, one, run, transaction, id, now } from './db';
 import { cashAccountSchema, updateCashAccountSchema, accountTransferSchema } from './validation';
+import { currencyLabel } from './currency';
 import { AppError, audit, nextNumber, requireRow, type Actor } from './service';
 import { writableBranch, type Scope } from './scope';
 import { postAccountTransferLedger } from './posting';
@@ -183,7 +184,7 @@ export function assertAccountFunds(
       const amountEgp = (amount / 100).toLocaleString('en-US', { minimumFractionDigits: 2 });
       throw new AppError(
         409,
-        `رصيد الحساب "${account.name}" المتاح (${balanceEgp} ج.م) لا يكفي لإتمام العملية بمبلغ (${amountEgp} ج.م)`,
+        `رصيد الحساب "${account.name}" المتاح (${balanceEgp} ${currencyLabel()}) لا يكفي لإتمام العملية بمبلغ (${amountEgp} ${currencyLabel()})`,
       );
     }
   }

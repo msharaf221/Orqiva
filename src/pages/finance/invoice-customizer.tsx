@@ -1,3 +1,4 @@
+import { cur } from '../../currency';
 import { useState, type FormEvent } from 'react';
 import {
   Palette,
@@ -652,7 +653,7 @@ export function InvoiceCustomizer() {
                 >
                   <span>الإجمالي النهائي</span>
                   <strong className="num">
-                    {money(sampleTotal, 2)} <small>ج.م</small>
+                    {money(sampleTotal, 2)} <small>{cur()}</small>
                   </strong>
                 </div>
               </div>
@@ -758,11 +759,15 @@ export function InvoiceCustomizer() {
             <div style={{ padding: '8px 0', borderBottom: '2px solid #0f172a' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span>المجموع:</span>
-                <span>{money(sampleSubtotal)} ج.م</span>
+                <span>
+                  {money(sampleSubtotal)} {cur()}
+                </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span>ضريبة القيمة المضافة 14%:</span>
-                <span>{money(sampleTax)} ج.م</span>
+                <span>
+                  {money(sampleTax)} {cur()}
+                </span>
               </div>
               <div
                 style={{
@@ -774,7 +779,9 @@ export function InvoiceCustomizer() {
                 }}
               >
                 <span>الإجمالي الصافي:</span>
-                <span>{money(sampleTotal)} ج.م</span>
+                <span>
+                  {money(sampleTotal)} {cur()}
+                </span>
               </div>
             </div>
 

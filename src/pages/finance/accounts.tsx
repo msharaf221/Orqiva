@@ -1,3 +1,4 @@
+import { cur } from '../../currency';
 import { useState, type FormEvent } from 'react';
 import {
   Plus,
@@ -167,7 +168,7 @@ export function CashAccountModal({
           )}
 
           {!account && (
-            <Field label="الرصيد الافتتاحي (ج.م)">
+            <Field label={`الرصيد الافتتاحي (${cur()})`}>
               <input
                 name="initial_balance"
                 type="number"
@@ -277,7 +278,7 @@ export function TransferModal({
                   .filter((a) => a.active)
                   .map((a) => (
                     <option key={a.id} value={a.id}>
-                      {a.name} ({money(a.balance, 2)} ج.م)
+                      {a.name} ({money(a.balance, 2)} {cur()})
                     </option>
                   ))}
               </select>
@@ -288,7 +289,7 @@ export function TransferModal({
                   .filter((a) => a.active && a.id !== fromId)
                   .map((a) => (
                     <option key={a.id} value={a.id}>
-                      {a.name} ({money(a.balance, 2)} ج.م)
+                      {a.name} ({money(a.balance, 2)} {cur()})
                     </option>
                   ))}
               </select>
@@ -296,7 +297,7 @@ export function TransferModal({
           </div>
 
           <div className="form-row">
-            <Field label="المبلغ المراد تحويله (ج.م) *">
+            <Field label={`المبلغ المراد تحويله (${cur()}) *`}>
               <input
                 name="amount"
                 type="number"
@@ -319,7 +320,7 @@ export function TransferModal({
           {selectedFrom && selectedFrom.allow_negative === 0 && (
             <div className="account-tag shield-ok" style={{ width: 'fit-content' }}>
               <ShieldCheck size={14} />
-              الرصيد المتاح في الحساب المحوّل منه: {money(selectedFrom.balance, 2)} ج.م
+              الرصيد المتاح في الحساب المحوّل منه: {money(selectedFrom.balance, 2)} {cur()}
             </div>
           )}
 
@@ -397,20 +398,26 @@ export function StatementModal({
         <div className="statement-summary">
           <div className="statement-sum-card">
             <div className="statement-sum-label">الرصيد الافتتاحي</div>
-            <div className="statement-sum-val">{money(account.initial_balance, 2)} ج.م</div>
+            <div className="statement-sum-val">
+              {money(account.initial_balance, 2)} {cur()}
+            </div>
           </div>
           <div className="statement-sum-card">
             <div className="statement-sum-label">إجمالي المقبوضات (الوارد)</div>
-            <div className="statement-sum-val in-flow">+{money(totalIn, 2)} ج.م</div>
+            <div className="statement-sum-val in-flow">
+              +{money(totalIn, 2)} {cur()}
+            </div>
           </div>
           <div className="statement-sum-card">
             <div className="statement-sum-label">إجمالي المدفوعات (المنصرف)</div>
-            <div className="statement-sum-val out-flow">-{money(totalOut, 2)} ج.م</div>
+            <div className="statement-sum-val out-flow">
+              -{money(totalOut, 2)} {cur()}
+            </div>
           </div>
           <div className="statement-sum-card">
             <div className="statement-sum-label">الرصيد الحالي</div>
             <div className={`statement-sum-val ${account.balance < 0 ? 'out-flow' : 'in-flow'}`}>
-              {money(account.balance, 2)} ج.م
+              {money(account.balance, 2)} {cur()}
             </div>
           </div>
         </div>
@@ -507,7 +514,7 @@ export function StatementModal({
                       {e.out_amount > 0 ? `-${money(e.out_amount, 2)}` : '—'}
                     </td>
                     <td className="num amount">
-                      <strong>{money(e.balance, 2)}</strong> <small>ج.م</small>
+                      <strong>{money(e.balance, 2)}</strong> <small>{cur()}</small>
                     </td>
                   </tr>
                 ))}
@@ -908,7 +915,7 @@ export function Accounts() {
                   <div className={`account-balance-box ${acc.balance < 0 ? 'negative' : ''}`}>
                     <span className="account-balance-label">الرصيد المتاح</span>
                     <span className={`account-balance-val ${acc.balance < 0 ? 'negative' : ''}`}>
-                      {money(acc.balance, 2)} <small>ج.م</small>
+                      {money(acc.balance, 2)} <small>{cur()}</small>
                     </span>
                   </div>
 
@@ -994,7 +1001,7 @@ export function Accounts() {
                         <span className="account-tag in-flow">{t.to_account_name}</span>
                       </td>
                       <td className="num amount">
-                        <strong>{money(t.amount, 2)}</strong> <small>ج.م</small>
+                        <strong>{money(t.amount, 2)}</strong> <small>{cur()}</small>
                       </td>
                       <td className="muted notes-cell">{t.notes || '—'}</td>
                     </tr>
@@ -1053,7 +1060,9 @@ export function Accounts() {
                         <div style={{ fontSize: '12.5px' }}>
                           <span>
                             مسلّم:{' '}
-                            <b>{money(s.cashier_declared_cash ?? s.closing_cash ?? 0)} ج.م</b>
+                            <b>
+                              {money(s.cashier_declared_cash ?? s.closing_cash ?? 0)} {cur()}
+                            </b>
                           </span>
                           {s.difference !== 0 && s.difference !== null && (
                             <div
@@ -1064,15 +1073,17 @@ export function Accounts() {
                               }}
                             >
                               {s.difference < 0
-                                ? `عجز: -${money(Math.abs(s.difference))} ج.م`
-                                : `زيادة: +${money(s.difference)} ج.م`}
+                                ? `عجز: -${money(Math.abs(s.difference))} ${cur()}`
+                                : `زيادة: +${money(s.difference)} ${cur()}`}
                             </div>
                           )}
                         </div>
                       </td>
                       <td>
                         <div style={{ fontSize: '12.5px' }}>
-                          <span>{money(s.cashier_declared_card ?? s.expected_card ?? 0)} ج.م</span>
+                          <span>
+                            {money(s.cashier_declared_card ?? s.expected_card ?? 0)} {cur()}
+                          </span>
                           {s.terminal_batch_number && (
                             <div style={{ fontSize: '10.5px', color: '#2563eb', fontWeight: 600 }}>
                               باتش: #{s.terminal_batch_number} ({s.card_slips_count || 0} إيصال)
@@ -1082,7 +1093,9 @@ export function Accounts() {
                       </td>
                       <td>
                         <div style={{ fontSize: '12.5px' }}>
-                          <span>{money(s.cashier_declared_bank ?? s.expected_bank ?? 0)} ج.م</span>
+                          <span>
+                            {money(s.cashier_declared_bank ?? s.expected_bank ?? 0)} {cur()}
+                          </span>
                           {(s.bank_transfers_count || 0) > 0 && (
                             <div style={{ fontSize: '10.5px', color: '#059669', fontWeight: 600 }}>
                               {s.bank_transfers_count} عملية تحويل

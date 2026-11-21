@@ -1,3 +1,4 @@
+import { cur } from '../../currency';
 import { useState, useEffect, type FormEvent } from 'react';
 import { Plus, Download, Wallet, ReceiptText, ShieldCheck, Banknote } from 'lucide-react';
 import {
@@ -193,7 +194,7 @@ export function Expenses() {
                         {e.account_name && <small className="cell-sub">{e.account_name}</small>}
                       </td>
                       <td className="num amount">
-                        {money(e.amount, 2)} <small>ج.م</small>
+                        {money(e.amount, 2)} <small>{cur()}</small>
                       </td>
                       <td className="muted notes-cell">{e.notes || '—'}</td>
                     </tr>
@@ -251,7 +252,7 @@ export function Expenses() {
                     ))}
                   </datalist>
                 </Field>
-                <Field label="المبلغ (ج.م) *">
+                <Field label={`المبلغ (${cur()}) *`}>
                   <input
                     name="amount"
                     type="number"
@@ -310,7 +311,7 @@ export function Expenses() {
                       <option key={a.id} value={a.id}>
                         {a.name} (
                         {a.type === 'CASH' ? 'خزينة' : a.type === 'BANK' ? 'حساب بنكي' : 'محفظة'}) —
-                        الرصيد: {money(a.balance, 2)} ج.م
+                        الرصيد: {money(a.balance, 2)} {cur()}
                       </option>
                     ))}
                 </select>

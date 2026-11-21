@@ -1,3 +1,4 @@
+import { cur } from '../../currency';
 import { type FormEvent } from 'react';
 import { Button, Field, Modal, toCents, useAction, useData } from '../../lib';
 import type { CrmAssignee } from '../../types';
@@ -63,7 +64,7 @@ export function TargetFormModal({
           </div>
 
           <div className="grid two" style={{ marginBottom: '12px' }}>
-            <Field label="قيمة التارجت المستهدف (ج.م)">
+            <Field label={`قيمة التارجت المستهدف (${cur()})`}>
               <input
                 name="target_amount"
                 type="number"

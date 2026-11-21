@@ -1,3 +1,4 @@
+import { cur } from '../currency';
 import { useEffect, useState, type FormEvent } from 'react';
 import { ClipboardList, Plus, CheckCircle2, XCircle, Save, Send, Barcode } from 'lucide-react';
 import {
@@ -124,7 +125,9 @@ export function StocktakePage() {
                       </span>
                     </td>
                     <td className="num">{s.variance_lines}</td>
-                    <td className="num amount">{money(s.variance_value ?? 0)} ج.م</td>
+                    <td className="num amount">
+                      {money(s.variance_value ?? 0)} {cur()}
+                    </td>
                     <td>{s.counted_by_name}</td>
                     <td className="muted">{formatDate(s.created_at, true)}</td>
                   </tr>

@@ -1,3 +1,4 @@
+import { cur } from '../../currency';
 import { useState, type FormEvent } from 'react';
 import { Users, Plus, DollarSign, FileText, CreditCard, Eye, ShieldCheck } from 'lucide-react';
 import {
@@ -131,7 +132,7 @@ export function CreateEmployeeModal({
           </div>
 
           <div className="grid three" style={{ marginBottom: '16px' }}>
-            <Field label="الراتب الأساسي (ج.م)">
+            <Field label={`الراتب الأساسي (${cur()})`}>
               <input
                 name="basic_salary"
                 type="number"
@@ -141,7 +142,7 @@ export function CreateEmployeeModal({
                 required
               />
             </Field>
-            <Field label="الراتب المتغير / البدلات (ج.م)">
+            <Field label={`الراتب المتغير / البدلات (${cur()})`}>
               <input name="variable_salary" type="number" step="0.01" min="0" defaultValue="0" />
             </Field>
             {!TAX_FREE && (
@@ -208,7 +209,7 @@ export function CreateAdvanceModal({
       <form onSubmit={submit}>
         <div className="modal-body form-grid">
           <div className="grid two" style={{ marginBottom: '12px' }}>
-            <Field label="مبلغ السلفة (ج.م)">
+            <Field label={`مبلغ السلفة (${cur()})`}>
               <input
                 name="amount"
                 type="number"
@@ -384,7 +385,7 @@ export function PayrollRunDetailsModal({
                 value={money(pr.total_net)}
                 icon={<CreditCard size={20} />}
                 tone="green"
-                foot={`استقطاع سلف: ${money(pr.total_advances)} ج.م`}
+                foot={`استقطاع سلف: ${money(pr.total_advances)} ${cur()}`}
               />
               {!TAX_FREE && (
                 <>
@@ -461,7 +462,7 @@ export function PayrollRunDetailsModal({
                         <strong style={{ color: '#16a34a', fontSize: '13.5px' }}>
                           {money(s.net_salary)}
                         </strong>{' '}
-                        <small>ج.م</small>
+                        <small>{cur()}</small>
                       </td>
                     </tr>
                   ))}
@@ -643,16 +644,24 @@ export function PayrollView() {
                         <strong>{r.month}</strong>
                       </td>
                       <td>{r.branch_name || 'كافة الفروع'}</td>
-                      <td>{money(r.total_gross)} ج.م</td>
+                      <td>
+                        {money(r.total_gross)} {cur()}
+                      </td>
                       {!TAX_FREE && (
                         <>
-                          <td>{money(r.total_social_insurance_employee)} ج.م</td>
-                          <td>{money(r.total_social_insurance_employer)} ج.م</td>
-                          <td>{money(r.total_income_tax + r.total_martyrs_fund)} ج.م</td>
+                          <td>
+                            {money(r.total_social_insurance_employee)} {cur()}
+                          </td>
+                          <td>
+                            {money(r.total_social_insurance_employer)} {cur()}
+                          </td>
+                          <td>
+                            {money(r.total_income_tax + r.total_martyrs_fund)} {cur()}
+                          </td>
                         </>
                       )}
                       <td>
-                        <strong style={{ color: '#16a34a' }}>{money(r.total_net)}</strong> ج.م
+                        <strong style={{ color: '#16a34a' }}>{money(r.total_net)}</strong> {cur()}
                       </td>
                       <td>
                         <span className={r.status === 'CONFIRMED' ? 'badge green' : 'badge amber'}>
@@ -725,9 +734,17 @@ export function PayrollView() {
                           {e.branch_name || 'عام'} {e.department ? `• ${e.department}` : ''}
                         </div>
                       </td>
-                      <td>{money(e.basic_salary)} ج.م</td>
-                      <td>{money(e.variable_salary)} ج.م</td>
-                      {!TAX_FREE && <td>{money(e.insured_salary)} ج.م</td>}
+                      <td>
+                        {money(e.basic_salary)} {cur()}
+                      </td>
+                      <td>
+                        {money(e.variable_salary)} {cur()}
+                      </td>
+                      {!TAX_FREE && (
+                        <td>
+                          {money(e.insured_salary)} {cur()}
+                        </td>
+                      )}
                       <td>{e.hire_date}</td>
                       <td>
                         <span className={e.active ? 'badge green' : 'badge gray'}>

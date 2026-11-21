@@ -1,3 +1,4 @@
+import { cur } from '../../currency';
 import { Plus } from 'lucide-react';
 import { Button, Empty, money } from '../../lib';
 import type { SalesTarget } from '../../types';
@@ -94,11 +95,15 @@ export function TargetsPanel({
                 >
                   <div>
                     <span style={{ color: 'var(--slate-500)' }}>المحقق: </span>
-                    <strong>{money(target.achieved_amount || 0)} ج.م</strong>
+                    <strong>
+                      {money(target.achieved_amount || 0)} {cur()}
+                    </strong>
                   </div>
                   <div>
                     <span style={{ color: 'var(--slate-500)' }}>المستهدف: </span>
-                    <span>{money(target.target_amount)} ج.م</span>
+                    <span>
+                      {money(target.target_amount)} {cur()}
+                    </span>
                   </div>
                 </div>
 
@@ -115,7 +120,7 @@ export function TargetsPanel({
                     العمولة المستحقة:
                   </span>
                   <strong style={{ fontSize: '16px', color: '#16a34a' }}>
-                    {money(target.earned_commission || 0)} ج.م
+                    {money(target.earned_commission || 0)} {cur()}
                   </strong>
                 </div>
               </div>
