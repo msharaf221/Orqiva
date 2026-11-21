@@ -45,7 +45,7 @@ export function resetBusinessData() {
   db.exec(`
     DELETE FROM user_permission_overrides;
     UPDATE gl_settings SET closed_through=NULL, fiscal_year_start_month=1 WHERE id=1;
-    DELETE FROM audit_logs; DELETE FROM distribution_payments; DELETE FROM distribution_lines;
+    DELETE FROM idempotency_keys; DELETE FROM audit_logs; DELETE FROM distribution_payments; DELETE FROM distribution_lines;
     DELETE FROM distributions; DELETE FROM equity_entries; DELETE FROM cost_movements;
     DELETE FROM branch_cost; DELETE FROM stock_movements;
     DELETE FROM transfer_lines; DELETE FROM transfers; DELETE FROM payments;

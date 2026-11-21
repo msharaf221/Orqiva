@@ -9,6 +9,8 @@
 
 import { all, one, run, transaction, id, now } from './db';
 import { AppError } from './errors';
+import { audit } from './audit';
+import type { Actor } from './scope';
 import { calculateTax, effectiveTaxRate } from '../src/config';
 import { Quotation, QuotationLine, QuotationStatus, QuotationType } from '../src/types';
 
@@ -99,7 +101,7 @@ export function createQuotation(
       notes?: string;
     }>;
   },
-  actorId?: string,
+  actor?: Pick<Actor, 'id' | 'name'>,
 ): Quotation {
   if (!data.lines?.length) {
     throw new AppError(400, 'يجب أن يحتوي عرض السعر على بند واحد على الأقل');
@@ -178,7 +180,7 @@ export function createQuotation(
       tax,
       total,
       data.notes || null,
-      actorId || null,
+      actor?.id || null,
       ts,
       ts,
     );
@@ -198,10 +200,16 @@ export function createQuotation(
     }
   });
 
+  if (actor) {
+    audit(actor, 'إنشاء عرض سعر', 'QUOTATION', qId, qNumber);
+  }
   return getQuotation(qId)!;
 }
 
-export function confirmQuotation(quotationId: string, _actorId?: string): Quotation {
+export function confirmQuotation(
+  quotationId: string,
+  actor?: Pick<Actor, 'id' | 'name'>,
+): Quotation {
   const q = one<Quotation>('SELECT * FROM quotations WHERE id=?', quotationId);
   if (!q) throw new AppError(404, 'عرض السعر غير موجود');
   if (q.status !== 'DRAFT') {
@@ -209,10 +217,16 @@ export function confirmQuotation(quotationId: string, _actorId?: string): Quotat
   }
 
   run("UPDATE quotations SET status='CONFIRMED', updated_at=? WHERE id=?", now(), quotationId);
+  if (actor) {
+    audit(actor, 'تأكيد عرض سعر', 'QUOTATION', quotationId, q.number);
+  }
   return getQuotation(quotationId)!;
 }
 
-export function rejectQuotation(quotationId: string, _actorId?: string): Quotation {
+export function rejectQuotation(
+  quotationId: string,
+  actor?: Pick<Actor, 'id' | 'name'>,
+): Quotation {
   const q = one<Quotation>('SELECT * FROM quotations WHERE id=?', quotationId);
   if (!q) throw new AppError(404, 'عرض السعر غير موجود');
   if (q.status === 'CONVERTED') {
@@ -220,6 +234,9 @@ export function rejectQuotation(quotationId: string, _actorId?: string): Quotati
   }
 
   run("UPDATE quotations SET status='REJECTED', updated_at=? WHERE id=?", now(), quotationId);
+  if (actor) {
+    audit(actor, 'رفض عرض سعر', 'QUOTATION', quotationId, q.number);
+  }
   return getQuotation(quotationId)!;
 }
 
@@ -228,7 +245,7 @@ export function rejectQuotation(quotationId: string, _actorId?: string): Quotati
  */
 export function convertQuotationToSale(
   quotationId: string,
-  actorId?: string,
+  actor?: Pick<Actor, 'id' | 'name'>,
 ): { documentId: string; quotation: Quotation } {
   const q = getQuotation(quotationId);
   if (!q) throw new AppError(404, 'عرض السعر غير موجود');
@@ -273,7 +290,7 @@ export function convertQuotationToSale(
       total,
       q.notes ? `${q.notes} (محول من ${q.number})` : `محول من ${q.number}`,
       id(), // unique UUID for ETA
-      actorId || null,
+      actor?.id || null,
       ts,
     );
 
@@ -303,6 +320,15 @@ export function convertQuotationToSale(
       ts,
       quotationId,
     );
+    if (actor) {
+      audit(
+        actor,
+        'تحويل عرض سعر إلى فاتورة',
+        'QUOTATION',
+        quotationId,
+        `${q.number} ← ${docNumber}`,
+      );
+    }
   });
 
   return { documentId: docId, quotation: getQuotation(quotationId)! };

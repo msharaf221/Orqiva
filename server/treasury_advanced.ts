@@ -4,7 +4,8 @@
 
 import { all, one, run, transaction, id, now } from './db';
 import { AppError } from './errors';
-import { inScope, type Scope } from './scope';
+import { audit } from './audit';
+import { inScope, type Actor, type Scope } from './scope';
 import { CostCenter } from '../src/types';
 
 function readableBranchSql(
@@ -42,12 +43,15 @@ export function listCostCenters(): CostCenter[] {
   return all<CostCenter>('SELECT * FROM cost_centers ORDER BY code ASC');
 }
 
-export function createCostCenter(data: {
-  code: string;
-  name: string;
-  parent_id?: string;
-  notes?: string;
-}): CostCenter {
+export function createCostCenter(
+  data: {
+    code: string;
+    name: string;
+    parent_id?: string;
+    notes?: string;
+  },
+  actor?: Pick<Actor, 'id' | 'name'>,
+): CostCenter {
   const existing = one<{ id: string }>('SELECT id FROM cost_centers WHERE code=?', data.code);
   if (existing) throw new AppError(400, 'كود مركز التكلفة موجود بالفعل');
 
@@ -63,6 +67,7 @@ export function createCostCenter(data: {
     data.notes || null,
     ts,
   );
+  if (actor) audit(actor, 'إنشاء مركز تكلفة', 'COST_CENTER', ccId, `${data.code}: ${data.name}`);
   return one<CostCenter>('SELECT * FROM cost_centers WHERE id=?', ccId)!;
 }
 
@@ -146,6 +151,7 @@ export function createBankStatement(
     }>;
   },
   scope?: Scope,
+  actor?: Pick<Actor, 'id' | 'name'>,
 ): BankStatement {
   assertBankAccountVisible(data.cash_account_id, scope);
 
@@ -177,12 +183,25 @@ export function createBankStatement(
         l.amount,
       );
     }
+    if (actor)
+      audit(
+        actor,
+        'إنشاء كشف حساب بنكي',
+        'BANK_STATEMENT',
+        stmtId,
+        `${data.statement_date} · ${data.lines.length} سطر`,
+      );
   });
 
   return getBankStatement(stmtId)!;
 }
 
-export function matchStatementLine(lineId: string, paymentId: string, scope?: Scope): void {
+export function matchStatementLine(
+  lineId: string,
+  paymentId: string,
+  scope?: Scope,
+  actor?: Pick<Actor, 'id' | 'name'>,
+): void {
   const line = one<BankStatementLine & { branch_id: string | null }>(
     `SELECT bsl.*, ca.branch_id
      FROM bank_statement_lines bsl
@@ -214,6 +233,7 @@ export function matchStatementLine(lineId: string, paymentId: string, scope?: Sc
     now(),
     lineId,
   );
+  if (actor) audit(actor, 'مطابقة سطر كشف بنكي', 'BANK_STATEMENT_LINE', lineId, paymentId);
 }
 
 // --- Cash Flow Forecasting ---

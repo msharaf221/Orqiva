@@ -34,6 +34,7 @@ import {
 } from './routes/attendance_devices';
 import { iclockRouter } from './routes/iclock';
 import { runTaxFreeReset } from './tax_free_reset';
+import { currentRequestId, requestIdMiddleware } from './request_context';
 
 import type { User } from '../src/types';
 
@@ -73,6 +74,7 @@ app.use(
 );
 app.use(express.json({ limit: '256kb' }));
 app.use(cookieParser());
+app.use(requestIdMiddleware);
 
 // Non-simple custom header prevents cross-site mutations, including with embedded cookies.
 // No CORS is enabled, so other origins cannot send the required header.
@@ -170,19 +172,27 @@ if (existsSync(dist)) {
 
 // Global error handling middleware
 app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  const requestId = currentRequestId();
+  const withRequestId = (payload: Record<string, unknown>) =>
+    requestId ? { ...payload, request_id: requestId } : payload;
   if (error instanceof ZodError) {
-    return res.status(400).json({
-      error: 'تحقق من البيانات المدخلة',
-      details: error.issues.map((i) => `${i.path.join('.')}: ${i.message}`),
-    });
+    return res.status(400).json(
+      withRequestId({
+        error: 'تحقق من البيانات المدخلة',
+        details: error.issues.map((i) => `${i.path.join('.')}: ${i.message}`),
+      }),
+    );
   }
-  if (error instanceof AppError) return res.status(error.status).json({ error: error.message });
+  if (error instanceof AppError)
+    return res.status(error.status).json(withRequestId({ error: error.message }));
   if (error instanceof SyntaxError && 'body' in error) {
-    return res.status(400).json({ error: 'صيغة الطلب غير صالحة' });
+    return res.status(400).json(withRequestId({ error: 'صيغة الطلب غير صالحة' }));
   }
   if (error instanceof Error && error.message.includes('UNIQUE constraint')) {
-    return res.status(409).json({ error: 'هذا الكود أو البريد الإلكتروني مستخدم بالفعل' });
+    return res
+      .status(409)
+      .json(withRequestId({ error: 'هذا الكود أو البريد الإلكتروني مستخدم بالفعل' }));
   }
   console.error(error);
-  res.status(500).json({ error: 'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.' });
+  res.status(500).json(withRequestId({ error: 'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.' }));
 });

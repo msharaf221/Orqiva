@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { all } from '../db';
 import { requirePermission } from '../rbac';
 import { scopeFor, scopeSql } from '../scope';
+import { idempotencyKey, sendIdempotent, withIdempotency } from '../idempotency';
 import { getReturnableLines } from '../returns';
 import type { Document } from '../../src/types';
 import {
@@ -80,7 +81,12 @@ posRouter.get(
 );
 
 posRouter.post('/checkout', requirePermission('pos:access'), (req, res) => {
-  res.status(201).json(posCheckout(req.body, req.user));
+  sendIdempotent(
+    res,
+    withIdempotency(req.user, 'pos.checkout', idempotencyKey(req), req.body, 201, () =>
+      posCheckout(req.body, req.user),
+    ),
+  );
 });
 
 posRouter.post('/return', requirePermission('pos:access', 'documents:create_sale'), (req, res) => {

@@ -13,6 +13,7 @@ import {
   confirmPayrollRun,
 } from '../payroll';
 import { AppError } from '../errors';
+import { idempotencyKey, sendIdempotent, withIdempotency } from '../idempotency';
 
 export const payrollRouter = Router();
 
@@ -99,5 +100,10 @@ payrollRouter.get('/payroll-runs/:id', requirePermission('hr:view'), (req, res) 
 });
 
 payrollRouter.post('/payroll-runs/:id/confirm', requirePermission('hr:manage'), (req, res) => {
-  res.json(confirmPayrollRun(String(req.params.id), req.user, scopeFor(req.user)));
+  sendIdempotent(
+    res,
+    withIdempotency(req.user, 'payroll.confirm', idempotencyKey(req), req.params.id, 200, () =>
+      confirmPayrollRun(String(req.params.id), req.user, scopeFor(req.user)),
+    ),
+  );
 });

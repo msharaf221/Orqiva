@@ -4,6 +4,7 @@
 
 import { all, one, run, transaction, id, now } from './db';
 import { AppError } from './errors';
+import { audit } from './audit';
 import { type Actor, canSee, writableBranch, scopeFor, scopeSql } from './scope';
 import { nextNumber, saveDocument, documentDetail } from './service';
 import { purchaseOrderSchema, landedCostSchema } from './validation';
@@ -152,6 +153,7 @@ export function createPurchaseOrder(raw: unknown, actor: Actor): PurchaseOrder {
       );
     }
 
+    audit(actor, 'إنشاء أمر شراء', 'PURCHASE_ORDER', orderId, number);
     return getPurchaseOrder(orderId, actor);
   });
 }
@@ -224,6 +226,7 @@ export function updatePurchaseOrder(orderId: string, raw: unknown, actor: Actor)
       );
     }
 
+    audit(actor, 'تعديل أمر شراء', 'PURCHASE_ORDER', orderId);
     return getPurchaseOrder(orderId, actor);
   });
 }
@@ -237,6 +240,7 @@ export function confirmPurchaseOrder(orderId: string, actor: Actor): PurchaseOrd
   }
 
   run("UPDATE purchase_orders SET status = 'CONFIRMED' WHERE id = ?", orderId);
+  audit(actor, 'تأكيد أمر شراء', 'PURCHASE_ORDER', orderId, po.number);
   return getPurchaseOrder(orderId, actor);
 }
 
@@ -249,6 +253,7 @@ export function cancelPurchaseOrder(orderId: string, actor: Actor): PurchaseOrde
   }
 
   run("UPDATE purchase_orders SET status = 'CANCELLED' WHERE id = ?", orderId);
+  audit(actor, 'إلغاء أمر شراء', 'PURCHASE_ORDER', orderId, po.number);
   return getPurchaseOrder(orderId, actor);
 }
 
@@ -357,6 +362,13 @@ export function receivePurchaseOrder(
 
     const doc = saveDocument(docPayload, actor);
 
+    audit(
+      actor,
+      'استلام أمر شراء',
+      'PURCHASE_ORDER',
+      orderId,
+      `${po.number} · مستند ${doc.number}`,
+    );
     return {
       purchase_order: getPurchaseOrder(orderId, actor),
       document: doc,
@@ -561,6 +573,13 @@ export function applyLandedCost(documentId: string, raw: unknown, actor: Actor):
 
     const created = listLandedCosts(documentId, actor).find((c) => c.id === landedCostId);
     if (!created) throw new AppError(500, 'فشل استرجاع بيانات التكلفة الإضافية بعد الحفظ');
+    audit(
+      actor,
+      'رسملة تكلفة إضافية',
+      'LANDED_COST',
+      landedCostId,
+      `${input.cost_name} · ${input.amount / 100} على ${doc.number}`,
+    );
     return created;
   });
 }

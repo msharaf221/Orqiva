@@ -13,6 +13,7 @@ import { getReturnableLines } from '../returns';
 import { canSee, scopeFor, scopeSql } from '../scope';
 import { requirePermission } from '../rbac';
 import { authorizeDoc, authorizePost, authorizePayment } from '../middleware';
+import { idempotencyKey, sendIdempotent, withIdempotency } from '../idempotency';
 import {
   listPurchaseOrders,
   getPurchaseOrder,
@@ -174,7 +175,17 @@ documentsRouter.post(
   '/purchase-orders/:id/receive',
   requirePermission('documents:create_purchase'),
   (req, res) => {
-    res.json(receivePurchaseOrder(String(req.params.id), req.user, req.body));
+    sendIdempotent(
+      res,
+      withIdempotency(
+        req.user,
+        'purchase_orders.receive',
+        idempotencyKey(req),
+        { id: req.params.id, ...req.body },
+        200,
+        () => receivePurchaseOrder(String(req.params.id), req.user, req.body),
+      ),
+    );
   },
 );
 
@@ -201,7 +212,7 @@ documentsRouter.get('/quotations', (req, res) => {
 
 documentsRouter.post('/quotations', requirePermission('documents:create'), (req, res) => {
   const parsed = quotationSchema.parse(req.body);
-  res.status(201).json(createQuotation(parsed, req.user?.id));
+  res.status(201).json(createQuotation(parsed, req.user));
 });
 
 documentsRouter.get('/quotations/:id', (req, res) => {
@@ -214,7 +225,7 @@ documentsRouter.post(
   '/quotations/:id/confirm',
   requirePermission('documents:create'),
   (req, res) => {
-    res.json(confirmQuotation(String(req.params.id), req.user?.id));
+    res.json(confirmQuotation(String(req.params.id), req.user));
   },
 );
 
@@ -222,7 +233,7 @@ documentsRouter.post(
   '/quotations/:id/reject',
   requirePermission('documents:create'),
   (req, res) => {
-    res.json(rejectQuotation(String(req.params.id), req.user?.id));
+    res.json(rejectQuotation(String(req.params.id), req.user));
   },
 );
 
@@ -230,7 +241,12 @@ documentsRouter.post(
   '/quotations/:id/convert',
   requirePermission('documents:create'),
   (req, res) => {
-    res.json(convertQuotationToSale(String(req.params.id), req.user?.id));
+    sendIdempotent(
+      res,
+      withIdempotency(req.user, 'quotations.convert', idempotencyKey(req), req.params.id, 200, () =>
+        convertQuotationToSale(String(req.params.id), req.user),
+      ),
+    );
   },
 );
 
@@ -242,7 +258,7 @@ documentsRouter.get('/price-lists', (_req, res) => {
 
 documentsRouter.post('/price-lists', requirePermission('catalog:edit'), (req, res) => {
   const parsed = priceListSchema.parse(req.body);
-  res.status(201).json(createPriceList(parsed));
+  res.status(201).json(createPriceList(parsed, req.user));
 });
 
 documentsRouter.get('/price-lists/:id', (req, res) => {
@@ -252,7 +268,7 @@ documentsRouter.get('/price-lists/:id', (req, res) => {
 });
 
 documentsRouter.put('/price-lists/:id', requirePermission('catalog:edit'), (req, res) => {
-  res.json(updatePriceList(String(req.params.id), req.body));
+  res.json(updatePriceList(String(req.params.id), req.body, req.user));
 });
 
 documentsRouter.post('/price-lists/:id/items', requirePermission('catalog:edit'), (req, res) => {
@@ -260,14 +276,14 @@ documentsRouter.post('/price-lists/:id/items', requirePermission('catalog:edit')
     ...req.body,
     price_list_id: req.params.id,
   });
-  res.status(201).json(setPriceListItem(parsed));
+  res.status(201).json(setPriceListItem(parsed, req.user));
 });
 
 documentsRouter.delete(
   '/price-lists/items/:itemId',
   requirePermission('catalog:edit'),
   (req, res) => {
-    deletePriceListItem(String(req.params.itemId));
+    deletePriceListItem(String(req.params.itemId), req.user);
     res.json({ ok: true });
   },
 );
@@ -284,7 +300,7 @@ documentsRouter.get('/pricing/resolve', (req, res) => {
 
 documentsRouter.post('/parties/:id/price-list', requirePermission('parties:edit'), (req, res) => {
   const plId = req.body.price_list_id ? String(req.body.price_list_id) : null;
-  assignPartyPriceList(String(req.params.id), plId);
+  assignPartyPriceList(String(req.params.id), plId, req.user);
   res.json({ ok: true });
 });
 
