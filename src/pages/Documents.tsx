@@ -1,3 +1,4 @@
+import { cur } from '../currency';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
@@ -897,7 +898,7 @@ function Editor({ type, existing }: { type: DocType; existing?: Document }) {
               <span>{TAX_FREE ? 'الإجمالي الفرعي' : 'الإجمالي قبل الضريبة'}</span>
               <strong className="num">{money(subtotal, 2)}</strong>
             </div>
-            <Field label="الخصم (ج.م)">
+            <Field label={`الخصم (${cur()})`}>
               <input
                 type="number"
                 min="0"
@@ -930,7 +931,7 @@ function Editor({ type, existing }: { type: DocType; existing?: Document }) {
             <div className="summary-total">
               <span>الإجمالي المستحق</span>
               <strong className="num">
-                {money(total, 2)} <small>ج.م</small>
+                {money(total, 2)} <small>{cur()}</small>
               </strong>
             </div>
             <Button type="submit" value="post" busy={busy}>
@@ -1367,7 +1368,7 @@ export function DocumentDetail() {
               <div className="grand-total">
                 <span>{isReturn ? 'إجمالي المرتجع' : 'الإجمالي النهائي'}</span>
                 <strong className="num">
-                  {money(doc.total, 2)} <small>ج.م</small>
+                  {money(doc.total, 2)} <small>{cur()}</small>
                 </strong>
               </div>
               {!isReturn && (
@@ -1380,7 +1381,7 @@ export function DocumentDetail() {
                     <div className="balance-row">
                       <span>المتبقي المستحق</span>
                       <strong className="num">
-                        {money(doc.total - doc.paid, 2)} <small>ج.م</small>
+                        {money(doc.total - doc.paid, 2)} <small>{cur()}</small>
                       </strong>
                     </div>
                   )}
@@ -1442,7 +1443,7 @@ export function DocumentDetail() {
                           <Check size={15} />
                         </span>
                         <strong className="num">
-                          {money(p.amount, 2)} <small>ج.م</small>
+                          {money(p.amount, 2)} <small>{cur()}</small>
                         </strong>
                       </div>
                       <p>
@@ -1690,10 +1691,10 @@ export function PaymentForm({
           <div className="adjust-current">
             <span>الرصيد المستحق</span>
             <strong className="num">
-              {money(doc.total - doc.paid, 2)} <small>ج.م</small>
+              {money(doc.total - doc.paid, 2)} <small>{cur()}</small>
             </strong>
           </div>
-          <Field label="المبلغ المدفوع (ج.م) *">
+          <Field label={`المبلغ المدفوع (${cur()}) *`}>
             <input
               name="amount"
               type="number"
@@ -1736,7 +1737,7 @@ export function PaymentForm({
                   <option key={a.id} value={a.id}>
                     {a.name} (
                     {a.type === 'CASH' ? 'خزينة' : a.type === 'BANK' ? 'حساب بنكي' : 'محفظة'}) —
-                    الرصيد: {money(a.balance, 2)} ج.م
+                    الرصيد: {money(a.balance, 2)} {cur()}
                   </option>
                 ))}
             </select>
@@ -1966,20 +1967,24 @@ export function ReturnModal({
                   <div style={{ fontSize: '11px', color: 'var(--muted)' }}>
                     {TAX_FREE ? 'الإجمالي الفرعي:' : 'قبل الضريبة:'}
                   </div>
-                  <strong className="num">{money(subtotal, 2)} ج.م</strong>
+                  <strong className="num">
+                    {money(subtotal, 2)} {cur()}
+                  </strong>
                 </div>
                 {!TAX_FREE && doc.tax_rate > 0 && (
                   <div>
                     <div style={{ fontSize: '11px', color: 'var(--muted)' }}>
                       الضريبة ({doc.tax_rate / 100}%):
                     </div>
-                    <strong className="num">{money(tax, 2)} ج.م</strong>
+                    <strong className="num">
+                      {money(tax, 2)} {cur()}
+                    </strong>
                   </div>
                 )}
                 <div>
                   <div style={{ fontSize: '11px', color: 'var(--muted)' }}>صافي قيمة الإشعار:</div>
                   <strong className="num amount" style={{ fontSize: '15px' }}>
-                    {money(total, 2)} ج.م
+                    {money(total, 2)} {cur()}
                   </strong>
                 </div>
               </div>
@@ -2063,7 +2068,9 @@ function LandedCostsModal({ doc, onClose }: { doc: Document; onClose: () => void
         >
           <div>
             <span className="muted">إجمالي التكاليف الموزعة: </span>
-            <strong className="num amount">{money(totalLanded, 2)} ج.م</strong>
+            <strong className="num amount">
+              {money(totalLanded, 2)} {cur()}
+            </strong>
           </div>
           {can(user, 'documents:create_purchase') && !adding && (
             <Button onClick={() => setAdding(true)}>
@@ -2178,7 +2185,9 @@ function LandedCostsModal({ doc, onClose }: { doc: Document; onClose: () => void
                       {c.notes && <small className="cell-sub">{c.notes}</small>}
                     </td>
                     <td>{TYPE_NAMES[c.cost_type] || c.cost_type}</td>
-                    <td className="num amount">{money(c.amount, 2)} ج.م</td>
+                    <td className="num amount">
+                      {money(c.amount, 2)} {cur()}
+                    </td>
                     <td>{c.allocation_method === 'BY_VALUE' ? 'حسب القيمة' : 'حسب الكمية'}</td>
                     <td>{c.created_by_name || '—'}</td>
                     <td className="muted">{formatDate(c.created_at, true)}</td>
@@ -2336,7 +2345,7 @@ function PurchaseOrdersView({
                       </span>
                     </td>
                     <td className="num amount">
-                      <strong>{money(po.total, 2)}</strong> <small>ج.م</small>
+                      <strong>{money(po.total, 2)}</strong> <small>{cur()}</small>
                     </td>
                     <td>
                       <div className="row-actions">
@@ -2545,7 +2554,7 @@ function CreatePurchaseOrderModal({
                   <tr>
                     <th>الصنف / المنتج</th>
                     <th>الكمية المطلوبة</th>
-                    <th>سعر الوحدة التقديري (ج.م)</th>
+                    <th>سعر الوحدة التقديري ({cur()})</th>
                     <th>الإجمالي</th>
                     <th>حذف</th>
                   </tr>
@@ -2598,7 +2607,7 @@ function CreatePurchaseOrderModal({
                         />
                       </td>
                       <td className="num amount">
-                        {money(Math.round(line.quantity * line.unit_price * 100), 2)} ج.م
+                        {money(Math.round(line.quantity * line.unit_price * 100), 2)} {cur()}
                       </td>
                       <td>
                         {lines.length > 1 && (
@@ -2629,17 +2638,23 @@ function CreatePurchaseOrderModal({
             >
               <div>
                 {TAX_FREE ? 'الإجمالي الفرعي:' : 'قبل الضريبة:'}{' '}
-                <strong className="num">{money(Math.round(subtotal * 100), 2)} ج.م</strong>
+                <strong className="num">
+                  {money(Math.round(subtotal * 100), 2)} {cur()}
+                </strong>
               </div>
               {!TAX_FREE && (
                 <div>
                   الضريبة ({taxRate / 100}%):{' '}
-                  <strong className="num">{money(Math.round(tax * 100), 2)} ج.م</strong>
+                  <strong className="num">
+                    {money(Math.round(tax * 100), 2)} {cur()}
+                  </strong>
                 </div>
               )}
               <div>
                 الإجمالي النهائي:{' '}
-                <strong className="num amount">{money(Math.round(total * 100), 2)} ج.م</strong>
+                <strong className="num amount">
+                  {money(Math.round(total * 100), 2)} {cur()}
+                </strong>
               </div>
             </div>
           </div>
@@ -2807,7 +2822,7 @@ function QuotationsView({
                       </span>
                     </td>
                     <td className="num amount">
-                      <strong>{money(q.total, 2)}</strong> <small>ج.م</small>
+                      <strong>{money(q.total, 2)}</strong> <small>{cur()}</small>
                     </td>
                     <td>
                       <div className="row-actions">
@@ -3038,7 +3053,7 @@ function CreateQuotationModal({
                   <tr>
                     <th>الصنف / المنتج</th>
                     <th>الكمية</th>
-                    <th>سعر الوحدة المعروض (ج.م)</th>
+                    <th>سعر الوحدة المعروض ({cur()})</th>
                     <th>الإجمالي</th>
                     <th>حذف</th>
                   </tr>
@@ -3091,7 +3106,7 @@ function CreateQuotationModal({
                         />
                       </td>
                       <td className="num amount">
-                        {money(Math.round(line.quantity * line.unit_price * 100), 2)} ج.م
+                        {money(Math.round(line.quantity * line.unit_price * 100), 2)} {cur()}
                       </td>
                       <td>
                         {lines.length > 1 && (
@@ -3124,7 +3139,9 @@ function CreateQuotationModal({
             >
               <div>
                 قبل الخصم:{' '}
-                <strong className="num">{money(Math.round(subtotal * 100), 2)} ج.م</strong>
+                <strong className="num">
+                  {money(Math.round(subtotal * 100), 2)} {cur()}
+                </strong>
               </div>
               <div>
                 الخصم:{' '}
@@ -3137,16 +3154,21 @@ function CreateQuotationModal({
                   placeholder="0.00"
                   style={{ width: '100px', padding: '2px 6px', textAlign: 'center' }}
                 />{' '}
-                ج.م
+                {cur()}
               </div>
               {!TAX_FREE && (
                 <div>
-                  ضريبة 14%: <strong className="num">{money(Math.round(tax * 100), 2)} ج.م</strong>
+                  ضريبة 14%:{' '}
+                  <strong className="num">
+                    {money(Math.round(tax * 100), 2)} {cur()}
+                  </strong>
                 </div>
               )}
               <div>
                 الإجمالي النهائي للعرض:{' '}
-                <strong className="num amount">{money(Math.round(total * 100), 2)} ج.م</strong>
+                <strong className="num amount">
+                  {money(Math.round(total * 100), 2)} {cur()}
+                </strong>
               </div>
             </div>
           </div>

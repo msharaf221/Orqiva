@@ -1,3 +1,4 @@
+import { cur } from '../../currency';
 import { useState } from 'react';
 import { CheckCircle2, FileText, Pencil, Plus, UserCheck, XCircle } from 'lucide-react';
 import { Button, Loading, Modal, formatDate, money, useAction, useData } from '../../lib';
@@ -110,7 +111,9 @@ export function DealDetailModal({
             <div className="crm-detail-summary">
               <div>
                 <span className="crm-detail-label">القيمة المتوقعة</span>
-                <strong className="crm-detail-value">{money(deal.expected_revenue)} ج.م</strong>
+                <strong className="crm-detail-value">
+                  {money(deal.expected_revenue)} {cur()}
+                </strong>
                 <span className="crm-detail-meta">
                   {deal.status === 'WON'
                     ? 'صفقة رابحة'

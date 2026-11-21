@@ -1,3 +1,4 @@
+import { cur } from '../../currency';
 import { useState, useEffect, type FormEvent } from 'react';
 import {
   ShieldCheck,
@@ -131,8 +132,10 @@ export function ShiftTreasuryAuditModal({
               <div style={{ textAlign: 'left', fontSize: '12px' }}>
                 <div>
                   إجمالي المبيعات:{' '}
-                  <b style={{ color: 'var(--indigo-600)' }}>{money(summary.total_sales)} ج.م</b> (
-                  {summary.sales_count} عملية)
+                  <b style={{ color: 'var(--indigo-600)' }}>
+                    {money(summary.total_sales)} {cur()}
+                  </b>{' '}
+                  ({summary.sales_count} عملية)
                 </div>
                 {summary.shift.safe_envelope_number && (
                   <div style={{ color: '#5b21b6', fontWeight: 700 }}>
@@ -150,7 +153,7 @@ export function ShiftTreasuryAuditModal({
                     <th>وسيلة الدفع</th>
                     <th>المسجل بالنظام</th>
                     <th>المصرح به من الكاشير</th>
-                    <th>المعتمد بالخزينة (ج.م)</th>
+                    <th>المعتمد بالخزينة ({cur()})</th>
                     <th>الفارق المالي</th>
                   </tr>
                 </thead>
@@ -166,11 +169,13 @@ export function ShiftTreasuryAuditModal({
                       </small>
                     </td>
                     <td>
-                      <b>{money(summary.expected_cash)} ج.م</b>
+                      <b>
+                        {money(summary.expected_cash)} {cur()}
+                      </b>
                     </td>
                     <td>
                       <span style={{ color: '#b45309', fontWeight: 600 }}>
-                        {money(summary.cashier_declared_cash ?? summary.expected_cash)} ج.م
+                        {money(summary.cashier_declared_cash ?? summary.expected_cash)} {cur()}
                       </span>
                     </td>
                     <td style={{ width: '140px' }}>
@@ -199,8 +204,8 @@ export function ShiftTreasuryAuditModal({
                         {cashDiffCents === 0
                           ? 'مطابق'
                           : cashDiffCents < 0
-                            ? `عجز: -${money(Math.abs(cashDiffCents))} ج.م`
-                            : `زيادة: +${money(cashDiffCents)} ج.م`}
+                            ? `عجز: -${money(Math.abs(cashDiffCents))} ${cur()}`
+                            : `زيادة: +${money(cashDiffCents)} ${cur()}`}
                       </span>
                     </td>
                   </tr>
@@ -217,11 +222,13 @@ export function ShiftTreasuryAuditModal({
                       </small>
                     </td>
                     <td>
-                      <b>{money(summary.expected_card)} ج.م</b>
+                      <b>
+                        {money(summary.expected_card)} {cur()}
+                      </b>
                     </td>
                     <td>
                       <span style={{ color: '#2563eb', fontWeight: 600 }}>
-                        {money(summary.cashier_declared_card ?? summary.expected_card)} ج.م
+                        {money(summary.cashier_declared_card ?? summary.expected_card)} {cur()}
                       </span>
                     </td>
                     <td style={{ width: '140px' }}>
@@ -250,8 +257,8 @@ export function ShiftTreasuryAuditModal({
                         {cardDiffCents === 0
                           ? 'مطابق'
                           : cardDiffCents < 0
-                            ? `عجز: -${money(Math.abs(cardDiffCents))} ج.م`
-                            : `زيادة: +${money(cardDiffCents)} ج.م`}
+                            ? `عجز: -${money(Math.abs(cardDiffCents))} ${cur()}`
+                            : `زيادة: +${money(cardDiffCents)} ${cur()}`}
                       </span>
                     </td>
                   </tr>
@@ -267,11 +274,13 @@ export function ShiftTreasuryAuditModal({
                       </small>
                     </td>
                     <td>
-                      <b>{money(summary.expected_bank)} ج.م</b>
+                      <b>
+                        {money(summary.expected_bank)} {cur()}
+                      </b>
                     </td>
                     <td>
                       <span style={{ color: '#059669', fontWeight: 600 }}>
-                        {money(summary.cashier_declared_bank ?? summary.expected_bank)} ج.م
+                        {money(summary.cashier_declared_bank ?? summary.expected_bank)} {cur()}
                       </span>
                     </td>
                     <td style={{ width: '140px' }}>
@@ -300,8 +309,8 @@ export function ShiftTreasuryAuditModal({
                         {bankDiffCents === 0
                           ? 'مطابق'
                           : bankDiffCents < 0
-                            ? `عجز: -${money(Math.abs(bankDiffCents))} ج.م`
-                            : `زيادة: +${money(bankDiffCents)} ج.م`}
+                            ? `عجز: -${money(Math.abs(bankDiffCents))} ${cur()}`
+                            : `زيادة: +${money(bankDiffCents)} ${cur()}`}
                       </span>
                     </td>
                   </tr>
@@ -314,14 +323,16 @@ export function ShiftTreasuryAuditModal({
                       </div>
                     </td>
                     <td>
-                      <b>{money(summary.credit_sales)} ج.م</b>
+                      <b>
+                        {money(summary.credit_sales)} {cur()}
+                      </b>
                     </td>
                     <td>
                       <span className="muted">—</span>
                     </td>
                     <td>
                       <span className="muted" style={{ fontSize: '12px' }}>
-                        {money(summary.credit_sales)} ج.م
+                        {money(summary.credit_sales)} {cur()}
                       </span>
                     </td>
                     <td>
@@ -416,7 +427,7 @@ export function ShiftTreasuryAuditModal({
                   />
                   <span>مراجعة وتوقيع أذونات التوريد والصرف اليدوية للدرج (Cash In/Out)</span>
                   <span className="pos-checklist-badge">
-                    صافي الحركات: {money(summary.cash_in - summary.cash_out)} ج.م
+                    صافي الحركات: {money(summary.cash_in - summary.cash_out)} {cur()}
                   </span>
                 </label>
 
@@ -506,7 +517,9 @@ export function ShiftTreasuryAuditModal({
                               </span>
                             </td>
                             <td>
-                              <b>{money(p.amount)} ج.م</b>
+                              <b>
+                                {money(p.amount)} {cur()}
+                              </b>
                             </td>
                             <td className="treasury-chip-meta">{p.reference || '—'}</td>
                           </tr>
@@ -526,7 +539,7 @@ export function ShiftTreasuryAuditModal({
                   <strong>تسجيل قيد عجز تلقائي:</strong>
                   <p className="shortage-note">
                     سيتم تلقائياً إنشاء قيد مصروف تشغيلي بقيمة ({money(Math.abs(cashDiffCents))}{' '}
-                    ج.م) في تصنيف «عجز نقدية نقطة بيع» لضبط الخزنة وحساب الأرباح والخسائر.
+                    {cur()}) في تصنيف «عجز نقدية نقطة بيع» لضبط الخزنة وحساب الأرباح والخسائر.
                   </p>
                 </div>
               </div>
@@ -634,27 +647,39 @@ export function ShiftZReportModal({
             <div className="receipt-section-title">1. مطابقة نقدية الدرج (كاش)</div>
             <div className="receipt-row">
               <span>الرصيد الافتتاحي (العهدة):</span>
-              <span className="num">{money(summary.opening_cash)} ج.م</span>
+              <span className="num">
+                {money(summary.opening_cash)} {cur()}
+              </span>
             </div>
             <div className="receipt-row">
               <span>المبيعات النقدية:</span>
-              <span className="num font-semibold">{money(summary.cash_sales)} ج.م</span>
+              <span className="num font-semibold">
+                {money(summary.cash_sales)} {cur()}
+              </span>
             </div>
             <div className="receipt-row">
               <span>توريدات نقدية (إيداع درج):</span>
-              <span className="num text-green">+{money(summary.cash_in)} ج.م</span>
+              <span className="num text-green">
+                +{money(summary.cash_in)} {cur()}
+              </span>
             </div>
             <div className="receipt-row">
               <span>مسحوبات ومصروفات (درج):</span>
-              <span className="num text-red">-{money(summary.cash_out)} ج.م</span>
+              <span className="num text-red">
+                -{money(summary.cash_out)} {cur()}
+              </span>
             </div>
             <div className="receipt-row grand-total-row">
               <span>النقدية المتوقعة بالدرج:</span>
-              <span className="num total-amount">{money(summary.expected_cash)} ج.م</span>
+              <span className="num total-amount">
+                {money(summary.expected_cash)} {cur()}
+              </span>
             </div>
             <div className="receipt-row grand-total-row" style={{ color: '#1e40af' }}>
               <span>النقدية المسلّمة فعلياً:</span>
-              <span className="num total-amount">{money(declaredCash)} ج.م</span>
+              <span className="num total-amount">
+                {money(declaredCash)} {cur()}
+              </span>
             </div>
             <div className="receipt-row">
               <span>فارق النقدية:</span>
@@ -667,8 +692,8 @@ export function ShiftZReportModal({
                 {cashDiff === 0
                   ? 'مطابق (0.00)'
                   : cashDiff < 0
-                    ? `عجز: -${money(Math.abs(cashDiff))} ج.م`
-                    : `زيادة: +${money(cashDiff)} ج.م`}
+                    ? `عجز: -${money(Math.abs(cashDiff))} ${cur()}`
+                    : `زيادة: +${money(cashDiff)} ${cur()}`}
               </span>
             </div>
 
@@ -677,11 +702,15 @@ export function ShiftZReportModal({
             <div className="receipt-section-title">2. مبيعات البطاقات وماكينة الفيزا</div>
             <div className="receipt-row">
               <span>المبيعات المسجلة بالنظام:</span>
-              <span className="num">{money(summary.expected_card)} ج.م</span>
+              <span className="num">
+                {money(summary.expected_card)} {cur()}
+              </span>
             </div>
             <div className="receipt-row">
               <span>إجمالي شريط التسوية (Batch):</span>
-              <span className="num font-semibold">{money(declaredCard)} ج.م</span>
+              <span className="num font-semibold">
+                {money(declaredCard)} {cur()}
+              </span>
             </div>
             {shift.terminal_batch_number && (
               <div className="receipt-row">
@@ -704,8 +733,8 @@ export function ShiftZReportModal({
                 {cardDiff === 0
                   ? 'مطابق'
                   : cardDiff < 0
-                    ? `عجز: -${money(Math.abs(cardDiff))} ج.م`
-                    : `زيادة: +${money(cardDiff)} ج.م`}
+                    ? `عجز: -${money(Math.abs(cardDiff))} ${cur()}`
+                    : `زيادة: +${money(cardDiff)} ${cur()}`}
               </span>
             </div>
 
@@ -714,11 +743,15 @@ export function ShiftZReportModal({
             <div className="receipt-section-title">3. إنستاباي والتحويلات البنكية</div>
             <div className="receipt-row">
               <span>المسجل بالنظام:</span>
-              <span className="num">{money(summary.expected_bank)} ج.م</span>
+              <span className="num">
+                {money(summary.expected_bank)} {cur()}
+              </span>
             </div>
             <div className="receipt-row">
               <span>المحصل الفعلي المسلّم:</span>
-              <span className="num font-semibold">{money(declaredBank)} ج.م</span>
+              <span className="num font-semibold">
+                {money(declaredBank)} {cur()}
+              </span>
             </div>
             <div className="receipt-row">
               <span>عدد عمليات التحويل:</span>
@@ -735,8 +768,8 @@ export function ShiftZReportModal({
                 {bankDiff === 0
                   ? 'مطابق'
                   : bankDiff < 0
-                    ? `عجز: -${money(Math.abs(bankDiff))} ج.م`
-                    : `زيادة: +${money(bankDiff)} ج.م`}
+                    ? `عجز: -${money(Math.abs(bankDiff))} ${cur()}`
+                    : `زيادة: +${money(bankDiff)} ${cur()}`}
               </span>
             </div>
 
@@ -744,7 +777,9 @@ export function ShiftZReportModal({
 
             <div className="receipt-row grand-total-highlight">
               <span className="label">إجمالي إيراد مبيعات الوردية:</span>
-              <span className="num value">{money(summary.total_sales)} ج.م</span>
+              <span className="num value">
+                {money(summary.total_sales)} {cur()}
+              </span>
             </div>
 
             <div className="receipt-diff-box" style={{ marginTop: '10px' }}>

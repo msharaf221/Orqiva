@@ -1,3 +1,4 @@
+import { cur } from '../../currency';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Button, Field, Modal, money, toCents, useAction, useData } from '../../lib';
 import { useBranch } from '../../branch';
@@ -174,7 +175,7 @@ export function DealFormModal({
           </div>
 
           <div className="grid three" style={{ marginBottom: '12px' }}>
-            <Field label="القيمة المتوقعة (ج.م)">
+            <Field label={`القيمة المتوقعة (${cur()})`}>
               <input
                 name="expected_revenue"
                 type="number"

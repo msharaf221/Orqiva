@@ -1,3 +1,4 @@
+import { cur } from '../../currency';
 import { useState, useEffect, type FormEvent } from 'react';
 import {
   CreditCard,
@@ -47,7 +48,7 @@ export function OpenShiftModal({
     >
       <form onSubmit={handleSubmit}>
         <div className="modal-body form-grid">
-          <Field label="الرصيد النقدي الافتتاحي في الدرج (ج.م) *">
+          <Field label={`الرصيد النقدي الافتتاحي في الدرج (${cur()}) *`}>
             <input
               type="number"
               step="any"
@@ -133,7 +134,7 @@ export function CashMovementModal({
               </button>
             </div>
           </Field>
-          <Field label="المبلغ بالجنيه (ج.م) *">
+          <Field label={`المبلغ بالجنيه (${cur()}) *`}>
             <input
               type="number"
               step="any"
@@ -313,7 +314,9 @@ export function CloseShiftModal({
                     <span>نقدية الدرج (كاش)</span>
                     <Coins size={16} style={{ color: '#d97706' }} />
                   </div>
-                  <div className="pos-tender-card-expected">{money(summary.expected_cash)} ج.م</div>
+                  <div className="pos-tender-card-expected">
+                    {money(summary.expected_cash)} {cur()}
+                  </div>
                   <span className="pos-tender-card-meta">
                     مبيعات: {money(summary.cash_sales)} + العهدة
                   </span>
@@ -324,7 +327,9 @@ export function CloseShiftModal({
                     <span>بطاقات بنكية / فيزا</span>
                     <CreditCard size={16} style={{ color: '#2563eb' }} />
                   </div>
-                  <div className="pos-tender-card-expected">{money(summary.expected_card)} ج.م</div>
+                  <div className="pos-tender-card-expected">
+                    {money(summary.expected_card)} {cur()}
+                  </div>
                   <span className="pos-tender-card-meta">مسجل بالنظام من المبيعات</span>
                 </div>
 
@@ -333,7 +338,9 @@ export function CloseShiftModal({
                     <span>إنستاباي / محفظة</span>
                     <Building size={16} style={{ color: '#059669' }} />
                   </div>
-                  <div className="pos-tender-card-expected">{money(summary.expected_bank)} ج.م</div>
+                  <div className="pos-tender-card-expected">
+                    {money(summary.expected_bank)} {cur()}
+                  </div>
                   <span className="pos-tender-card-meta">تحويلات بنكية ومحافظ</span>
                 </div>
 
@@ -342,7 +349,9 @@ export function CloseShiftModal({
                     <span>مبيعات آجلة (ذمم)</span>
                     <Clock size={16} style={{ color: '#7c3aed' }} />
                   </div>
-                  <div className="pos-tender-card-expected">{money(summary.credit_sales)} ج.م</div>
+                  <div className="pos-tender-card-expected">
+                    {money(summary.credit_sales)} {cur()}
+                  </div>
                   <span className="pos-tender-card-meta">على حسابات العملاء</span>
                 </div>
               </div>
@@ -357,32 +366,42 @@ export function CloseShiftModal({
                 <div className="pos-reconciliation-card">
                   <div className="pos-recon-row">
                     <span>الرصيد الافتتاحي (عهدة البداية):</span>
-                    <b>{money(summary.opening_cash)} ج.م</b>
+                    <b>
+                      {money(summary.opening_cash)} {cur()}
+                    </b>
                   </div>
                   <div className="pos-recon-row">
                     <span>مبيعات نقدية (كاش):</span>
-                    <b>+{money(summary.cash_sales)} ج.م</b>
+                    <b>
+                      +{money(summary.cash_sales)} {cur()}
+                    </b>
                   </div>
                   <div className="pos-recon-row">
                     <span>توريدات نقدية إضافية (إيداع درج):</span>
-                    <b>+{money(summary.cash_in)} ج.م</b>
+                    <b>
+                      +{money(summary.cash_in)} {cur()}
+                    </b>
                   </div>
                   <div className="pos-recon-row">
                     <span>مسحوبات نقدية (مصروفات درج):</span>
-                    <b>-{money(summary.cash_out)} ج.م</b>
+                    <b>
+                      -{money(summary.cash_out)} {cur()}
+                    </b>
                   </div>
                   <div className="pos-recon-divider" />
                   <div className="pos-recon-row total">
                     <span>النقدية المتوقعة بالدرج:</span>
-                    <strong>{money(summary.expected_cash)} ج.م</strong>
+                    <strong>
+                      {money(summary.expected_cash)} {cur()}
+                    </strong>
                   </div>
                 </div>
 
                 <Field
                   label={
                     directClose
-                      ? 'النقدية الفعلية المعتمدة (ج.م) *'
-                      : 'النقدية المحصاة في الدرج المسلّمة للخزنة (ج.م) *'
+                      ? 'النقدية الفعلية المعتمدة (' + cur() + ') *'
+                      : 'النقدية المحصاة في الدرج المسلّمة للخزنة (' + cur() + ') *'
                   }
                 >
                   <input
@@ -406,20 +425,26 @@ export function CloseShiftModal({
                   {cashDiffCents === 0 ? (
                     <>
                       <CheckCircle2 size={18} />
-                      <span>النقدية مطابقة تماماً مع المسجل بالنظام (الفارق: 0.00 ج.م)</span>
+                      <span>النقدية مطابقة تماماً مع المسجل بالنظام (الفارق: 0.00 {cur()})</span>
                     </>
                   ) : cashDiffCents < 0 ? (
                     <>
                       <AlertCircle size={18} />
                       <span>
-                        عجز نقدي في الدرج بمقدار: <b>{money(Math.abs(cashDiffCents))} ج.م</b>
+                        عجز نقدي في الدرج بمقدار:{' '}
+                        <b>
+                          {money(Math.abs(cashDiffCents))} {cur()}
+                        </b>
                       </span>
                     </>
                   ) : (
                     <>
                       <Sparkles size={18} />
                       <span>
-                        توجد زيادة نقدية في الدرج بمقدار: <b>+{money(cashDiffCents)} ج.م</b>
+                        توجد زيادة نقدية في الدرج بمقدار:{' '}
+                        <b>
+                          +{money(cashDiffCents)} {cur()}
+                        </b>
                       </span>
                     </>
                   )}
@@ -440,7 +465,7 @@ export function CloseShiftModal({
                     gap: '12px',
                   }}
                 >
-                  <Field label="إجمالي شريط تسوية الماكينة (Batch Total) ج.م *">
+                  <Field label={`إجمالي شريط تسوية الماكينة (Batch Total) ${cur()} *`}>
                     <input
                       type="number"
                       step="any"
@@ -482,7 +507,7 @@ export function CloseShiftModal({
                     <>
                       <CheckCircle2 size={18} />
                       <span>
-                        مبيعات البطاقات مطابقة تماماً لشريط تسوية الماكينة (الفارق: 0.00 ج.م)
+                        مبيعات البطاقات مطابقة تماماً لشريط تسوية الماكينة (الفارق: 0.00 {cur()})
                       </span>
                     </>
                   ) : cardDiffCents < 0 ? (
@@ -490,14 +515,19 @@ export function CloseShiftModal({
                       <AlertCircle size={18} />
                       <span>
                         فارق نقص في شريط البطاقات بمقدار:{' '}
-                        <b>{money(Math.abs(cardDiffCents))} ج.م</b>
+                        <b>
+                          {money(Math.abs(cardDiffCents))} {cur()}
+                        </b>
                       </span>
                     </>
                   ) : (
                     <>
                       <Sparkles size={18} />
                       <span>
-                        زيادة في شريط البطاقات بمقدار: <b>+{money(cardDiffCents)} ج.م</b>
+                        زيادة في شريط البطاقات بمقدار:{' '}
+                        <b>
+                          +{money(cardDiffCents)} {cur()}
+                        </b>
                       </span>
                     </>
                   )}
@@ -518,7 +548,7 @@ export function CloseShiftModal({
                     gap: '12px',
                   }}
                 >
-                  <Field label="إجمالي المحصل عبر إنستاباي / البنك (ج.م) *">
+                  <Field label={`إجمالي المحصل عبر إنستاباي / البنك (${cur()}) *`}>
                     <input
                       type="number"
                       step="any"
@@ -550,21 +580,26 @@ export function CloseShiftModal({
                   {bankDiffCents === 0 ? (
                     <>
                       <CheckCircle2 size={18} />
-                      <span>إجمالي إنستاباي مطابق مع المسجل بالنظام (الفارق: 0.00 ج.م)</span>
+                      <span>إجمالي إنستاباي مطابق مع المسجل بالنظام (الفارق: 0.00 {cur()})</span>
                     </>
                   ) : bankDiffCents < 0 ? (
                     <>
                       <AlertCircle size={18} />
                       <span>
                         فارق نقص في تحويلات إنستاباي بمقدار:{' '}
-                        <b>{money(Math.abs(bankDiffCents))} ج.م</b>
+                        <b>
+                          {money(Math.abs(bankDiffCents))} {cur()}
+                        </b>
                       </span>
                     </>
                   ) : (
                     <>
                       <Sparkles size={18} />
                       <span>
-                        زيادة في تحويلات إنستاباي بمقدار: <b>+{money(bankDiffCents)} ج.م</b>
+                        زيادة في تحويلات إنستاباي بمقدار:{' '}
+                        <b>
+                          +{money(bankDiffCents)} {cur()}
+                        </b>
                       </span>
                     </>
                   )}

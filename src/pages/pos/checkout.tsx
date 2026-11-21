@@ -1,3 +1,4 @@
+import { cur } from '../../currency';
 import { useState, useMemo, type FormEvent } from 'react';
 import { Search, CreditCard, Building, Clock, Coins } from 'lucide-react';
 import { api, Button, Field, Modal, money, useAction, useToast } from '../../lib';
@@ -63,7 +64,9 @@ export function CustomerPickerModal({
                 <span>{c.phone || 'بدون هاتف'}</span>
               </div>
               {c.id !== 'walk-in-customer' && (
-                <span className="pos-cust-bal">الرصيد: {money(c.balance || 0)} ج.م</span>
+                <span className="pos-cust-bal">
+                  الرصيد: {money(c.balance || 0)} {cur()}
+                </span>
               )}
             </button>
           ))}
@@ -118,7 +121,7 @@ export function DiscountModal({
               className={'pos-segment ' + (mode === 'FIXED' ? 'active' : '')}
               onClick={() => setMode('FIXED')}
             >
-              مبلغ ثابت (ج.م)
+              مبلغ ثابت ({cur()})
             </button>
             <button
               type="button"
@@ -143,7 +146,9 @@ export function DiscountModal({
 
           <div className="pos-discount-preview">
             <span>إجمالي الخصم المحسوب:</span>
-            <b>{money(calculatedDiscount)} ج.م</b>
+            <b>
+              {money(calculatedDiscount)} {cur()}
+            </b>
           </div>
         </div>
         <div className="modal-footer">
@@ -214,11 +219,11 @@ export function CheckoutModal({
 
   const quickCashOptions = [
     { label: 'المبلغ بالضبط', val: totalCents },
-    { label: '50 ج.م', val: 5000 },
-    { label: '100 ج.م', val: 10000 },
-    { label: '200 ج.م', val: 20000 },
-    { label: '500 ج.م', val: 50000 },
-    { label: '1000 ج.م', val: 100000 },
+    { label: '50 ' + cur() + '', val: 5000 },
+    { label: '100 ' + cur() + '', val: 10000 },
+    { label: '200 ' + cur() + '', val: 20000 },
+    { label: '500 ' + cur() + '', val: 50000 },
+    { label: '1000 ' + cur() + '', val: 100000 },
   ];
 
   /**
@@ -256,7 +261,9 @@ export function CheckoutModal({
 
     if (splitMode) {
       if (splitAllocatedCents !== totalCents) {
-        toast(`يجب توزيع كامل مبلغ الفاتورة. المتبقي للتوزيع: ${money(splitRemainingCents)} ج.م`);
+        toast(
+          `يجب توزيع كامل مبلغ الفاتورة. المتبقي للتوزيع: ${money(splitRemainingCents)} ${cur()}`,
+        );
         return;
       }
       if (splitCreditCents > 0 && customer.id === 'walk-in-customer') {
@@ -376,7 +383,7 @@ export function CheckoutModal({
   return (
     <Modal
       title="إتمام عملية الدفع وإنهاء الطلب (F2)"
-      description={`المبلغ المطلوب سداده: ${money(totalCents)} ج.م`}
+      description={`المبلغ المطلوب سداده: ${money(totalCents)} ${cur()}`}
       onClose={onClose}
       wide
       sheet
@@ -387,7 +394,9 @@ export function CheckoutModal({
           <div className="pos-checkout-amount-banner">
             <div>
               <span>المبلغ المستحق:</span>
-              <strong style={{ display: 'block' }}>{money(totalCents)} ج.م</strong>
+              <strong style={{ display: 'block' }}>
+                {money(totalCents)} {cur()}
+              </strong>
             </div>
 
             <button
@@ -412,9 +421,13 @@ export function CheckoutModal({
                   {splitRemainingCents === 0 ? (
                     <span>✓ المبلغ موزع بالكامل</span>
                   ) : splitRemainingCents > 0 ? (
-                    <span>متبقي للتوزيع: {money(splitRemainingCents)} ج.م</span>
+                    <span>
+                      متبقي للتوزيع: {money(splitRemainingCents)} {cur()}
+                    </span>
                   ) : (
-                    <span>زيادة في التوزيع: {money(Math.abs(splitRemainingCents))} ج.م</span>
+                    <span>
+                      زيادة في التوزيع: {money(Math.abs(splitRemainingCents))} {cur()}
+                    </span>
                   )}
                 </span>
               </div>
@@ -564,7 +577,7 @@ export function CheckoutModal({
               {/* Cash Tender & Quick Buttons */}
               {method === 'CASH' && (
                 <div className="pos-cash-tender-section">
-                  <Field label="المبلغ المستلم من العميل (ج.م) *">
+                  <Field label={`المبلغ المستلم من العميل (${cur()}) *`}>
                     <input
                       type="number"
                       step="any"
@@ -582,7 +595,7 @@ export function CheckoutModal({
                       value={amountTendered}
                       onChange={setAmountTendered}
                       title="المبلغ المستلم"
-                      hint={`المطلوب: ${money(totalCents)} ج.م`}
+                      hint={`المطلوب: ${money(totalCents)} ${cur()}`}
                       onClose={() => setAmountTendered((totalCents / 100).toFixed(2))}
                     />
                   )}
@@ -604,7 +617,7 @@ export function CheckoutModal({
                   <div className="pos-change-card">
                     <span>الباقي للعميل:</span>
                     <strong className={changeDueCents > 0 ? 'has-change' : ''}>
-                      {money(changeDueCents)} ج.م
+                      {money(changeDueCents)} {cur()}
                     </strong>
                   </div>
                 </div>

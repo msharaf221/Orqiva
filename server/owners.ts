@@ -1,5 +1,6 @@
 import { all, one, run, transaction, id, now } from './db';
 import { equitySchema, ownerSchema } from './validation';
+import { currencyLabel } from './currency';
 import { AppError, audit, requireRow, type Actor } from './service';
 import { resolveDefaultAccountId, assertAccountFunds } from './accounts';
 import type { EquityEntry, Owner } from '../src/types';
@@ -110,7 +111,10 @@ export function addEquityEntry(ownerId: string, raw: unknown, actor: Actor) {
     if (input.kind === 'WITHDRAWAL') {
       const cash = cashBalance();
       if (input.amount > cash)
-        throw new AppError(409, `الرصيد النقدي المتاح (${egp(cash)} ج.م) لا يكفي لهذا المسحوب`);
+        throw new AppError(
+          409,
+          `الرصيد النقدي المتاح (${egp(cash)} ${currencyLabel()}) لا يكفي لهذا المسحوب`,
+        );
       assertAccountFunds(accountId, input.amount, actor, input.override_overdraft);
     }
     run(
@@ -131,7 +135,7 @@ export function addEquityEntry(ownerId: string, raw: unknown, actor: Actor) {
       input.kind === 'CONTRIBUTION' ? 'إيداع رأس مال' : 'مسحوب شريك',
       'OWNER',
       ownerId,
-      `${owner.name} · ${egp(input.amount)} ج.م`,
+      `${owner.name} · ${egp(input.amount)} ${currencyLabel()}`,
     );
   });
   return ownerLedger(ownerId);

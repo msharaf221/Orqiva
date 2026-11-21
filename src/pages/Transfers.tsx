@@ -1,3 +1,4 @@
+import { cur } from '../currency';
 import { useState, type FormEvent } from 'react';
 import { ArrowLeft, ArrowRightLeft, Package, Plus, Send, Sparkles } from 'lucide-react';
 import {
@@ -565,10 +566,10 @@ function TransferDetail({
                     )}
                   </td>
                   <td className="num">
-                    {l.unit_cost ? (l.unit_cost / 100).toFixed(2) : '—'} <small>ج.م</small>
+                    {l.unit_cost ? (l.unit_cost / 100).toFixed(2) : '—'} <small>{cur()}</small>
                   </td>
                   <td className="num amount">
-                    {((l.quantity_sent * l.unit_cost) / 100).toFixed(2)} <small>ج.م</small>
+                    {((l.quantity_sent * l.unit_cost) / 100).toFixed(2)} <small>{cur()}</small>
                   </td>
                 </tr>
               ))}
@@ -577,7 +578,7 @@ function TransferDetail({
         </div>
         <div className="transfer-summary">
           <span>
-            قيمة البضاعة: <b className="num">{money2(value)}</b> ج.م
+            قيمة البضاعة: <b className="num">{money2(value)}</b> {cur()}
           </span>
           {t.status === 'RECEIVED' && shortage > 0 && (
             <span className="negative">

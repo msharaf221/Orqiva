@@ -10,6 +10,7 @@
  * Every figure is derived server-side from journal_lines; this page never computes balances.
  */
 
+import { cur } from '../../currency';
 import { useEffect, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
@@ -1691,9 +1692,9 @@ function ProfitAndLossTab() {
 
   const handleExportCSV = () => {
     if (!r) return;
-    const headers = ['القسم', 'الكود', 'الحساب', 'الفترة الحالية (ج.م)'];
+    const headers = ['القسم', 'الكود', 'الحساب', 'الفترة الحالية (' + cur() + ')'];
     if (enableCompare) {
-      headers.push('الفترة المقارنة (ج.م)', 'نسبة التغير %');
+      headers.push('الفترة المقارنة (' + cur() + ')', 'نسبة التغير %');
     }
     const rows: (string | number)[][] = [];
 
@@ -2120,9 +2121,9 @@ function BalanceSheetTab() {
 
   const handleExportCSV = () => {
     if (!bs) return;
-    const headers = ['الجانب', 'القسم', 'الكود', 'الحساب', 'الرصيد (ج.م)'];
+    const headers = ['الجانب', 'القسم', 'الكود', 'الحساب', 'الرصيد (' + cur() + ')'];
     if (enableCompare) {
-      headers.push('رصيد المقارنة (ج.م)', 'نسبة التغير %');
+      headers.push('رصيد المقارنة (' + cur() + ')', 'نسبة التغير %');
     }
     const rows: (string | number)[][] = [];
 
@@ -2956,7 +2957,7 @@ function OpeningBalancesTab({ canManage }: { canManage: boolean }) {
                     <th>الحساب</th>
                     <th>النوع</th>
                     <th>الفرع</th>
-                    <th style={{ width: '220px' }}>الرصيد الافتتاحي (ج.م)</th>
+                    <th style={{ width: '220px' }}>الرصيد الافتتاحي ({cur()})</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2997,7 +2998,7 @@ function OpeningBalancesTab({ canManage }: { canManage: boolean }) {
                   <thead>
                     <tr>
                       <th>العميل</th>
-                      <th style={{ width: '160px' }}>الرصيد المدين (ج.م)</th>
+                      <th style={{ width: '160px' }}>الرصيد المدين ({cur()})</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -3034,7 +3035,7 @@ function OpeningBalancesTab({ canManage }: { canManage: boolean }) {
                   <thead>
                     <tr>
                       <th>المورد</th>
-                      <th style={{ width: '160px' }}>الرصيد الدائن (ج.م)</th>
+                      <th style={{ width: '160px' }}>الرصيد الدائن ({cur()})</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -3087,7 +3088,7 @@ function OpeningBalancesTab({ canManage }: { canManage: boolean }) {
                       <th>المنتج</th>
                       <th>الفرع</th>
                       <th style={{ width: '140px' }}>الكمية</th>
-                      <th style={{ width: '160px' }}>سعر التكلفة (ج.م)</th>
+                      <th style={{ width: '160px' }}>سعر التكلفة ({cur()})</th>
                       <th style={{ width: '160px' }}>القيمة الإجمالية</th>
                       <th style={{ width: '50px' }} />
                     </tr>
@@ -3219,8 +3220,8 @@ function OpeningBalancesTab({ canManage }: { canManage: boolean }) {
                   <thead>
                     <tr>
                       <th>الحساب</th>
-                      <th style={{ width: '160px' }}>مدين (ج.م)</th>
-                      <th style={{ width: '160px' }}>دائن (ج.م)</th>
+                      <th style={{ width: '160px' }}>مدين ({cur()})</th>
+                      <th style={{ width: '160px' }}>دائن ({cur()})</th>
                       <th>ملاحظات البند</th>
                       <th style={{ width: '50px' }} />
                     </tr>

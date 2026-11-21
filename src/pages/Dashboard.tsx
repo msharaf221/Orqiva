@@ -1,3 +1,4 @@
+import { cur } from '../currency';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -90,7 +91,7 @@ export function RevenueChart({ data }: { data: DashboardData['series'] }) {
             }}
             labelFormatter={(v) => formatDate(String(v))}
             formatter={(value: number, name: string) => [
-              money(value) + ' ج.م',
+              money(value) + ' ' + cur() + '',
               name === 'sales' ? 'المبيعات' : 'المشتريات',
             ]}
           />
@@ -257,7 +258,7 @@ export function Dashboard() {
                 </div>
                 <div className="chart-summary">
                   <strong className="num">
-                    {money(data.sales)} <small>ج.م</small>
+                    {money(data.sales)} <small>{cur()}</small>
                   </strong>
                   <span className="chart-summary-note">
                     {TAX_FREE ? 'إجمالي المبيعات' : 'إجمالي المبيعات قبل الضريبة'}
@@ -276,7 +277,7 @@ export function Dashboard() {
                 <div className="cash-main">
                   <span>صافي التدفق النقدي للفترة</span>
                   <strong className="num">
-                    {money(data.cashFlow)} <small>ج.م</small>
+                    {money(data.cashFlow)} <small>{cur()}</small>
                   </strong>
                   <div className="cash-sparkline">
                     <div className="cash-flow-bars" aria-label="نسبة المقبوضات والمدفوعات">
@@ -302,7 +303,7 @@ export function Dashboard() {
                     <div>
                       <span>لك عند العملاء</span>
                       <strong className="num">
-                        {money(data.receivables)} <small>ج.م</small>
+                        {money(data.receivables)} <small>{cur()}</small>
                       </strong>
                     </div>
                     <Link to="/sales?status=unpaid" aria-label="عرض مستحقات العملاء">
@@ -316,7 +317,7 @@ export function Dashboard() {
                     <div>
                       <span>عليك للموردين</span>
                       <strong className="num">
-                        {money(data.payables)} <small>ج.م</small>
+                        {money(data.payables)} <small>{cur()}</small>
                       </strong>
                     </div>
                     <Link to="/purchases?status=unpaid" aria-label="عرض مستحقات الموردين">
@@ -371,7 +372,7 @@ export function Dashboard() {
                           </td>
                           <td className="muted no-wrap">{formatDate(doc.date, true)}</td>
                           <td className="num amount">
-                            {money(doc.total)} <small>ج.م</small>
+                            {money(doc.total)} <small>{cur()}</small>
                           </td>
                           <td>
                             <Status doc={doc} />
@@ -576,13 +577,22 @@ function GroupPanel({ from, to }: { from: string; to: string }) {
       </div>
       <div className="group-foot">
         <span>
-          السيولة المتاحة للمجموعة <b className="num">{money(g.cashAvailable)} ج.م</b>
+          السيولة المتاحة للمجموعة{' '}
+          <b className="num">
+            {money(g.cashAvailable)} {cur()}
+          </b>
         </span>
         <span>
-          بضاعة في الطريق <b className="num">{money(g.totals.inTransitValue)} ج.م</b>
+          بضاعة في الطريق{' '}
+          <b className="num">
+            {money(g.totals.inTransitValue)} {cur()}
+          </b>
         </span>
         <span>
-          عجز التحويلات خلال الفترة <b className="num">{money(g.totals.shortageValue)} ج.م</b>
+          عجز التحويلات خلال الفترة{' '}
+          <b className="num">
+            {money(g.totals.shortageValue)} {cur()}
+          </b>
         </span>
       </div>
     </section>

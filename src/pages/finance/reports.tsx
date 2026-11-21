@@ -1,3 +1,4 @@
+import { cur } from '../../currency';
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -152,7 +153,7 @@ export function Reports() {
               <section className="card">
                 <div className="card-heading">
                   <h2>ملخص الأداء المالي</h2>
-                  <span className="category-tag">ج.م</span>
+                  <span className="category-tag">{cur()}</span>
                 </div>
                 <div className="financial-summary">
                   {metrics.map(([label, value], i) => (
@@ -189,7 +190,7 @@ export function Reports() {
                             {c.category}
                           </span>
                           <strong className="num">
-                            {money(c.amount)} <small>ج.م</small>
+                            {money(c.amount)} <small>{cur()}</small>
                           </strong>
                         </div>
                         <div className="progress-track">
@@ -247,7 +248,7 @@ export function Reports() {
                         <td className="num muted">{p.sku}</td>
                         <td className="num">{p.quantity}</td>
                         <td className="num amount">
-                          {money(p.revenue, 2)} <small>ج.م</small>
+                          {money(p.revenue, 2)} <small>{cur()}</small>
                         </td>
                       </tr>
                     ))}

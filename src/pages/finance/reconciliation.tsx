@@ -1,3 +1,4 @@
+import { cur } from '../../currency';
 import { useState, type FormEvent } from 'react';
 import {
   TrendingUp,
@@ -163,7 +164,7 @@ export function CreateBankStatementModal({
                 <option value="">اختر الحساب...</option>
                 {bankAccounts.map((a) => (
                   <option key={a.id} value={a.id}>
-                    {a.name} ({money(a.balance)} ج.م)
+                    {a.name} ({money(a.balance)} {cur()})
                   </option>
                 ))}
               </select>
@@ -177,10 +178,10 @@ export function CreateBankStatementModal({
           </div>
 
           <div className="grid two" style={{ marginBottom: '16px' }}>
-            <Field label="الرصيد الافتتاحي (ج.م)">
+            <Field label={`الرصيد الافتتاحي (${cur()})`}>
               <input name="opening_balance" type="number" step="0.01" defaultValue="0" required />
             </Field>
-            <Field label="الرصيد الختامي (ج.م)">
+            <Field label={`الرصيد الختامي (${cur()})`}>
               <input name="closing_balance" type="number" step="0.01" defaultValue="0" required />
             </Field>
           </div>
@@ -360,7 +361,7 @@ export function ReconciliationView({ accounts }: { accounts: CashAccount[] }) {
                 value={money(forecast.projectedEndingBalance)}
                 icon={<Layers size={20} />}
                 tone={forecast.projectedEndingBalance >= 0 ? 'green' : 'red'}
-                foot={`صافي التغير: ${forecast.projectedNetChange >= 0 ? '+' : ''}${money(forecast.projectedNetChange)} ج.م`}
+                foot={`صافي التغير: ${forecast.projectedNetChange >= 0 ? '+' : ''}${money(forecast.projectedNetChange)} ${cur()}`}
               />
             </div>
 
@@ -397,7 +398,7 @@ export function ReconciliationView({ accounts }: { accounts: CashAccount[] }) {
                             <td>{inv.party_name}</td>
                             <td>{inv.due_date}</td>
                             <td>
-                              <strong>+{money(inv.amount_due)}</strong> ج.م
+                              <strong>+{money(inv.amount_due)}</strong> {cur()}
                             </td>
                           </tr>
                         ))}
@@ -409,7 +410,7 @@ export function ReconciliationView({ accounts }: { accounts: CashAccount[] }) {
                             <td>{chq.party_name}</td>
                             <td>{chq.due_date}</td>
                             <td>
-                              <strong>+{money(chq.amount)}</strong> ج.م
+                              <strong>+{money(chq.amount)}</strong> {cur()}
                             </td>
                           </tr>
                         ))}
@@ -453,7 +454,7 @@ export function ReconciliationView({ accounts }: { accounts: CashAccount[] }) {
                             <td>{bill.party_name}</td>
                             <td>{bill.due_date}</td>
                             <td>
-                              <strong>-{money(bill.amount_due)}</strong> ج.م
+                              <strong>-{money(bill.amount_due)}</strong> {cur()}
                             </td>
                           </tr>
                         ))}
@@ -465,7 +466,7 @@ export function ReconciliationView({ accounts }: { accounts: CashAccount[] }) {
                             <td>{chq.party_name}</td>
                             <td>{chq.due_date}</td>
                             <td>
-                              <strong>-{money(chq.amount)}</strong> ج.م
+                              <strong>-{money(chq.amount)}</strong> {cur()}
                             </td>
                           </tr>
                         ))}
@@ -477,7 +478,7 @@ export function ReconciliationView({ accounts }: { accounts: CashAccount[] }) {
                             <td>{po.party_name}</td>
                             <td>{po.expected_delivery_date}</td>
                             <td>
-                              <strong>-{money(po.total)}</strong> ج.م
+                              <strong>-{money(po.total)}</strong> {cur()}
                             </td>
                           </tr>
                         ))}
@@ -557,9 +558,11 @@ export function ReconciliationView({ accounts }: { accounts: CashAccount[] }) {
                         />
                         {accounts.find((a) => a.id === s.cash_account_id)?.name || 'حساب بنكي'}
                       </td>
-                      <td>{money(s.opening_balance)} ج.م</td>
                       <td>
-                        <strong>{money(s.closing_balance)}</strong> ج.م
+                        {money(s.opening_balance)} {cur()}
+                      </td>
+                      <td>
+                        <strong>{money(s.closing_balance)}</strong> {cur()}
                       </td>
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>

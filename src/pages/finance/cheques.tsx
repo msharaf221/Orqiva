@@ -1,3 +1,4 @@
+import { cur } from '../../currency';
 import { useState, type FormEvent } from 'react';
 import {
   Plus,
@@ -103,7 +104,7 @@ export function CreateChequeModal({
                 ))}
               </select>
             </Field>
-            <Field label="المبلغ (ج.م)">
+            <Field label={`المبلغ (${cur()})`}>
               <input
                 name="amount"
                 type="number"
@@ -184,7 +185,7 @@ export function CollectChequeModal({
       size="md"
       showMaximize
       title={`تحصيل الشيك #${cheque.number}`}
-      description={`إيداع مبلغ ${money(cheque.amount)} ج.م في الحساب البنكي وتسوية أوراق القبض.`}
+      description={`إيداع مبلغ ${money(cheque.amount)} ${cur()} في الحساب البنكي وتسوية أوراق القبض.`}
       onClose={onClose}
     >
       <form onSubmit={submit}>
@@ -194,7 +195,7 @@ export function CollectChequeModal({
               <option value="">اختر الحساب البنكي...</option>
               {bankAccounts.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {a.name} ({money(a.balance)} ج.م)
+                  {a.name} ({money(a.balance)} {cur()})
                 </option>
               ))}
             </select>
@@ -251,7 +252,7 @@ export function PayChequeModal({
       size="md"
       showMaximize
       title={`صرف الشيك #${cheque.number}`}
-      description={`خصم مبلغ ${money(cheque.amount)} ج.م من الحساب البنكي وتسوية أوراق الدفع.`}
+      description={`خصم مبلغ ${money(cheque.amount)} ${cur()} من الحساب البنكي وتسوية أوراق الدفع.`}
       onClose={onClose}
     >
       <form onSubmit={submit}>
@@ -261,7 +262,7 @@ export function PayChequeModal({
               <option value="">اختر الحساب البنكي...</option>
               {bankAccounts.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {a.name} ({money(a.balance)} ج.م)
+                  {a.name} ({money(a.balance)} {cur()})
                 </option>
               ))}
             </select>
@@ -314,7 +315,7 @@ export function BounceChequeModal({
       size="md"
       showMaximize
       title={`إثبات ارتداد الشيك #${cheque.number}`}
-      description={`سيتم إلغاء أثر ورقة القبض وإعادة إثبات مديونية ${money(cheque.amount)} ج.م على حساب العميل.`}
+      description={`سيتم إلغاء أثر ورقة القبض وإعادة إثبات مديونية ${money(cheque.amount)} ${cur()} على حساب العميل.`}
       onClose={onClose}
     >
       <form onSubmit={submit}>
@@ -539,7 +540,7 @@ export function ChequesView({ accounts, parties }: { accounts: CashAccount[]; pa
                     </td>
                     <td>
                       <strong style={{ fontSize: '13.5px' }}>{money(c.amount)}</strong>{' '}
-                      <small>ج.م</small>
+                      <small>{cur()}</small>
                     </td>
                     <td>
                       <div style={{ fontSize: '12.5px' }}>

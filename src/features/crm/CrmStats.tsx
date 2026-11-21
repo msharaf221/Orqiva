@@ -1,3 +1,4 @@
+import { cur } from '../../currency';
 import { Activity, DollarSign, Kanban, Target, TrendingUp } from 'lucide-react';
 import { Stat, money } from '../../lib';
 import type { CrmOverview, SalesTarget } from '../../types';
@@ -33,12 +34,12 @@ export function CrmStats({
         unit="صفقة"
         icon={<Kanban size={20} />}
         tone="blue"
-        foot={`متوسط قيمة الصفقة ${money(data.average_deal)} ج.م`}
+        foot={`متوسط قيمة الصفقة ${money(data.average_deal)} ${cur()}`}
       />
       <Stat
         label="قيمة الصفقات المفتوحة"
         value={money(data.open_value)}
-        unit="ج.م"
+        unit={`${cur()}`}
         icon={<DollarSign size={20} />}
         tone="purple"
         foot="إجمالي الإيراد المتوقع في الـ Pipeline"
@@ -46,15 +47,15 @@ export function CrmStats({
       <Stat
         label="التوقع المرجح (Weighted)"
         value={money(data.weighted_value)}
-        unit="ج.م"
+        unit={`${cur()}`}
         icon={<Target size={20} />}
         tone="amber"
-        foot={`محسوب باحتمالية كل مرحلة — عمولات ${month}: ${money(commission)} ج.م`}
+        foot={`محسوب باحتمالية كل مرحلة — عمولات ${month}: ${money(commission)} ${cur()}`}
       />
       <Stat
         label="الصفقات المغلقة بنجاح"
         value={money(data.won_value)}
-        unit="ج.م"
+        unit={`${cur()}`}
         icon={<TrendingUp size={20} />}
         tone="green"
         foot={`${data.won_deals} رابحة من ${data.won_deals + data.lost_deals} — نسبة الفوز ${data.win_rate}%`}

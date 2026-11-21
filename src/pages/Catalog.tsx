@@ -1,3 +1,4 @@
+import { cur } from '../currency';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
@@ -217,7 +218,7 @@ export function Products() {
                         className="num muted"
                         title={
                           p.avg_cost && p.avg_cost !== p.cost_price
-                            ? `التكلفة المرجعية: ${money(p.cost_price, 2)} ج.م`
+                            ? `التكلفة المرجعية: ${money(p.cost_price, 2)} ${cur()}`
                             : undefined
                         }
                       >
@@ -392,7 +393,7 @@ export function ProductForm({
             </Field>
           </div>
           <div className="form-row">
-            <Field label="سعر البيع (ج.م) *">
+            <Field label={`سعر البيع (${cur()}) *`}>
               <input
                 name="sale_price"
                 type="number"
@@ -403,7 +404,7 @@ export function ProductForm({
                 defaultValue={(product?.sale_price || 0) / 100}
               />
             </Field>
-            <Field label="سعر التكلفة المرجعي (ج.م) *">
+            <Field label={`سعر التكلفة المرجعي (${cur()}) *`}>
               <input
                 name="cost_price"
                 type="number"
@@ -682,16 +683,20 @@ function StockValuationView({
           </div>
           <div className="rec-item">
             <span>رصيد المخزون الدفتري</span>
-            <strong>{money(report.gl_check.gl_inventory_balance, 2)} ج.م</strong>
+            <strong>
+              {money(report.gl_check.gl_inventory_balance, 2)} {cur()}
+            </strong>
           </div>
           <div className="rec-item">
             <span>تقييم المخزون الفعلي (WAC)</span>
-            <strong>{money(report.gl_check.stock_valuation_total, 2)} ج.م</strong>
+            <strong>
+              {money(report.gl_check.stock_valuation_total, 2)} {cur()}
+            </strong>
           </div>
           <div className="rec-item">
             <span>الفارق</span>
             <strong style={{ color: report.gl_check.reconciled ? '#15803d' : '#b45309' }}>
-              {money(report.gl_check.variance, 2)} ج.م
+              {money(report.gl_check.variance, 2)} {cur()}
             </strong>
           </div>
         </div>
@@ -898,7 +903,7 @@ function BatchesExpiryView({
         'تاريخ الصلاحية',
         'الأيام المتبقية',
         'الكمية',
-        'التكلفة (ج.م)',
+        'التكلفة (' + cur() + ')',
         'الحالة',
       ],
       filtered.map((b) => [
@@ -1607,7 +1612,7 @@ export function Inventory() {
                           </td>
                           <td className="num muted">{p.min_stock}</td>
                           <td className="num amount">
-                            {money(p.stock * (p.avg_cost ?? p.cost_price))} <small>ج.م</small>
+                            {money(p.stock * (p.avg_cost ?? p.cost_price))} <small>{cur()}</small>
                           </td>
                           <td>
                             <span
@@ -1687,7 +1692,7 @@ export function Inventory() {
                             <strong>{r.suggested_qty}</strong>
                           </td>
                           <td className="num amount">
-                            {money(r.estimated_cost)} <small>ج.م</small>
+                            {money(r.estimated_cost)} <small>{cur()}</small>
                           </td>
                         </tr>
                       ))}
@@ -2015,7 +2020,7 @@ export function Parties({ type }: { type: PartyType }) {
                       <td className="muted address-cell">{p.address || '—'}</td>
                       <td className="num">{p.documents_count}</td>
                       <td className={'num amount ' + (p.balance > 0 ? 'amber-text' : '')}>
-                        {money(p.balance, 2)} <small>ج.م</small>
+                        {money(p.balance, 2)} <small>{cur()}</small>
                       </td>
                       <td>
                         <div className="row-actions">
@@ -2211,7 +2216,7 @@ function PartyStatement({ party, onClose }: { party: Party; onClose: () => void 
           <div className="statement-balance">
             <span>الرصيد المستحق الحالي</span>
             <strong className="num">
-              {money(party.balance, 2)} <small>ج.م</small>
+              {money(party.balance, 2)} <small>{cur()}</small>
             </strong>
             <Button
               variant="secondary"

@@ -1,3 +1,4 @@
+import { cur } from '../currency';
 import { useState, type FormEvent } from 'react';
 import { Boxes, Building2, Plus, Store } from 'lucide-react';
 import {
@@ -102,7 +103,7 @@ export function Branches() {
                   <b className="num">{count(b.stock_units ?? 0)}</b> وحدة
                 </span>
                 <span>
-                  <b className="num">{money(b.stock_value ?? 0)}</b> ج.م مخزون
+                  <b className="num">{money(b.stock_value ?? 0)}</b> {cur()} مخزون
                 </span>
                 <span>
                   <b className="num">{b.users?.length ?? 0}</b> موظف
@@ -325,7 +326,7 @@ function AssortmentTab({ branchId, branchActive }: { branchId: string; branchAct
               <th>المنتج</th>
               <th>المخزون هنا</th>
               <th>متاح في الفرع</th>
-              <th>سعر الفرع (ج.م)</th>
+              <th>سعر الفرع ({cur()})</th>
               <th>حد إعادة الطلب</th>
             </tr>
           </thead>
@@ -554,7 +555,7 @@ function StockMatrixCard() {
                     <td
                       key={b.id}
                       className={'num ' + (qty ? '' : 'muted')}
-                      title={wac ? `متوسط التكلفة: ${money(wac, 2)} ج.م` : undefined}
+                      title={wac ? `متوسط التكلفة: ${money(wac, 2)} ${cur()}` : undefined}
                     >
                       {qty || '—'}
                     </td>

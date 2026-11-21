@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { all, one, run, transaction, id, now } from './db';
+import { currencyLabel } from './currency';
 import { distributionPaymentSchema, distributionSchema } from './validation';
 import { AppError, audit, nextNumber, requireRow, type Actor } from './service';
 import { largestRemainder } from './allocation';
@@ -153,7 +154,7 @@ export function createDistribution(raw: unknown, actor: Actor) {
       'إنشاء توزيع أرباح',
       'DISTRIBUTION',
       distributionId,
-      `${number} · ${egp(preview.distributable)} ج.م`,
+      `${number} · ${egp(preview.distributable)} ${currencyLabel()}`,
     );
     return distributionDetail(distributionId);
   });
@@ -275,10 +276,16 @@ export function payDistribution(
     );
     const due = line.amount - line.paid;
     if (input.amount > due)
-      throw new AppError(400, `المبلغ أكبر من المستحق لـ ${line.owner_name} (${egp(due)} ج.م)`);
+      throw new AppError(
+        400,
+        `المبلغ أكبر من المستحق لـ ${line.owner_name} (${egp(due)} ${currencyLabel()})`,
+      );
     const cash = cashBalance();
     if (input.amount > cash)
-      throw new AppError(409, `الرصيد النقدي المتاح (${egp(cash)} ج.م) لا يكفي لصرف هذا المبلغ`);
+      throw new AppError(
+        409,
+        `الرصيد النقدي المتاح (${egp(cash)} ${currencyLabel()}) لا يكفي لصرف هذا المبلغ`,
+      );
     const accountId = input.account_id || resolveDefaultAccountId(input.method);
     assertAccountFunds(accountId, input.amount, actor, input.override_overdraft);
     run(
@@ -306,7 +313,7 @@ export function payDistribution(
       'صرف توزيع أرباح',
       'DISTRIBUTION',
       distributionId,
-      `${line.owner_name} · ${egp(input.amount)} ج.م`,
+      `${line.owner_name} · ${egp(input.amount)} ${currencyLabel()}`,
     );
     return distributionDetail(distributionId);
   });

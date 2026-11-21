@@ -1,3 +1,4 @@
+import { cur } from './currency';
 import {
   createContext,
   useCallback,
@@ -560,7 +561,7 @@ export function Status({ doc }: { doc: Document }) {
 export function Stat({
   label,
   value,
-  unit = 'ج.م',
+  unit = cur(),
   icon,
   foot,
   trend,

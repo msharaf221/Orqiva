@@ -1,3 +1,4 @@
+import { cur } from '../../currency';
 import { useState } from 'react';
 import { RefreshCw, Send, RotateCcw, FileJson } from 'lucide-react';
 import { api, useData, useAction, Button, Loading, ErrorState, Empty, money } from '../../lib';
@@ -119,7 +120,9 @@ export function EInvoicePanel() {
                   <td dir="ltr">{s.document_number}</td>
                   <td>{s.party_name}</td>
                   <td>{DOC_TYPE_LABELS[s.document_type]}</td>
-                  <td>{money(s.document_total ?? 0)} ج.م</td>
+                  <td>
+                    {money(s.document_total ?? 0)} {cur()}
+                  </td>
                   <td>
                     <span className={'badge ' + statusTone(s.status)}>
                       <i />

@@ -1,3 +1,4 @@
+import { cur } from '../currency';
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -162,7 +163,7 @@ export function CreateEmployeeModalExtended({
           </div>
 
           <div className="grid three" style={{ marginBottom: '12px' }}>
-            <Field label="الراتب الأساسي (ج.م)">
+            <Field label={`الراتب الأساسي (${cur()})`}>
               <input
                 name="basic_salary"
                 type="number"
@@ -172,7 +173,7 @@ export function CreateEmployeeModalExtended({
                 required
               />
             </Field>
-            <Field label="الراتب المتغير / الحوافز (ج.م)">
+            <Field label={`الراتب المتغير / الحوافز (${cur()})`}>
               <input
                 name="variable_salary"
                 type="number"
@@ -537,7 +538,7 @@ export function HR() {
         <Stat
           label="آخر مسير رواتب"
           value={latestPayrollRun ? money(latestPayrollRun.total_net) : '0'}
-          unit="ج.م"
+          unit={`${cur()}`}
           icon={<CreditCard size={20} />}
           tone="purple"
           foot={
@@ -655,7 +656,7 @@ export function HR() {
                           + {money(emp.variable_salary)}
                         </small>
                       )}
-                      <small> ج.م</small>
+                      <small> {cur()}</small>
                     </td>
                     <td>
                       <small style={{ color: 'var(--slate-600)' }}>
@@ -1027,7 +1028,7 @@ export function HR() {
                       )}
                       <td style={{ color: '#d97706' }}>-{money(r.total_advances)}</td>
                       <td>
-                        <strong style={{ color: '#16a34a' }}>{money(r.total_net)}</strong> ج.م
+                        <strong style={{ color: '#16a34a' }}>{money(r.total_net)}</strong> {cur()}
                       </td>
                       <td>
                         <span
