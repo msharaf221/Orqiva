@@ -1,6 +1,7 @@
 import { cur } from '../../currency';
 import { useState, useMemo, type FormEvent } from 'react';
 import { Search, CreditCard, Building, Clock, Coins } from 'lucide-react';
+import { idempotentApi } from '../../idempotent-api';
 import { api, Button, Field, Modal, money, useAction, useToast } from '../../lib';
 import type { Party } from '../../types';
 import {
@@ -293,7 +294,7 @@ export function CheckoutModal({
 
       void act(async () => {
         if (!(await revalidateStock())) return;
-        const res = await api<CheckoutResult>('/pos/checkout', 'POST', {
+        const res = await idempotentApi<CheckoutResult>('pos.checkout', '/pos/checkout', {
           branch_id: branchId,
           shift_id: shiftId,
           party_id: customer.id,
@@ -343,7 +344,7 @@ export function CheckoutModal({
 
     void act(async () => {
       if (!(await revalidateStock())) return;
-      const res = await api<CheckoutResult>('/pos/checkout', 'POST', {
+      const res = await idempotentApi<CheckoutResult>('pos.checkout', '/pos/checkout', {
         branch_id: branchId,
         shift_id: shiftId,
         party_id: customer.id,

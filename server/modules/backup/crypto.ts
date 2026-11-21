@@ -6,6 +6,7 @@ import {
   readSync,
   closeSync,
   statSync,
+  rmSync,
 } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
 
@@ -43,9 +44,15 @@ export async function decryptFile(src: string, dest: string, passphrase: string)
   const iv = head.subarray(MAGIC.length + 16);
   const decipher = createDecipheriv('aes-256-gcm', key(passphrase, salt), iv);
   decipher.setAuthTag(tag);
-  await pipeline(
-    createReadStream(src, { start: head.length, end: size - 17 }),
-    decipher,
-    createWriteStream(dest),
-  );
+  try {
+    await pipeline(
+      createReadStream(src, { start: head.length, end: size - 17 }),
+      decipher,
+      createWriteStream(dest),
+    );
+  } catch (error) {
+    // Wrong passphrase or tampered file: never leave unauthenticated plaintext behind.
+    rmSync(dest, { force: true });
+    throw error;
+  }
 }

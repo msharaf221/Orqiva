@@ -335,6 +335,9 @@ function deliver(submission: EtaSubmission): { longId: string; response: string 
   throw new AppError(503, 'الإرسال الفعلي لهيئة الضرائب يتم عبر المعالج غير المتزامن');
 }
 
+/** Submissions being sent right now by this process, so overlapping runs never double-send. */
+const inFlight = new Set<string>();
+
 function dueSubmissions(limit: number, scope?: Scope): EtaSubmission[] {
   const visible = scopeSql('d.branch_id', scope ?? { ids: null });
   return all<EtaSubmission>(
@@ -344,8 +347,10 @@ function dueSubmissions(limit: number, scope?: Scope): EtaSubmission[] {
      ORDER BY s.created_at ASC LIMIT ?`,
     now(),
     ...visible.params,
-    limit,
-  );
+    limit + inFlight.size,
+  )
+    .filter((s) => !inFlight.has(s.id))
+    .slice(0, limit);
 }
 
 function recordSuccess(submission: EtaSubmission, longId: string, response: string): void {
@@ -374,6 +379,12 @@ function recordSuccess(submission: EtaSubmission, longId: string, response: stri
 
 /** Records a failed attempt. Permanent errors skip the remaining retries. */
 function recordFailure(submission: EtaSubmission, error: unknown): void {
+  // A late failure must never downgrade an invoice that ETA already accepted.
+  const current = one<{ status: string }>(
+    'SELECT status FROM e_invoice_submissions WHERE id=?',
+    submission.id,
+  );
+  if (current?.status === 'VALID') return;
   const attempt = submission.attempt + 1;
   const message = error instanceof Error ? error.message : 'خطأ غير معروف';
   const exhausted = error instanceof EtaPermanentError || attempt >= submission.max_attempts;
@@ -429,6 +440,7 @@ export async function processPendingSubmissionsAsync(
   if (!etaConfigured()) return processPendingSubmissions(limit, scope);
   const env = etaEnvironment() as EtaEnv;
   const due = dueSubmissions(limit, scope);
+  for (const submission of due) inFlight.add(submission.id);
   let succeeded = 0;
   for (const submission of due) {
     try {
@@ -442,6 +454,8 @@ export async function processPendingSubmissionsAsync(
       succeeded++;
     } catch (error) {
       recordFailure(submission, error);
+    } finally {
+      inFlight.delete(submission.id);
     }
   }
   return { processed: due.length, succeeded };

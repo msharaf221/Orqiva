@@ -97,7 +97,7 @@ describe('Per-company tax policy', () => {
     expect(res.body.tax).toBe(950);
   });
 
-  it('zeroes the rate and tax identity when switched back to no tax', async () => {
+  it('zeroes the rate but keeps the tax identity when switched back to no tax', async () => {
     await admin
       .put('/api/company')
       .set(header)
@@ -110,7 +110,15 @@ describe('Per-company tax policy', () => {
       .expect(200);
     const c = one<{ tax_rate: number; tax_number: string }>('SELECT * FROM company WHERE id=1')!;
     expect(c.tax_rate).toBe(0);
-    expect(c.tax_number).toBe('');
+    expect(c.tax_number).toBe('123');
+    await admin
+      .put('/api/company')
+      .set(header)
+      .send(body({ tax_mode: 'VAT', tax_rate: 1400, tax_number: '' }))
+      .expect(200);
+    expect(
+      one<{ tax_number: string }>('SELECT tax_number FROM company WHERE id=1')!.tax_number,
+    ).toBe('');
   });
 
   it('only enables ETA together with VAT', async () => {

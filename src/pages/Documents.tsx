@@ -1,3 +1,4 @@
+import { idempotentApi } from '../idempotent-api';
 import { cur } from '../currency';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -2285,7 +2286,7 @@ function PurchaseOrdersView({
 
   const receiveFull = (po: PurchaseOrder) => {
     void act(async () => {
-      await api(`/purchase-orders/${po.id}/receive`, 'POST', {});
+      await idempotentApi(`po.receive:${po.id}`, `/purchase-orders/${po.id}/receive`, {});
       orders.reload();
     }, `تم إنشاء فاتورة الشراء واستلام بضاعة أمر الشراء ${po.number}`);
   };
@@ -2758,7 +2759,7 @@ function QuotationsView({
 
   const convertToSale = (q: Quotation) => {
     void act(async () => {
-      await api(`/quotations/${q.id}/convert`, 'POST', {});
+      await idempotentApi(`q.convert:${q.id}`, `/quotations/${q.id}/convert`, {});
       quotations.reload();
     }, `تم تحويل ${q.number} بنجاح إلى فاتورة بيع`);
   };

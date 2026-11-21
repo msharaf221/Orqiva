@@ -3,6 +3,7 @@ import { db, one } from './db';
 import { seed } from './seed';
 import { processPendingSubmissionsAsync } from './eta';
 import { runScheduledBackup } from './modules/backup/service';
+import { pruneIdempotencyKeys } from './idempotency';
 import { isAddonEnabled } from './addons/registry';
 
 if (process.env.NODE_ENV !== 'test' && !one('SELECT id FROM users LIMIT 1')) {
@@ -43,11 +44,27 @@ if (process.env.NODE_ENV !== 'test') {
   backupTimer.unref();
 }
 
+// Keep the retry-safety table small: drop idempotency keys older than 30 days, once a day.
+let pruneTimer: NodeJS.Timeout | undefined;
+if (process.env.NODE_ENV !== 'test') {
+  const prune = () => {
+    try {
+      pruneIdempotencyKeys();
+    } catch (error) {
+      console.error('Idempotency prune error', error);
+    }
+  };
+  setTimeout(prune, 120_000).unref();
+  pruneTimer = setInterval(prune, 24 * 3_600_000);
+  pruneTimer.unref();
+}
+
 for (const signal of ['SIGTERM', 'SIGINT'])
   process.on(signal, () =>
     server.close(() => {
       if (etaTimer) clearInterval(etaTimer);
       if (backupTimer) clearInterval(backupTimer);
+      if (pruneTimer) clearInterval(pruneTimer);
       db.close();
       process.exit(0);
     }),

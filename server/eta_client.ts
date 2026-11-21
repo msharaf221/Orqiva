@@ -144,6 +144,13 @@ export async function submitToEta(
     json.acceptedDocuments?.find((d) => d.uuid === invoice.uuid) ?? json.acceptedDocuments?.[0];
   if (accepted) return { longId: accepted.longId, response: text };
   if (json.rejectedDocuments?.length) {
+    const detail = JSON.stringify(json.rejectedDocuments[0].error ?? {});
+    if (/duplicate/i.test(detail)) {
+      // The invoice may already be accepted (for example after a timeout). Never retry blindly.
+      throw new EtaPermanentError(
+        'ETA يفيد بأن الفاتورة مرسلة من قبل: راجع حالتها في بوابة الهيئة قبل إعادة المحاولة',
+      );
+    }
     throw new EtaPermanentError(
       `رفضت هيئة الضرائب الفاتورة: ${JSON.stringify(json.rejectedDocuments[0].error ?? {}).slice(0, 400)}`,
     );
