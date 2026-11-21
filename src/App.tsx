@@ -314,10 +314,57 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
     </div>
   );
 }
+function Activation({ onDone }: { onDone: () => void }) {
+  const { busy, act } = useAction();
+  const submit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const key = String(new FormData(e.currentTarget).get('key') || '').trim();
+    void act(async () => {
+      await api('/license/activate', 'PUT', { key });
+      onDone();
+    }, 'تم تفعيل النظام');
+  };
+  return (
+    <div className="boot">
+      <Brand />
+      <form
+        onSubmit={submit}
+        className="card settings-card"
+        style={{ maxWidth: 480, width: 'calc(100% - 32px)', marginTop: 20 }}
+      >
+        <div className="card-heading">
+          <div>
+            <h2>تفعيل النظام</h2>
+            <p>الصق مفتاح الترخيص الذي استلمته من البائع لبدء الاستخدام.</p>
+          </div>
+        </div>
+        <div className="form-card-body form-grid">
+          <Field label="مفتاح الترخيص">
+            <textarea name="key" dir="ltr" rows={5} required disabled={busy} />
+          </Field>
+          <button className="btn btn-primary" disabled={busy}>
+            تفعيل
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
 export function App() {
   const [user, setUser] = useState<User | null>(null),
-    [loading, setLoading] = useState(true);
+    [loading, setLoading] = useState(true),
+    [locked, setLocked] = useState(false);
   const toast = useToast();
+  const checkLicense = () =>
+    api<{ locked: boolean }>('/license/status')
+      .then((s) => setLocked(s.locked))
+      .catch(() => {});
+  useEffect(() => {
+    void checkLicense();
+    const needLicense = () => setLocked(true);
+    window.addEventListener('license-required', needLicense);
+    return () => window.removeEventListener('license-required', needLicense);
+  }, []);
   useEffect(() => {
     api<User>('/auth/me')
       .then(setUser)
@@ -336,6 +383,15 @@ export function App() {
         <Brand />
         <Loading />
       </div>
+    );
+  if (locked)
+    return (
+      <Activation
+        onDone={() => {
+          setLocked(false);
+          window.location.reload();
+        }}
+      />
     );
   if (!user) return <Login onLogin={setUser} />;
   return <Authenticated user={user} onLogout={() => setUser(null)} />;

@@ -441,7 +441,7 @@ function LicenseSettings() {
           <>
             <Field
               label="مفتاح الترخيص"
-              hint="الصق المفتاح الذي استلمته. النظام الأساسي يظل يعمل دائماً."
+              hint="الصق المفتاح الذي استلمته. لإضافة إضافات جديدة ألصق المفتاح الجديد هنا."
             >
               <textarea name="key" dir="ltr" rows={4} required disabled={busy} />
             </Field>

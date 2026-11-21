@@ -20,7 +20,7 @@ import { expensesRouter } from './routes/expenses';
 import { accountsRouter } from './routes/accounts';
 import { reportsRouter } from './routes/reports';
 import { ownersRouter } from './routes/owners';
-import { licenseRouter } from './routes/license';
+import { licenseRouter, licensePublicRouter, requireBaseLicense } from './routes/license';
 import { rbacRouter } from './routes/rbac';
 import { posRouter } from './routes/pos';
 import { etaRouter } from './routes/eta';
@@ -104,6 +104,11 @@ app.get('/api/health', (_req, res) => {
   one('SELECT 1');
   res.json({ status: 'ok' });
 });
+
+// License activation is public (it must work before sign-in); everything else needs a base license.
+app.use('/api', licensePublicRouter);
+app.use('/api', requireBaseLicense);
+app.use('/iclock', requireBaseLicense);
 
 // Public authentication routes (login with rate limiter)
 app.use('/api/auth', publicAuthRouter);

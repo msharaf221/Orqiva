@@ -54,6 +54,6 @@ jobs:
           Write-Host 'Installed app is healthy'
       - uses: actions/upload-artifact@v4
         with:
-          name: Orqiva-Setup
+          name: ${{ env.LICENSE_PUBLIC_KEY != '' && 'Orqiva-Setup' || 'Orqiva-OPEN-TEST-do-not-sell' }}
           path: release/Orqiva-Setup-*.exe
           if-no-files-found: error

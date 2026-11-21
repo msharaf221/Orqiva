@@ -43,12 +43,12 @@ describe('review follow-ups', () => {
     run('DELETE FROM idempotency_keys');
   });
 
-  it('keeps the backup add-on on when the license is missing', () => {
+  it('backup is a normal add-on: off when the license is missing', () => {
     process.env.ORQIVA_LICENSE_PUBLIC_KEY = generateKeyPairSync('ed25519')
       .publicKey.export({ type: 'spki', format: 'der' })
       .toString('base64');
     run('DELETE FROM license');
-    expect(isAddonEnabled('backup')).toBe(true);
+    expect(isAddonEnabled('backup')).toBe(false);
     expect(isAddonEnabled('crm')).toBe(false);
   });
 

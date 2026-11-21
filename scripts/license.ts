@@ -36,6 +36,7 @@ if (cmd === 'keygen') {
   const payload: LicensePayload = {
     v: 1,
     customer,
+    base: true,
     addons: (flag('addons') ?? '')
       .split(',')
       .map((s) => s.trim())

@@ -1,5 +1,5 @@
 import { createPublicKey, verify, type KeyObject } from 'node:crypto';
-import { one } from './db';
+import { one, run, now } from './db';
 
 /**
  * Offline license keys. A key is `base64url(payload).base64url(signature)` where the
@@ -8,13 +8,17 @@ import { one } from './db';
  * (`ORQIVA_LICENSE_PUBLIC_KEY`, PEM or base64 SPKI DER).
  *
  * Enforcement is opt-in per build: with no public key configured the install is
- * "open" (development and today's behavior) and every add-on is available. With a
- * public key, add-ons need a valid, unexpired license that lists them. The core ERP
- * is never locked, so an expired license cannot hold a customer's data hostage.
+ * "open" (development, CI and test builds) and everything is available. With a public
+ * key (every release build), the whole app is locked until a valid, unexpired key with
+ * the base entitlement is installed, and each add-on also needs to be listed in the key.
+ * Keys issued before the base entitlement existed carry no `base` field and count as
+ * base-licensed, so no existing buyer is locked out.
  */
 export interface LicensePayload {
   v: 1;
   customer: string;
+  /** Base entitlement (the whole system). Absent in older keys, which count as true. */
+  base?: boolean;
   /** Add-on ids this license unlocks, or ["*"] for all. */
   addons: string[];
   /** ISO date the license was issued. */
@@ -55,6 +59,7 @@ export function parseLicense(key: string, pub: KeyObject): LicensePayload | null
     const p = JSON.parse(payloadBytes.toString('utf8')) as LicensePayload;
     if (p.v !== 1 || typeof p.customer !== 'string' || !Array.isArray(p.addons)) return null;
     if (!p.addons.every((a) => typeof a === 'string')) return null;
+    if (p.base !== undefined && typeof p.base !== 'boolean') return null;
     if (
       p.expires !== null &&
       (typeof p.expires !== 'string' || Number.isNaN(Date.parse(p.expires)))
@@ -80,11 +85,26 @@ export function licenseStatus(at: Date = new Date()): LicenseStatus {
   const key = installedKey();
   if (!key) return { enforced: true, state: 'missing' };
   const p = parseLicense(key, pub);
-  if (!p) return { enforced: true, state: 'invalid' };
+  if (!p || p.base === false) return { enforced: true, state: 'invalid' };
   const base = { enforced: true, customer: p.customer, addons: p.addons, expires: p.expires };
   if (p.expires && Date.parse(p.expires) + 86_400_000 <= at.getTime())
     return { ...base, state: 'expired' };
   return { ...base, state: 'valid' };
+}
+
+/** Whether the app as a whole may be used. Always true on an open install. */
+export function licenseAllowsBase(): boolean {
+  const s = licenseStatus();
+  return !s.enforced || s.state === 'valid';
+}
+
+/** Stores a key that already passed checkLicenseKey. */
+export function storeLicenseKey(key: string): void {
+  run(
+    'INSERT INTO license(id,key,installed_at) VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET key=excluded.key, installed_at=excluded.installed_at',
+    key,
+    now(),
+  );
 }
 
 /** Whether the license lets this add-on run. Always true on an open install. */
@@ -101,6 +121,7 @@ export function checkLicenseKey(key: string): string | null {
   if (!pub) return 'هذه النسخة غير مقيّدة بترخيص';
   const p = parseLicense(key, pub);
   if (!p) return 'مفتاح الترخيص غير صالح';
+  if (p.base === false) return 'هذا المفتاح لا يشمل ترخيص النظام الأساسي';
   if (p.expires && Date.parse(p.expires) + 86_400_000 <= Date.now()) return 'انتهت صلاحية المفتاح';
   return null;
 }

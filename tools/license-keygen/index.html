@@ -41,14 +41,20 @@
     <label for="customer">اسم العميل</label>
     <input type="text" id="customer" placeholder="مثال: شركة النور" autocomplete="off">
 
-    <label>الإضافات</label>
+    <label>الترخيص الأساسي</label>
+    <div class="row">
+      <label class="chk"><input type="checkbox" id="base" checked disabled> النظام الأساسي (مطلوب دايمًا)</label>
+    </div>
+    <div class="hint">من غير الترخيص الأساسي النظام كله مقفول وبيطلب مفتاح تفعيل. كل مفتاح بيطلعه هنا بيشمله.</div>
+
+    <label>الإضافات الاختيارية</label>
     <div class="row" id="addons">
       <label class="chk"><input type="checkbox" class="addon" value="crm"> إدارة العملاء والصفقات (CRM)</label>
       <label class="chk"><input type="checkbox" class="addon" value="loyalty"> نقاط ولاء العملاء</label>
       <label class="chk"><input type="checkbox" class="addon" value="backup"> النسخ الاحتياطي المجدول والسحابي</label>
       <label class="chk"><input type="checkbox" id="all"> كل الإضافات (*)</label>
     </div>
-    <div class="hint">دي كل الإضافات الموجودة في النظام حاليًا. النسخ الاحتياطي شغال دايمًا حتى من غير ترخيص. "كل الإضافات" بتشمل أي إضافة هتتضاف مستقبلًا.</div>
+    <div class="hint">دي كل الإضافات الموجودة في النظام حاليًا، وكلها اختيارية (النسخ الاحتياطي كمان إضافة مدفوعة). "كل الإضافات" بتشمل أي إضافة هتتضاف مستقبلًا.</div>
 
     <label for="expires">تاريخ الانتهاء (اختياري)</label>
     <input type="date" id="expires" class="ltr">
@@ -127,7 +133,7 @@ $('f').addEventListener('submit', async (ev) => {
     addons = [...new Set(addons)];
     const exp = $('expires').value;
     if (exp && !/^\d{4}-\d{2}-\d{2}$/.test(exp)) throw new Error('تاريخ غير صالح');
-    const payload = { v: 1, customer, addons, issued: new Date().toISOString().slice(0, 10), expires: exp || null };
+    const payload = { v: 1, customer, base: true, addons, issued: new Date().toISOString().slice(0, 10), expires: exp || null };
     const bytes = new TextEncoder().encode(JSON.stringify(payload));
     let key;
     try {
@@ -139,7 +145,7 @@ $('f').addEventListener('submit', async (ev) => {
     const sig = new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, key, bytes));
     const license = b64url(bytes) + '.' + b64url(sig);
     $('out').textContent = license;
-    $('summary').textContent = 'العميل: ' + customer + ' | الإضافات: ' + (addons.join(', ') || 'بدون') + ' | ينتهي: ' + (exp || 'بلا نهاية');
+    $('summary').textContent = 'العميل: ' + customer + ' | النظام الأساسي + الإضافات: ' + (addons.join(', ') || 'بدون') + ' | ينتهي: ' + (exp || 'بلا نهاية');
     $('res').hidden = false;
     $('priv').value = '';
     $('res').scrollIntoView({ behavior: 'smooth', block: 'start' });

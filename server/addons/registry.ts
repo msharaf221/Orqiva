@@ -21,8 +21,6 @@ export interface AddonManifest {
   permissions?: string[];
   /** API mount path, relative to the server root. */
   mountPath: string;
-  /** Never switched off by the license (data safety must not depend on a subscription). */
-  licenseExempt?: boolean;
   router: Router;
 }
 
@@ -75,7 +73,7 @@ export function listAddons(): AddonInfo[] {
   }));
   if (licenseStatus().enforced) {
     for (const info of infos) {
-      if (info.enabled && !registered.get(info.id)?.licenseExempt && !licenseAllowsAddon(info.id)) {
+      if (info.enabled && !licenseAllowsAddon(info.id)) {
         info.enabled = false;
         info.reason = 'unlicensed';
       }
