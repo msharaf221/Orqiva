@@ -1,4 +1,5 @@
 import { cur, setActiveCurrency } from './currency';
+import { setTaxPolicy } from './config';
 import { lazy, Suspense, useEffect, useState, type FormEvent } from 'react';
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -344,6 +345,7 @@ function Authenticated({ user, onLogout }: { user: User; onLogout: () => void })
   useDensity();
   // The currency label must be set before any amount renders.
   setActiveCurrency(company.data?.currency);
+  setTaxPolicy(company.data);
   if (!company.data && company.loading)
     return (
       <div className="boot">

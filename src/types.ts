@@ -467,6 +467,10 @@ export interface Company {
   tax_number: string;
   currency: string;
   tax_rate: number;
+  /** NONE = no tax, VAT = value-added tax at tax_rate. */
+  tax_mode: 'NONE' | 'VAT';
+  eta_enabled: number;
+  payroll_tax_enabled: number;
   invoice_note: string;
   /** ETA (Egyptian Tax Authority) taxpayer registration number. */
   tax_registration_number: string;

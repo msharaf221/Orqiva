@@ -9,7 +9,7 @@ import {
   generateInvoiceQrData,
 } from '../../receipt-components';
 import type { CheckoutResult } from './helpers';
-import { TAX_FREE } from '../../config';
+import { taxFree } from '../../config';
 
 export function ThermalReceiptModal({
   result,
@@ -81,8 +81,8 @@ export function ThermalReceiptModal({
             )}
             <p className="receipt-branch-name">فرع: {branchName}</p>
             <div className="receipt-title-box">
-              <span>{TAX_FREE ? 'فاتورة بيع مبسطة' : 'فاتورة ضريبية مبسطة'}</span>
-              <small>{TAX_FREE ? 'SIMPLIFIED INVOICE' : 'SIMPLIFIED TAX INVOICE'}</small>
+              <span>{taxFree() ? 'فاتورة بيع مبسطة' : 'فاتورة ضريبية مبسطة'}</span>
+              <small>{taxFree() ? 'SIMPLIFIED INVOICE' : 'SIMPLIFIED TAX INVOICE'}</small>
             </div>
             <div className="receipt-cut-line" />
             <div className="receipt-meta-grid">
@@ -141,7 +141,7 @@ export function ThermalReceiptModal({
           {/* Financial Totals */}
           <div className="receipt-totals">
             <div className="receipt-row">
-              <span>{TAX_FREE ? 'المجموع الفرعي:' : 'المجموع الفرعي (قبل الضريبة):'}</span>
+              <span>{taxFree() ? 'المجموع الفرعي:' : 'المجموع الفرعي (قبل الضريبة):'}</span>
               <span className="num">
                 {money(result.document.subtotal)} {cur()}
               </span>
@@ -156,7 +156,7 @@ export function ThermalReceiptModal({
               </div>
             )}
 
-            {!TAX_FREE && (
+            {!taxFree() && (
               <div className="receipt-row">
                 <span>
                   ضريبة القيمة المضافة ({((result.document.tax_rate ?? 1400) / 100).toFixed(0)}%):

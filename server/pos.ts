@@ -15,7 +15,7 @@ import { postPosCashMovementLedger } from './posting';
 import { businessToday } from './clock';
 import { validateReturnLines } from './returns';
 import { writableBranch, type Actor, type Scope, scopeSql } from './scope';
-import { effectiveTaxRate } from '../src/config';
+import { effectiveTaxRate } from './tax_policy';
 import {
   posShiftOpenSchema,
   posCashMovementSchema,

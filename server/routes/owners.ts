@@ -4,7 +4,7 @@ import { one, run, transaction } from '../db';
 import { audit } from '../service';
 import { requirePermission } from '../rbac';
 import { companySchema } from '../validation';
-import { TAX_FREE, effectiveTaxRate } from '../../src/config';
+import { taxPolicy } from '../tax_policy';
 import {
   listOwners,
   createOwner,
@@ -33,23 +33,36 @@ ownersRouter.get('/company', (_req, res) =>
 
 ownersRouter.put('/company', requirePermission('branches:manage'), (req, res) => {
   const c = companySchema.parse(req.body);
+  const before = taxPolicy();
+  const vat = c.tax_mode ? c.tax_mode === 'VAT' : before.vat;
+  const eta = vat && (c.eta_enabled ?? before.eta);
+  const payrollTax = c.payroll_tax_enabled ?? before.payrollTax;
   transaction(() => {
     run(
-      'UPDATE company SET name=?,email=?,phone=?,address=?,tax_number=?,tax_registration_number=?,activity_code=?,tax_rate=?,invoice_note=?,currency=COALESCE(?,currency),eta_environment=COALESCE(?,eta_environment),invoice_settings=COALESCE(?,invoice_settings) WHERE id=1',
+      'UPDATE company SET name=?,email=?,phone=?,address=?,tax_number=?,tax_registration_number=?,activity_code=?,tax_rate=?,invoice_note=?,currency=COALESCE(?,currency),tax_mode=?,eta_enabled=?,payroll_tax_enabled=?,eta_environment=COALESCE(?,eta_environment),invoice_settings=COALESCE(?,invoice_settings) WHERE id=1',
       c.name,
       c.email,
       c.phone,
       c.address,
-      TAX_FREE ? '' : c.tax_number,
-      TAX_FREE ? '' : c.tax_registration_number || '',
-      TAX_FREE ? '' : c.activity_code || '',
-      effectiveTaxRate(c.tax_rate),
+      vat ? (c.tax_number ?? '') : '',
+      vat ? c.tax_registration_number || '' : '',
+      vat ? c.activity_code || '' : '',
+      vat ? (c.tax_rate ?? 1400) : 0,
       c.invoice_note,
       c.currency ?? null,
+      vat ? 'VAT' : 'NONE',
+      eta ? 1 : 0,
+      payrollTax ? 1 : 0,
       c.eta_environment || null,
       c.invoice_settings || null,
     );
-    audit(req.user, 'تحديث إعدادات الشركة', 'COMPANY', '1');
+    audit(
+      req.user,
+      'تحديث إعدادات الشركة',
+      'COMPANY',
+      '1',
+      `الضريبة: ${vat ? 'ضريبة القيمة المضافة' : 'بدون'} · الفاتورة الإلكترونية: ${eta ? 'مفعّلة' : 'متوقفة'} · ضرائب الرواتب: ${payrollTax ? 'مفعّلة' : 'متوقفة'}`,
+    );
   });
   res.json(one('SELECT * FROM company WHERE id=1'));
 });

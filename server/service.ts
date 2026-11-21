@@ -11,7 +11,7 @@ import { resolveDefaultAccountId, assertAccountFunds, glAccountForCashAccount } 
 import { enqueueEtaSubmission, isEtaEligible } from './eta';
 import { postDocumentLedger, reverseDocumentLedger, postPaymentLedger } from './posting';
 import { recordBatchStock } from './batches';
-import { calculateTax, effectiveTaxRate } from '../src/config';
+import { calculateTax, effectiveTaxRate } from './tax_policy';
 import type { Document, DocLine, Party, Payment, Branch } from '../src/types';
 
 export { AppError } from './errors';

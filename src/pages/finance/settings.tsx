@@ -33,7 +33,7 @@ import {
 } from '../../lib';
 import type { User, RoleDef, PermissionDef } from '../../types';
 import { useBranch } from '../../branch';
-import { TAX_FREE, ETA_ENABLED } from '../../config';
+import { etaEnabled } from '../../config';
 import { PermissionsModal } from '../PermissionsModal';
 import { EInvoicePanel } from './e-invoice';
 import { InvoiceCustomizer } from './invoice-customizer';
@@ -82,7 +82,7 @@ export function SettingsPage() {
               </div>
             </button>
           )}
-          {ETA_ENABLED && can(user, 'eta:view') && (
+          {etaEnabled() && can(user, 'eta:view') && (
             <button
               onClick={() => setTab('einvoice')}
               className={tab === 'einvoice' ? 'active' : ''}
@@ -143,6 +143,9 @@ function CompanySettings() {
   const { company, refreshCompany, user } = useSession();
   const { busy, act } = useAction();
   const admin = user.role === 'ADMIN';
+  const [mode, setMode] = useState<'NONE' | 'VAT'>(company?.tax_mode === 'VAT' ? 'VAT' : 'NONE');
+  const [etaOn, setEtaOn] = useState(!!company?.eta_enabled);
+  const vatOn = mode === 'VAT';
   const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
@@ -152,15 +155,22 @@ function CompanySettings() {
         email: f.get('email'),
         phone: f.get('phone'),
         address: f.get('address'),
-        ...(TAX_FREE
-          ? {}
-          : {
+        tax_mode: mode,
+        eta_enabled: vatOn && etaOn,
+        payroll_tax_enabled: f.get('payroll_tax_enabled') === 'on',
+        ...(vatOn
+          ? {
               tax_number: f.get('tax_number'),
-              tax_registration_number: f.get('tax_registration_number'),
-              activity_code: f.get('activity_code'),
               tax_rate: Math.round(Number(f.get('tax_rate')) * 100),
-              eta_environment: f.get('eta_environment'),
-            }),
+              ...(etaOn
+                ? {
+                    tax_registration_number: f.get('tax_registration_number'),
+                    activity_code: f.get('activity_code'),
+                    eta_environment: f.get('eta_environment'),
+                  }
+                : {}),
+            }
+          : {}),
         invoice_note: f.get('invoice_note'),
         currency: f.get('currency'),
       });
@@ -202,7 +212,16 @@ function CompanySettings() {
         <Field label="العنوان">
           <input name="address" maxLength={500} defaultValue={company.address} />
         </Field>
-        {!TAX_FREE && (
+        <Field
+          label="سياسة الضريبة"
+          hint="الافتراضي بدون ضريبة. فعّل ضريبة القيمة المضافة إذا كانت شركتك مسجلة، وتُدخل الأسعار بدون الضريبة وتُضاف عند الحساب."
+        >
+          <select value={mode} onChange={(e) => setMode(e.target.value as 'NONE' | 'VAT')}>
+            <option value="NONE">بدون ضريبة</option>
+            <option value="VAT">ضريبة القيمة المضافة (VAT)</option>
+          </select>
+        </Field>
+        {vatOn && (
           <>
             <div className="form-row">
               <Field label="الرقم الضريبي">
@@ -216,10 +235,33 @@ function CompanySettings() {
                   max="100"
                   step=".01"
                   required
-                  defaultValue={company.tax_rate / 100}
+                  defaultValue={company.tax_rate ? company.tax_rate / 100 : 14}
                 />
               </Field>
             </div>
+          </>
+        )}
+        <Field
+          label="ضرائب الرواتب"
+          hint="ضريبة الدخل وصندوق الشهداء والتأمينات الاجتماعية في كشف الرواتب."
+        >
+          <label>
+            <input
+              type="checkbox"
+              name="payroll_tax_enabled"
+              defaultChecked={!!company.payroll_tax_enabled}
+            />{' '}
+            احتساب ضرائب الرواتب
+          </label>
+        </Field>
+        {vatOn && (
+          <label>
+            <input type="checkbox" checked={etaOn} onChange={(e) => setEtaOn(e.target.checked)} />{' '}
+            تفعيل الفاتورة الإلكترونية (ETA)
+          </label>
+        )}
+        {vatOn && etaOn && (
+          <>
             <div className="form-row">
               <Field
                 label="رقم التسجيل الضريبي (ETA)"

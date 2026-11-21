@@ -49,7 +49,7 @@ import {
   Status,
 } from '../lib';
 import { useBranch, withBranch } from '../branch';
-import { TAX_FREE } from '../config';
+import { taxFree } from '../config';
 import type {
   Product,
   Party,
@@ -2165,7 +2165,7 @@ function PartyForm({
               placeholder="المدينة، المنطقة، الشارع"
             />
           </Field>
-          {!TAX_FREE && (
+          {!taxFree() && (
             <Field label="الرقم الضريبي">
               <input name="tax_number" maxLength={50} defaultValue={party?.tax_number} />
             </Field>

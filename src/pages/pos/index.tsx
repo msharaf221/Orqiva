@@ -40,7 +40,7 @@ import { ThermalReceiptModal } from './receipt';
 import { HotkeysModal } from './hotkeys';
 import { PosReturnModal } from './return';
 import { can } from '../../auth';
-import { TAX_FREE, calculateTax, effectiveTaxRate } from '../../config';
+import { taxFree, calculateTax, effectiveTaxRate } from '../../config';
 import { ProductForm } from '../Catalog';
 
 export function POS() {
@@ -698,7 +698,7 @@ export function POS() {
               </span>
             </div>
 
-            {!TAX_FREE && (
+            {!taxFree() && (
               <div className="pos-summary-line">
                 <span>ضريبة القيمة المضافة ({taxRate / 100}%):</span>
                 <span>

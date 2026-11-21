@@ -11,7 +11,7 @@ import { all, one, run, transaction, id, now } from './db';
 import { AppError } from './errors';
 import { audit } from './audit';
 import type { Actor } from './scope';
-import { calculateTax, effectiveTaxRate } from '../src/config';
+import { calculateTax, effectiveTaxRate } from './tax_policy';
 import { Quotation, QuotationLine, QuotationStatus, QuotationType } from '../src/types';
 
 export function listQuotations(filter?: {

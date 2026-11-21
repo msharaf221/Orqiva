@@ -66,7 +66,7 @@ import {
 } from '../../lib';
 import { useBranch, withBranch } from '../../branch';
 import { can } from '../../auth';
-import { TAX_FREE } from '../../config';
+import { taxFree } from '../../config';
 import type {
   ChartAccount,
   JournalEntry,
@@ -133,7 +133,7 @@ export function Ledger() {
     'trial',
     'pnl',
     'balance-sheet',
-    ...(TAX_FREE ? [] : ['vat-return']),
+    ...(taxFree() ? [] : ['vat-return']),
     'opening-balances',
     'settings',
   ];
@@ -160,7 +160,7 @@ export function Ledger() {
         eyebrow="قيود متوازنة، ودفتر واحد للحقيقة"
         title="دفتر الأستاذ"
         description={
-          TAX_FREE
+          taxFree()
             ? 'كل حركة في أوركيفا تُرحَّل تلقائياً كقيد مزدوج متوازن — راجع القيود، ودليل الحسابات، وميزان المراجعة، والقوائم المالية.'
             : 'كل حركة في أوركيفا تُرحَّل تلقائياً كقيد مزدوج متوازن — راجع القيود، ودليل الحسابات، وميزان المراجعة، والقوائم المالية، وإقرارات الضرائب.'
         }
@@ -188,7 +188,7 @@ export function Ledger() {
           >
             <span>الميزانية العمومية</span>
           </button>
-          {!TAX_FREE && (
+          {!taxFree() && (
             <button
               className={tab === 'vat-return' ? 'active' : ''}
               onClick={() => switchTab('vat-return')}
@@ -220,7 +220,7 @@ export function Ledger() {
         <ProfitAndLossTab />
       ) : tab === 'balance-sheet' ? (
         <BalanceSheetTab />
-      ) : !TAX_FREE && tab === 'vat-return' ? (
+      ) : !taxFree() && tab === 'vat-return' ? (
         <VatReturnTab />
       ) : tab === 'opening-balances' ? (
         <OpeningBalancesTab canManage={canManage} />

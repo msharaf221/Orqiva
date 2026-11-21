@@ -13,7 +13,7 @@ import { all, one, run, transaction, id, now } from './db';
 import { AppError } from './errors';
 import { postEntry } from './ledger';
 import { getMonthlyAttendanceAndLeaveImpact } from './hr';
-import { TAX_FREE } from '../src/config';
+import { taxPolicy } from './tax_policy';
 import { Employee, PayrollRun, PayrollSlip, EmploymentType, JournalEntry } from '../src/types';
 import { audit } from './audit';
 import { inScope, scopeSql, writableBranch, type Actor, type Scope } from './scope';
@@ -79,7 +79,7 @@ export function createEmployee(
   const ts = now();
   // Tax-free mode removes social insurance from the payroll model, so the insured wage and
   // insurance number are kept empty even if an older client still sends them.
-  const insured = TAX_FREE ? 0 : (data.insured_salary ?? data.basic_salary);
+  const insured = !taxPolicy().payrollTax ? 0 : (data.insured_salary ?? data.basic_salary);
 
   run(
     `INSERT INTO employees(id, code, name, national_id, phone, job_title, department, branch_id,
@@ -98,7 +98,7 @@ export function createEmployee(
     data.basic_salary,
     data.variable_salary || 0,
     insured,
-    TAX_FREE ? null : data.insurance_number || null,
+    !taxPolicy().payrollTax ? null : data.insurance_number || null,
     data.hire_date,
     ts,
   );
@@ -166,7 +166,7 @@ export function calculateEgyptianPayrollDeductions(
 
   // Tax-free mode: no social insurance, martyrs fund, or income tax. Gross pay is the
   // employee's full entitlement before advances and attendance adjustments.
-  if (TAX_FREE) {
+  if (!taxPolicy().payrollTax) {
     return {
       gross,
       employeeSocialIns: 0,

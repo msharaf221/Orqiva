@@ -19,7 +19,7 @@ import { all, one, run, transaction, id, now } from './db';
 import { AppError } from './errors';
 import { audit } from './audit';
 import { inScope, scopeSql, type Actor, type Scope } from './scope';
-import { ETA_ENABLED } from '../src/config';
+import { etaEnabled } from './tax_policy';
 
 /** ETA default document type names inside UBL 2.1. */
 export type EtaDocType = 'INVOICE' | 'CREDIT_NOTE' | 'DEBIT_NOTE';
@@ -86,7 +86,7 @@ const ETA_CLIENT_SECRET = process.env.ETA_CLIENT_SECRET || '';
 
 /** True when real ETA credentials exist; otherwise the pipeline runs in stub mode. */
 export function etaConfigured(): boolean {
-  return ETA_ENABLED && Boolean(ETA_CLIENT_ID && ETA_CLIENT_SECRET);
+  return etaEnabled() && Boolean(ETA_CLIENT_ID && ETA_CLIENT_SECRET);
 }
 
 /** Builds the value for the ETA TLV QR code (base64 of tag/length/value bytes). */
@@ -261,7 +261,7 @@ export function etaQrPayload(documentId: string, scope?: Scope): string {
 /** Creates the outbox row for a document, if one does not already exist. */
 export function enqueueEtaSubmission(documentId: string, actorId?: string): void {
   // ETA depends on tax identity; tax-free mode keeps the pipeline dormant.
-  if (!ETA_ENABLED) return;
+  if (!etaEnabled()) return;
   const doc = one<DocRow>('SELECT * FROM documents WHERE id=?', documentId);
   if (!doc) throw new AppError(404, 'الفاتورة غير موجودة');
   if (!isEtaEligible(doc.type)) return;
@@ -333,7 +333,7 @@ export function processPendingSubmissions(
   limit = 20,
   scope?: Scope,
 ): { processed: number; succeeded: number } {
-  if (!ETA_ENABLED) return { processed: 0, succeeded: 0 };
+  if (!etaEnabled()) return { processed: 0, succeeded: 0 };
   const visible = scopeSql('d.branch_id', scope ?? { ids: null });
   const due = all<EtaSubmission>(
     `SELECT s.* FROM e_invoice_submissions s
@@ -441,7 +441,7 @@ export function retrySubmission(
   scope?: Scope,
   actor?: Pick<Actor, 'id' | 'name'>,
 ): EtaSubmission {
-  if (!ETA_ENABLED)
+  if (!etaEnabled())
     throw new AppError(409, 'منظومة الفاتورة الإلكترونية معطّلة في وضع إلغاء الضرائب');
   const submission = one<EtaSubmission & { branch_id?: string }>(
     `SELECT s.*, d.branch_id

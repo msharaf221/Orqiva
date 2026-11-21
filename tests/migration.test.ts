@@ -66,6 +66,7 @@ describe('upgrading a single-warehouse installation', () => {
       '025_tax_free_and_attendance_devices.sql',
       '026_audit_request_id_and_idempotency.sql',
       '027_company_currency.sql',
+      '028_company_tax_policy.sql',
     ]);
     expect(one("SELECT role_id FROM user_roles WHERE user_id='u-admin'")).toEqual({
       role_id: 'role_admin',
