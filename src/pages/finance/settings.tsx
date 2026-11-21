@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { CURRENCIES } from '../../currency';
+import { CURRENCIES, cur } from '../../currency';
 import { can } from '../../auth';
 import { Link } from 'react-router-dom';
 import {
@@ -17,6 +17,7 @@ import {
   Palette,
   KeyRound,
   DatabaseBackup,
+  Gift,
 } from 'lucide-react';
 import {
   api,
@@ -45,6 +46,7 @@ export function SettingsPage() {
   const [tab, setTab] = useState('company');
   const addonList = useData<{ id: string; enabled: boolean }[]>('/addons');
   const backupOn = !!addonList.data?.find((a) => a.id === 'backup')?.enabled;
+  const loyaltyOn = !!addonList.data?.find((a) => a.id === 'loyalty')?.enabled;
   return (
     <>
       <PageHeader
@@ -104,6 +106,15 @@ export function SettingsPage() {
               </div>
             </button>
           )}
+          {can(user, 'users:manage') && loyaltyOn && (
+            <button onClick={() => setTab('loyalty')} className={tab === 'loyalty' ? 'active' : ''}>
+              <Gift size={19} />
+              <div>
+                <strong>نقاط الولاء</strong>
+                <small>كسب واستبدال نقاط العملاء</small>
+              </div>
+            </button>
+          )}
           {etaEnabled() && can(user, 'eta:view') && (
             <button
               onClick={() => setTab('einvoice')}
@@ -152,6 +163,8 @@ export function SettingsPage() {
             <LicenseSettings />
           ) : tab === 'backup' ? (
             <BackupSettings />
+          ) : tab === 'loyalty' ? (
+            <LoyaltySettings />
           ) : tab === 'einvoice' ? (
             <EInvoicePanel />
           ) : (
@@ -492,6 +505,69 @@ function BackupSettings() {
         </ul>
       </div>
     </div>
+  );
+}
+
+function LoyaltySettings() {
+  const data = useData<{ enabled: boolean; earn_per: number; point_value: number }>(
+    '/loyalty/settings',
+  );
+  const { busy, act } = useAction();
+  const s = data.data;
+  const submit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    void act(async () => {
+      await api('/loyalty/settings', 'PUT', {
+        enabled: f.get('enabled') === 'on',
+        earn_per: Math.round(Number(f.get('earn_per')) * 100),
+        point_value: Math.round(Number(f.get('point_value')) * 100),
+      });
+      data.reload();
+    }, 'تم حفظ إعدادات نقاط الولاء');
+  };
+  if (!s) return <Loading />;
+  return (
+    <form onSubmit={submit} className="card settings-card" key={String(s.enabled) + s.earn_per}>
+      <div className="card-heading">
+        <div>
+          <h2>نقاط الولاء</h2>
+          <p>يكسب العميل المسجل نقاطاً على مبيعات نقطة البيع ويستبدلها بخصم.</p>
+        </div>
+        <Gift size={21} />
+      </div>
+      <fieldset disabled={busy} className="form-card-body form-grid">
+        <label>
+          <input type="checkbox" name="enabled" defaultChecked={s.enabled} /> تفعيل نقاط الولاء
+        </label>
+        <Field label={`قيمة البيع التي تمنح نقطة واحدة (${cur()})`}>
+          <input
+            name="earn_per"
+            type="number"
+            min="0.01"
+            step=".01"
+            required
+            defaultValue={s.earn_per / 100}
+          />
+        </Field>
+        <Field label={`قيمة النقطة الواحدة عند الاستبدال (${cur()})`}>
+          <input
+            name="point_value"
+            type="number"
+            min="0.01"
+            step=".01"
+            required
+            defaultValue={s.point_value / 100}
+          />
+        </Field>
+        <p>
+          العميل النقدي (الطائر) لا يكسب ولا يستبدل نقاطاً. المرتجع يسحب النقاط المكتسبة منه فقط.
+        </p>
+        <button className="btn btn-primary">
+          <Save size={16} /> حفظ
+        </button>
+      </fieldset>
+    </form>
   );
 }
 

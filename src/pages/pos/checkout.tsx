@@ -174,6 +174,7 @@ export function CheckoutModal({
   customer,
   cart,
   discountCents,
+  loyaltyPoints = 0,
   totalCents,
   numpad = false,
   onSuccess,
@@ -184,6 +185,8 @@ export function CheckoutModal({
   customer: Party;
   cart: CartItem[];
   discountCents: number;
+  /** Loyalty points redeemed as an extra discount (already reflected in totalCents). */
+  loyaltyPoints?: number;
   totalCents: number;
   /** Show the on-screen numeric keypad for the tendered amount (touch tills). */
   numpad?: boolean;
@@ -296,6 +299,7 @@ export function CheckoutModal({
           party_id: customer.id,
           date: new Date().toISOString().slice(0, 10),
           discount: discountCents,
+          loyalty_redeem_points: loyaltyPoints || undefined,
           lines: cart.map((c) => ({
             product_id: c.product.id,
             quantity: c.quantity,
@@ -345,6 +349,7 @@ export function CheckoutModal({
         party_id: customer.id,
         date: new Date().toISOString().slice(0, 10),
         discount: discountCents,
+        loyalty_redeem_points: loyaltyPoints || undefined,
         lines: cart.map((c) => ({
           product_id: c.product.id,
           quantity: c.quantity,

@@ -632,6 +632,8 @@ export const posCheckoutSchema = z
     party_id: id().default('walk-in-customer'),
     date,
     discount: money.default(0),
+    /** Loyalty points to redeem as extra discount (needs the loyalty add-on and a registered customer). */
+    loyalty_redeem_points: z.number().int().min(0).max(10_000_000).default(0),
     notes: optionalText(500),
     lines: z
       .array(

@@ -17,6 +17,13 @@ import { validateReturnLines } from './returns';
 import { writableBranch, type Actor, type Scope, scopeSql } from './scope';
 import { effectiveTaxRate } from './tax_policy';
 import {
+  pointsBalance,
+  recordEarn,
+  recordRedeem,
+  redemptionDiscount,
+  reverseEarn,
+} from './modules/loyalty/service';
+import {
   posShiftOpenSchema,
   posCashMovementSchema,
   posShiftSubmitSchema,
@@ -597,6 +604,7 @@ export function posCheckout(raw: unknown, actor: Actor) {
       ),
     );
     const taxRate = effectiveTaxRate(company.tax_rate);
+    const loyaltyDiscount = redemptionDiscount(input.party_id, input.loyalty_redeem_points);
 
     // Create & Post Document
     const docData = saveDocument(
@@ -606,7 +614,7 @@ export function posCheckout(raw: unknown, actor: Actor) {
         party_id: input.party_id,
         date: input.date,
         due_date: input.date,
-        discount: input.discount,
+        discount: input.discount + loyaltyDiscount,
         tax_rate: taxRate,
         prices_include_tax: taxRate > 0 && company.prices_include_tax === 1,
         notes: input.notes || '',
@@ -620,6 +628,9 @@ export function posCheckout(raw: unknown, actor: Actor) {
 
     // Post document (draws stock, snapshots WAC cost, sets status to POSTED)
     const postedDoc = postDocument(docData.id, actor);
+
+    recordRedeem(input.party_id, input.loyalty_redeem_points, postedDoc.id);
+    const pointsEarned = recordEarn(input.party_id, postedDoc.total, postedDoc.id);
 
     // Record payments (single payment or split payments)
     let changeDue = 0;
@@ -732,6 +743,11 @@ export function posCheckout(raw: unknown, actor: Actor) {
       lines,
       shift_id: shiftId,
       payment: paymentResult,
+      loyalty: {
+        redeemed: input.loyalty_redeem_points,
+        earned: pointsEarned,
+        balance: pointsBalance(input.party_id),
+      },
     };
   });
 }
@@ -797,6 +813,7 @@ export function posReturn(raw: unknown, actor: Actor) {
       actor,
     );
     const posted = postDocument(created.id, actor);
+    reverseEarn(original.party_id, posted.total, posted.id);
 
     // Refund the customer out of the drawer (or their tender account) so cash nets out.
     if (posted.total > 0) {
