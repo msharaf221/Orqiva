@@ -5,7 +5,8 @@ import {
   listSubmissions,
   retrySubmission,
   getSubmissionByDocument,
-  processPendingSubmissions,
+  processPendingSubmissionsAsync,
+  etaEnvironment,
   buildEtaInvoice,
   etaQrPayload,
   etaConfigured,
@@ -20,7 +21,7 @@ etaRouter.get('/eta/status', requirePermission('eta:view'), (req, res) => {
     acc[s.status] = (acc[s.status] || 0) + 1;
     return acc;
   }, {});
-  res.json({ configured: etaConfigured(), summary });
+  res.json({ configured: etaConfigured(), environment: etaEnvironment(), summary });
 });
 
 /** Submission log, newest first. */
@@ -41,8 +42,8 @@ etaRouter.get('/eta/documents/:id/payload', requirePermission('eta:view'), (req,
 });
 
 /** Force a due batch to be processed now (normally a background worker). */
-etaRouter.post('/eta/process', requirePermission('eta:manage'), (req, res) => {
-  res.json(processPendingSubmissions(50, scopeFor(req.user, req.query.branch_id)));
+etaRouter.post('/eta/process', requirePermission('eta:manage'), async (req, res) => {
+  res.json(await processPendingSubmissionsAsync(50, scopeFor(req.user, req.query.branch_id)));
 });
 
 /** Manual retry after a permanent failure. */
