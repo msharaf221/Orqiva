@@ -15,6 +15,7 @@ import {
   Trash2,
   ReceiptText,
   Palette,
+  KeyRound,
 } from 'lucide-react';
 import {
   api,
@@ -82,6 +83,15 @@ export function SettingsPage() {
               </div>
             </button>
           )}
+          {can(user, 'users:manage') && (
+            <button onClick={() => setTab('license')} className={tab === 'license' ? 'active' : ''}>
+              <KeyRound size={19} />
+              <div>
+                <strong>الترخيص</strong>
+                <small>مفتاح الترخيص والإضافات</small>
+              </div>
+            </button>
+          )}
           {etaEnabled() && can(user, 'eta:view') && (
             <button
               onClick={() => setTab('einvoice')}
@@ -126,6 +136,8 @@ export function SettingsPage() {
             <UserSettings />
           ) : tab === 'roles' ? (
             <RolesSettings />
+          ) : tab === 'license' ? (
+            <LicenseSettings />
           ) : tab === 'einvoice' ? (
             <EInvoicePanel />
           ) : (
@@ -328,6 +340,82 @@ function CompanySettings() {
     </form>
   );
 }
+interface LicenseInfo {
+  enforced: boolean;
+  state: 'open' | 'valid' | 'missing' | 'invalid' | 'expired';
+  customer?: string;
+  addons?: string[];
+  expires?: string | null;
+}
+const LICENSE_STATE: Record<LicenseInfo['state'], string> = {
+  open: 'نسخة مفتوحة (بدون تقييد بترخيص)',
+  valid: 'ترخيص ساري',
+  missing: 'لا يوجد مفتاح ترخيص',
+  invalid: 'مفتاح الترخيص غير صالح',
+  expired: 'انتهت صلاحية الترخيص',
+};
+function LicenseSettings() {
+  const license = useData<LicenseInfo>('/license');
+  const addons =
+    useData<{ id: string; name: string; enabled: boolean; reason?: string }[]>('/addons');
+  const { busy, act } = useAction();
+  const info = license.data;
+  const submit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const f = new FormData(form);
+    void act(async () => {
+      await api('/license', 'PUT', { key: String(f.get('key') || '').trim() });
+      form.reset();
+      license.reload();
+      addons.reload();
+    }, 'تم تثبيت مفتاح الترخيص');
+  };
+  return (
+    <form onSubmit={submit} className="card settings-card">
+      <div className="card-heading">
+        <div>
+          <h2>الترخيص</h2>
+          <p>{info ? LICENSE_STATE[info.state] : 'جارٍ التحميل...'}</p>
+        </div>
+        <KeyRound size={21} />
+      </div>
+      <div className="form-card-body form-grid">
+        {info?.customer && (
+          <p>
+            العميل: <strong>{info.customer}</strong>
+            {' · '}
+            الانتهاء: {info.expires || 'دائم'}
+          </p>
+        )}
+        <Field label="الإضافات">
+          <ul>
+            {(addons.data || []).map((a) => (
+              <li key={a.id}>
+                {a.name}:{' '}
+                {a.enabled ? 'مفعّلة' : a.reason === 'unlicensed' ? 'غير مرخّصة' : 'متوقفة'}
+              </li>
+            ))}
+          </ul>
+        </Field>
+        {info?.enforced && (
+          <>
+            <Field
+              label="مفتاح الترخيص"
+              hint="الصق المفتاح الذي استلمته. النظام الأساسي يظل يعمل دائماً."
+            >
+              <textarea name="key" dir="ltr" rows={4} required disabled={busy} />
+            </Field>
+            <button className="btn btn-primary" disabled={busy}>
+              <Save size={16} /> تثبيت المفتاح
+            </button>
+          </>
+        )}
+      </div>
+    </form>
+  );
+}
+
 function SecuritySettings() {
   const { user } = useSession();
   const { busy, act } = useAction();

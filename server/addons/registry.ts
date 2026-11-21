@@ -1,4 +1,5 @@
 import { Router, type Express } from 'express';
+import { licenseAllowsAddon, licenseStatus } from '../license';
 
 /**
  * Add-on kernel. Orqiva is a strong core plus optional add-ons that can be
@@ -30,7 +31,7 @@ export interface AddonInfo {
   depends: string[];
   enabled: boolean;
   /** Why an add-on is off: switched off by configuration, or a dependency is missing. */
-  reason?: 'disabled' | 'missing_dependency';
+  reason?: 'disabled' | 'missing_dependency' | 'unlicensed';
 }
 
 const registered = new Map<string, AddonManifest>();
@@ -70,6 +71,14 @@ export function listAddons(): AddonInfo[] {
     enabled: !wanted || wanted.has(m.id),
     reason: !wanted || wanted.has(m.id) ? undefined : 'disabled',
   }));
+  if (licenseStatus().enforced) {
+    for (const info of infos) {
+      if (info.enabled && !licenseAllowsAddon(info.id)) {
+        info.enabled = false;
+        info.reason = 'unlicensed';
+      }
+    }
+  }
   let changed = true;
   while (changed) {
     changed = false;
