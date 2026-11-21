@@ -1,0 +1,19 @@
+{
+  "appId": "com.orqiva.erp",
+  "productName": "Orqiva",
+  "directories": { "app": "build/app", "output": "release" },
+  "asar": false,
+  "npmRebuild": false,
+  "win": {
+    "target": [{ "target": "nsis", "arch": ["x64"] }],
+    "signAndEditExecutable": false
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "deleteAppDataOnUninstall": false,
+    "createDesktopShortcut": true,
+    "artifactName": "Orqiva-Setup-${version}.${ext}"
+  }
+}
