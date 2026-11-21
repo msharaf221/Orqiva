@@ -11,7 +11,7 @@
  *    payload locally, marks it VALID, and records a synthetic long id. This keeps POS
  *    checkout fully offline-capable while the compliance paperwork with the authority is
  *    still pending.
- *  - When `ETA_CLIENT_ID` / `ETA_CLIENT_SECRET` are provided, `deliver()` starts talking to
+ *  - When `ETA_CLIENT_ID` / `ETA_CLIENT_SECRET` are set and the company environment is preprod or production, `processPendingSubmissionsAsync()` uses server/eta_client.ts (real HTTP transport).
  *    the real ETA endpoints. Only that function needs to change.
  */
 
@@ -20,6 +20,7 @@ import { AppError } from './errors';
 import { audit } from './audit';
 import { inScope, scopeSql, type Actor, type Scope } from './scope';
 import { etaEnabled } from './tax_policy';
+import { submitToEta, EtaPermanentError, type EtaEnv } from './eta_client';
 
 /** ETA default document type names inside UBL 2.1. */
 export type EtaDocType = 'INVOICE' | 'CREDIT_NOTE' | 'DEBIT_NOTE';
@@ -81,12 +82,20 @@ export interface EtaInvoiceJson {
   references?: Array<string>;
 }
 
-const ETA_CLIENT_ID = process.env.ETA_CLIENT_ID || '';
-const ETA_CLIENT_SECRET = process.env.ETA_CLIENT_SECRET || '';
+const etaClientId = (): string => process.env.ETA_CLIENT_ID || '';
+const etaClientSecret = (): string => process.env.ETA_CLIENT_SECRET || '';
 
 /** True when real ETA credentials exist; otherwise the pipeline runs in stub mode. */
 export function etaConfigured(): boolean {
-  return etaEnabled() && Boolean(ETA_CLIENT_ID && ETA_CLIENT_SECRET);
+  return etaEnabled() && Boolean(etaClientId() && etaClientSecret()) && etaEnvironment() !== 'stub';
+}
+
+/** The company's ETA environment: stub (offline), preprod or production. */
+export function etaEnvironment(): 'stub' | EtaEnv {
+  const env = one<{ eta_environment: string }>(
+    'SELECT eta_environment FROM company WHERE id=1',
+  )?.eta_environment;
+  return env === 'preprod' || env === 'production' ? env : 'stub';
 }
 
 /** Builds the value for the ETA TLV QR code (base64 of tag/length/value bytes). */
@@ -323,19 +332,13 @@ function deliver(submission: EtaSubmission): { longId: string; response: string 
       response: JSON.stringify({ mode: 'stub', accepted: true, uuid: submission.uuid }),
     };
   }
-  // Real integration point: exchange a token and POST the UBL JSON to the ETA endpoints.
-  // Left unimplemented on purpose until sandbox credentials are supplied.
-  throw new AppError(503, 'لم يتم إعداد مفاتيح هيئة الضرائب (ETA) بعد');
+  // Real submissions are async and go through processPendingSubmissionsAsync.
+  throw new AppError(503, 'الإرسال الفعلي لهيئة الضرائب يتم عبر المعالج غير المتزامن');
 }
 
-/** Processes due PENDING submissions, applying retry/backoff on failure. */
-export function processPendingSubmissions(
-  limit = 20,
-  scope?: Scope,
-): { processed: number; succeeded: number } {
-  if (!etaEnabled()) return { processed: 0, succeeded: 0 };
+function dueSubmissions(limit: number, scope?: Scope): EtaSubmission[] {
   const visible = scopeSql('d.branch_id', scope ?? { ids: null });
-  const due = all<EtaSubmission>(
+  return all<EtaSubmission>(
     `SELECT s.* FROM e_invoice_submissions s
      JOIN documents d ON d.id=s.document_id
      WHERE s.status='PENDING' AND s.next_attempt_at<=? AND ${visible.sql}
@@ -344,55 +347,102 @@ export function processPendingSubmissions(
     ...visible.params,
     limit,
   );
+}
+
+function recordSuccess(submission: EtaSubmission, longId: string, response: string): void {
+  transaction(() => {
+    const ts = now();
+    run(
+      `UPDATE e_invoice_submissions
+       SET status='VALID', attempt=?, submitted_at=?, completed_at=?,
+           eta_long_id=?, eta_response=?, last_error='', updated_at=?
+       WHERE id=?`,
+      submission.attempt + 1,
+      ts,
+      ts,
+      longId,
+      response,
+      ts,
+      submission.id,
+    );
+    run(
+      "UPDATE documents SET eta_status='VALID', eta_long_id=? WHERE id=?",
+      longId,
+      submission.document_id,
+    );
+  });
+}
+
+/** Records a failed attempt. Permanent errors skip the remaining retries. */
+function recordFailure(submission: EtaSubmission, error: unknown): void {
+  const attempt = submission.attempt + 1;
+  const message = error instanceof Error ? error.message : 'خطأ غير معروف';
+  const exhausted = error instanceof EtaPermanentError || attempt >= submission.max_attempts;
+  const nextAt = new Date(Date.now() + backoffSeconds(attempt) * 1000).toISOString();
+  run(
+    `UPDATE e_invoice_submissions
+     SET status=?, attempt=?, last_error=?, next_attempt_at=?, updated_at=?
+     WHERE id=?`,
+    exhausted ? 'FAILED' : 'PENDING',
+    attempt,
+    message,
+    exhausted ? now() : nextAt,
+    now(),
+    submission.id,
+  );
+  run(
+    'UPDATE documents SET eta_status=? WHERE id=?',
+    exhausted ? 'FAILED' : 'PENDING',
+    submission.document_id,
+  );
+}
+
+/** Processes due PENDING submissions in stub mode (synchronous, offline). */
+export function processPendingSubmissions(
+  limit = 20,
+  scope?: Scope,
+): { processed: number; succeeded: number } {
+  if (!etaEnabled()) return { processed: 0, succeeded: 0 };
+  const due = dueSubmissions(limit, scope);
   let succeeded = 0;
   for (const submission of due) {
     try {
-      const result = transaction(() => {
-        const attempt = submission.attempt + 1;
-        const { longId, response } = deliver(submission);
-        const ts = now();
-        run(
-          `UPDATE e_invoice_submissions
-           SET status='VALID', attempt=?, submitted_at=?, completed_at=?,
-               eta_long_id=?, eta_response=?, last_error='', updated_at=?
-           WHERE id=?`,
-          attempt,
-          ts,
-          ts,
-          longId,
-          response,
-          ts,
-          submission.id,
-        );
-        run(
-          "UPDATE documents SET eta_status='VALID', eta_long_id=? WHERE id=?",
-          longId,
-          submission.document_id,
-        );
-        return true;
-      });
-      if (result) succeeded++;
+      const { longId, response } = deliver(submission);
+      recordSuccess(submission, longId, response);
+      succeeded++;
     } catch (error) {
-      const attempt = submission.attempt + 1;
-      const message = error instanceof Error ? error.message : 'خطأ غير معروف';
-      const exhausted = attempt >= submission.max_attempts;
-      const nextAt = new Date(Date.now() + backoffSeconds(attempt) * 1000).toISOString();
-      run(
-        `UPDATE e_invoice_submissions
-         SET status=?, attempt=?, last_error=?, next_attempt_at=?, updated_at=?
-         WHERE id=?`,
-        exhausted ? 'FAILED' : 'PENDING',
-        attempt,
-        message,
-        exhausted ? now() : nextAt,
-        now(),
-        submission.id,
+      recordFailure(submission, error);
+    }
+  }
+  return { processed: due.length, succeeded };
+}
+
+/**
+ * Processes due submissions using the real ETA transport when credentials and a
+ * non-stub environment are configured, otherwise the offline stub. This is what the
+ * background worker and the "process now" button call.
+ */
+export async function processPendingSubmissionsAsync(
+  limit = 20,
+  scope?: Scope,
+): Promise<{ processed: number; succeeded: number }> {
+  if (!etaEnabled()) return { processed: 0, succeeded: 0 };
+  if (!etaConfigured()) return processPendingSubmissions(limit, scope);
+  const env = etaEnvironment() as EtaEnv;
+  const due = dueSubmissions(limit, scope);
+  let succeeded = 0;
+  for (const submission of due) {
+    try {
+      const invoice = buildEtaInvoice(submission.document_id);
+      const { longId, response } = await submitToEta(
+        env,
+        { clientId: etaClientId(), clientSecret: etaClientSecret() },
+        invoice,
       );
-      run(
-        'UPDATE documents SET eta_status=? WHERE id=?',
-        exhausted ? 'FAILED' : 'PENDING',
-        submission.document_id,
-      );
+      recordSuccess(submission, longId, response);
+      succeeded++;
+    } catch (error) {
+      recordFailure(submission, error);
     }
   }
   return { processed: due.length, succeeded };
