@@ -253,7 +253,10 @@ export function POS() {
   }, [products, cart, shift, checkoutModal, receiptResult, customerPickerModal]);
 
   const handleBarcodeScanned = (code: string) => {
-    const matched = products.find((p) => p.sku.toLowerCase() === code.toLowerCase());
+    const c = code.toLowerCase();
+    const matched =
+      products.find((p) => p.barcodes?.some((b) => b.toLowerCase() === c)) ??
+      products.find((p) => p.sku.toLowerCase() === c);
     if (!matched) {
       playSound(false);
       toast(`لم يتم العثور على منتج بهذا الباركود: «${code}»`);
@@ -455,6 +458,7 @@ export function POS() {
         !q ||
         p.name.toLowerCase().includes(q) ||
         p.sku.toLowerCase().includes(q) ||
+        !!p.barcodes?.some((b) => b.toLowerCase().includes(q)) ||
         (p.category && p.category.toLowerCase().includes(q));
       return matchCat && matchSearch;
     });

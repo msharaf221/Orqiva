@@ -562,6 +562,8 @@ export interface BranchProduct {
 }
 export interface Product {
   id: string;
+  /** Extra scan codes for this product (EAN/UPC, supplier or pack barcodes). */
+  barcodes?: string[];
   sku: string;
   name: string;
   category: string;

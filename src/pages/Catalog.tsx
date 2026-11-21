@@ -331,6 +331,9 @@ export function ProductForm({
       sale_price: toCents(f.get('sale_price')),
       cost_price: toCents(f.get('cost_price')),
       min_stock: Number(f.get('min_stock')),
+      barcodes: String(f.get('barcodes') || '')
+        .split(/[\s,،]+/)
+        .filter(Boolean),
       track_batches: f.get('track_batches') === 'on' ? 1 : 0,
       ...(!product ? { stock: Number(f.get('stock')), branch_id: String(f.get('branch_id')) } : {}),
     };
@@ -431,6 +434,22 @@ export function ProductForm({
               />
             </Field>
           </div>
+          <Field
+            label="الباركود"
+            hint="اختياري. يمكن إدخال أكثر من باركود مفصولة بمسافة أو فاصلة. اضغط الماسح داخل الخانة لقراءته."
+          >
+            <input
+              dir="ltr"
+              name="barcodes"
+              maxLength={500}
+              defaultValue={product?.barcodes?.join(' ')}
+              placeholder="6221234567890"
+              onKeyDown={(e) => {
+                // Scanners end with Enter; do not submit the form by accident.
+                if (e.key === 'Enter') e.preventDefault();
+              }}
+            />
+          </Field>
           {!product && (
             <>
               <Field

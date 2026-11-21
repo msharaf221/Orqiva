@@ -141,8 +141,10 @@ posRouter.get('/products', requirePermission('pos:access'), (req, res) => {
   const clauses = ['p.active=1', 'COALESCE(bp.active, 1)=1'];
   const params: (string | number)[] = [];
   if (search) {
-    clauses.push('(p.name LIKE ? OR p.sku LIKE ?)');
-    params.push(`%${search}%`, `%${search}%`);
+    clauses.push(
+      '(p.name LIKE ? OR p.sku LIKE ? OR EXISTS (SELECT 1 FROM product_barcodes pb WHERE pb.product_id=p.id AND pb.barcode LIKE ?))',
+    );
+    params.push(`%${search}%`, `%${search}%`, `%${search}%`);
   }
   if (category && category !== 'ALL') {
     clauses.push('p.category=?');
@@ -154,9 +156,9 @@ posRouter.get('/products', requirePermission('pos:access'), (req, res) => {
     params.push(limit, offset);
   }
 
-  res.json(
-    all(
-      `SELECT p.*, COALESCE(bs.quantity, 0) stock,
+  const rows = all<Record<string, unknown>>(
+    `SELECT p.*, COALESCE(bs.quantity, 0) stock,
+              (SELECT json_group_array(barcode) FROM product_barcodes pb WHERE pb.product_id=p.id) barcodes,
               COALESCE(bp.sale_price, p.sale_price) sale_price,
               COALESCE(sold.units, 0) units_sold
        FROM products p
@@ -172,11 +174,13 @@ posRouter.get('/products', requirePermission('pos:access'), (req, res) => {
        ) sold ON sold.product_id=p.id
        WHERE ${clauses.join(' AND ')}
        ORDER BY ${top ? 'units_sold DESC, p.name' : 'p.name'}${pagination}`,
-      branchId,
-      branchId,
-      branchId,
-      ...params,
-    ),
+    branchId,
+    branchId,
+    branchId,
+    ...params,
+  );
+  res.json(
+    rows.map((r) => ({ ...r, barcodes: JSON.parse(String(r.barcodes ?? '[]')) as string[] })),
   );
 });
 // --- Parked (held) sales: suspend a cart and resume it later ---
