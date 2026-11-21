@@ -1,0 +1,11 @@
+# Netlify: static license keygen page only (no build step).
+[build]
+  publish = "tools/license-keygen"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
+    Cache-Control = "no-store"

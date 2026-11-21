@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; form-action 'none'; base-uri 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex,nofollow">
+<title>إصدار مفتاح ترخيص Orqiva</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, "Segoe UI", Tahoma, Arial, sans-serif; background: #0f1115; color: #e8eaed; line-height: 1.6; }
+  main { max-width: 640px; margin: 0 auto; padding: 20px 16px 48px; }
+  h1 { font-size: 1.4rem; margin: 8px 0 4px; }
+  p.sub { color: #9aa0a6; margin: 0 0 20px; font-size: .95rem; }
+  .card { background: #181b21; border: 1px solid #2a2e37; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  label { display: block; font-weight: 600; margin: 14px 0 6px; font-size: .95rem; }
+  label:first-child { margin-top: 0; }
+  input[type=text], input[type=date], textarea { width: 100%; padding: 12px; font-size: 16px; border-radius: 8px; border: 1px solid #3a3f4b; background: #0f1115; color: #e8eaed; font-family: inherit; }
+  textarea { min-height: 84px; direction: ltr; text-align: left; font-family: ui-monospace, Consolas, monospace; font-size: 14px; resize: vertical; }
+  input.ltr { direction: ltr; text-align: left; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px 18px; }
+  .row label.chk { display: flex; align-items: center; gap: 8px; font-weight: 400; margin: 0; }
+  input[type=checkbox] { width: 20px; height: 20px; }
+  button { width: 100%; padding: 14px; font-size: 1.05rem; font-weight: 700; border: 0; border-radius: 10px; background: #3b82f6; color: #fff; cursor: pointer; margin-top: 8px; }
+  button.secondary { background: #2a2e37; margin-top: 10px; }
+  .hint { color: #9aa0a6; font-size: .85rem; margin-top: 6px; }
+  .err { color: #ff8a80; margin-top: 12px; display: none; white-space: pre-wrap; }
+  .ok { color: #81c995; }
+  #out { direction: ltr; text-align: left; word-break: break-all; font-family: ui-monospace, Consolas, monospace; font-size: 13px; background: #0f1115; border: 1px solid #3a3f4b; border-radius: 8px; padding: 12px; margin-top: 10px; }
+  .privacy { font-size: .85rem; color: #9aa0a6; border-right: 3px solid #3b82f6; padding-right: 10px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>إصدار مفتاح ترخيص Orqiva</h1>
+  <p class="sub">املأ البيانات والصق المفتاح الخاص، وانسخ المفتاح الناتج للصقه في: الإعدادات &gt; الترخيص.</p>
+
+  <form id="f" class="card" autocomplete="off" novalidate>
+    <label for="customer">اسم العميل</label>
+    <input type="text" id="customer" placeholder="مثال: شركة النور" autocomplete="off">
+
+    <label>الإضافات</label>
+    <div class="row" id="addons">
+      <label class="chk"><input type="checkbox" class="addon" value="crm"> إدارة العملاء والصفقات (CRM)</label>
+      <label class="chk"><input type="checkbox" class="addon" value="loyalty"> نقاط ولاء العملاء</label>
+      <label class="chk"><input type="checkbox" class="addon" value="backup"> النسخ الاحتياطي المجدول والسحابي</label>
+      <label class="chk"><input type="checkbox" id="all"> كل الإضافات (*)</label>
+    </div>
+    <div class="hint">دي كل الإضافات الموجودة في النظام حاليًا. النسخ الاحتياطي شغال دايمًا حتى من غير ترخيص. "كل الإضافات" بتشمل أي إضافة هتتضاف مستقبلًا.</div>
+
+    <label for="expires">تاريخ الانتهاء (اختياري)</label>
+    <input type="date" id="expires" class="ltr">
+    <div class="hint">لو سبته فاضي المفتاح بلا نهاية.</div>
+
+    <label for="priv">المفتاح الخاص (من نسخة الـ vault)</label>
+    <textarea id="priv" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="الصق المفتاح هنا (44 حرف، أو ملف PEM كامل)"></textarea>
+    <div class="privacy">المفتاح بيتستخدم جوه المتصفح بس لتوقيع المفتاح. مبيتخزنش ومبيتبعتش لأي مكان، والصفحة ممنوعة من الاتصال بالإنترنت. بيتمسح من الخانة بعد كل توقيع.</div>
+
+    <button type="submit">إصدار المفتاح</button>
+    <div class="err" id="err" role="alert"></div>
+  </form>
+
+  <div class="card" id="res" hidden>
+    <strong class="ok">تم إصدار المفتاح</strong>
+    <div class="hint" id="summary"></div>
+    <div id="out"></div>
+    <button type="button" id="copy">نسخ المفتاح</button>
+    <button type="button" class="secondary" id="clear">مسح وبدء جديد</button>
+  </div>
+</main>
+
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+const PKCS8_PREFIX = new Uint8Array([0x30,0x2e,0x02,0x01,0x00,0x30,0x05,0x06,0x03,0x2b,0x65,0x70,0x04,0x22,0x04,0x20]);
+
+function b64decode(s) {
+  s = s.replace(/-/g, '+').replace(/_/g, '/');
+  while (s.length % 4) s += '=';
+  const bin = atob(s);
+  return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+}
+function b64url(bytes) {
+  let bin = '';
+  bytes.forEach((b) => (bin += String.fromCharCode(b)));
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+// Accepts: base64 32-byte seed, PKCS8 PEM, or base64 of a PKCS8 DER/PEM.
+function toPkcs8(input) {
+  const raw = input.trim();
+  if (!raw) throw new Error('الصق المفتاح الخاص');
+  if (raw.includes('BEGIN')) {
+    const body = raw.replace(/-----[^-]+-----/g, '').replace(/\s+/g, '');
+    const der = b64decode(body);
+    if (der.length !== 48) throw new Error('ملف PEM مش مفتاح Ed25519 صحيح');
+    return der;
+  }
+  const bytes = b64decode(raw.replace(/\s+/g, ''));
+  if (bytes.length === 32) {
+    const der = new Uint8Array(48);
+    der.set(PKCS8_PREFIX, 0);
+    der.set(bytes, 16);
+    return der;
+  }
+  if (bytes.length === 48) return bytes;
+  const asText = new TextDecoder().decode(bytes);
+  if (asText.includes('BEGIN')) return toPkcs8(asText);
+  throw new Error('شكل المفتاح غير مفهوم');
+}
+
+$('all').addEventListener('change', () => {
+  document.querySelectorAll('.addon').forEach((c) => { c.disabled = $('all').checked; if ($('all').checked) c.checked = false; });
+});
+
+function showErr(msg) { const e = $('err'); e.textContent = msg; e.style.display = msg ? 'block' : 'none'; }
+
+$('f').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  showErr('');
+  try {
+    if (!(globalThis.crypto && crypto.subtle)) throw new Error('المتصفح ده قديم أو الصفحة مش على HTTPS. افتحها من متصفح حديث.');
+    const customer = $('customer').value.trim();
+    if (!customer) throw new Error('اكتب اسم العميل');
+    let addons = $('all').checked ? ['*'] : [...document.querySelectorAll('.addon:checked')].map((c) => c.value);
+    addons = [...new Set(addons)];
+    const exp = $('expires').value;
+    if (exp && !/^\d{4}-\d{2}-\d{2}$/.test(exp)) throw new Error('تاريخ غير صالح');
+    const payload = { v: 1, customer, addons, issued: new Date().toISOString().slice(0, 10), expires: exp || null };
+    const bytes = new TextEncoder().encode(JSON.stringify(payload));
+    let key;
+    try {
+      key = await crypto.subtle.importKey('pkcs8', toPkcs8($('priv').value), { name: 'Ed25519' }, false, ['sign']);
+    } catch (e) {
+      if (e && e.name === 'NotSupportedError') throw new Error('المتصفح ده مش بيدعم Ed25519. جرّب Chrome أو Safari أو Firefox حديث.');
+      throw new Error(e && e.message && /[\u0600-\u06FF]/.test(e.message) ? e.message : 'المفتاح الخاص غير صالح');
+    }
+    const sig = new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, key, bytes));
+    const license = b64url(bytes) + '.' + b64url(sig);
+    $('out').textContent = license;
+    $('summary').textContent = 'العميل: ' + customer + ' | الإضافات: ' + (addons.join(', ') || 'بدون') + ' | ينتهي: ' + (exp || 'بلا نهاية');
+    $('res').hidden = false;
+    $('priv').value = '';
+    $('res').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (e) {
+    showErr(e.message || 'حصل خطأ');
+  }
+});
+
+$('copy').addEventListener('click', async () => {
+  const t = $('out').textContent;
+  try { await navigator.clipboard.writeText(t); $('copy').textContent = 'تم النسخ'; }
+  catch { const r = document.createRange(); r.selectNodeContents($('out')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); $('copy').textContent = 'اتحدد، انسخه يدوي'; }
+  setTimeout(() => ($('copy').textContent = 'نسخ المفتاح'), 2000);
+});
+$('clear').addEventListener('click', () => {
+  $('out').textContent = ''; $('res').hidden = true; $('f').reset();
+  document.querySelectorAll('.addon').forEach((c) => (c.disabled = false));
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+</script>
+</body>
+</html>
