@@ -157,6 +157,7 @@ function CompanySettings() {
   const admin = user.role === 'ADMIN';
   const [mode, setMode] = useState<'NONE' | 'VAT'>(company?.tax_mode === 'VAT' ? 'VAT' : 'NONE');
   const [etaOn, setEtaOn] = useState(!!company?.eta_enabled);
+  const [inclusivePrices, setInclusivePrices] = useState(!!company?.prices_include_tax);
   const vatOn = mode === 'VAT';
   const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -170,6 +171,7 @@ function CompanySettings() {
         tax_mode: mode,
         eta_enabled: vatOn && etaOn,
         payroll_tax_enabled: f.get('payroll_tax_enabled') === 'on',
+        prices_include_tax: inclusivePrices,
         ...(vatOn
           ? {
               tax_number: f.get('tax_number'),
@@ -252,6 +254,16 @@ function CompanySettings() {
               </Field>
             </div>
           </>
+        )}
+        {vatOn && (
+          <label>
+            <input
+              type="checkbox"
+              checked={inclusivePrices}
+              onChange={(e) => setInclusivePrices(e.target.checked)}
+            />{' '}
+            الأسعار شاملة الضريبة افتراضياً (المبيعات ونقطة البيع)
+          </label>
         )}
         <Field
           label="ضرائب الرواتب"

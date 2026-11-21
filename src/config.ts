@@ -43,6 +43,11 @@ export function effectiveTaxRate(requested: number): number {
   return vat ? requested : 0;
 }
 
+/** Tax portion (piasters) contained in a tax-inclusive gross amount. */
+export function taxInGross(gross: number, rate: number): number {
+  return vat ? gross - Math.round((gross * 10000) / (10000 + rate)) : 0;
+}
+
 /** Computes tax in piasters from a pre-tax base and a basis-points rate. */
 export function calculateTax(base: number, rate: number): number {
   return vat ? Math.round((base * rate) / 10000) : 0;

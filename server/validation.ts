@@ -230,6 +230,8 @@ export const documentSchema = z
     due_date: date,
     discount: money.default(0),
     tax_rate: z.number().int().min(0).max(10000).default(1400),
+    /** Entered prices and discount already include VAT; they are converted to net on save. */
+    prices_include_tax: z.boolean().optional(),
     notes: optionalText(2000),
     lines: z
       .array(
@@ -313,6 +315,7 @@ export const companySchema = z
     tax_mode: z.enum(['NONE', 'VAT']).optional(),
     eta_enabled: z.boolean().optional(),
     payroll_tax_enabled: z.boolean().optional(),
+    prices_include_tax: z.boolean().optional(),
     currency: z
       .string()
       .trim()

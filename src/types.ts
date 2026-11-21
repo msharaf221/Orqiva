@@ -471,6 +471,8 @@ export interface Company {
   tax_mode: 'NONE' | 'VAT';
   eta_enabled: number;
   payroll_tax_enabled: number;
+  /** Default entry mode for sales and POS: prices already include VAT. */
+  prices_include_tax: number;
   invoice_note: string;
   /** ETA (Egyptian Tax Authority) taxpayer registration number. */
   tax_registration_number: string;

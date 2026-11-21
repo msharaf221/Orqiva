@@ -592,7 +592,9 @@ export function posCheckout(raw: unknown, actor: Actor) {
 
     // Company tax rate (forced to zero in tax-free mode)
     const company = requireRow(
-      one<{ tax_rate: number }>('SELECT tax_rate FROM company WHERE id=1'),
+      one<{ tax_rate: number; prices_include_tax: number }>(
+        'SELECT tax_rate, prices_include_tax FROM company WHERE id=1',
+      ),
     );
     const taxRate = effectiveTaxRate(company.tax_rate);
 
@@ -606,6 +608,7 @@ export function posCheckout(raw: unknown, actor: Actor) {
         due_date: input.date,
         discount: input.discount,
         tax_rate: taxRate,
+        prices_include_tax: taxRate > 0 && company.prices_include_tax === 1,
         notes: input.notes || '',
         lines: input.lines,
       },
