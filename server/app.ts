@@ -59,6 +59,11 @@ try {
 }
 
 app.disable('x-powered-by');
+// Framing is only legitimate for the cross-site embedded preview (development builds
+// hosted on *.e2b.app, or COOKIE_PARTITIONED=true deployments). Everywhere else the app
+// denies framing so an attacker site cannot embed it for clickjacking.
+const allowEmbedding =
+  process.env.NODE_ENV !== 'production' || process.env.COOKIE_PARTITIONED === 'true';
 app.use(
   helmet({
     contentSecurityPolicy: {
@@ -66,11 +71,11 @@ app.use(
         'script-src': ["'self'"],
         'style-src': ["'self'", "'unsafe-inline'"],
         'img-src': ["'self'", 'data:'],
-        'frame-ancestors': null,
+        'frame-ancestors': allowEmbedding ? null : ["'self'"],
         'upgrade-insecure-requests': null,
       },
     },
-    frameguard: false,
+    frameguard: allowEmbedding ? false : { action: 'sameorigin' },
     crossOriginResourcePolicy: false,
   }),
 );
