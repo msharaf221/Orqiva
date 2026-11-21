@@ -1,5 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { generateKeyPairSync, sign } from 'node:crypto';
+import request from 'supertest';
+import { app } from '../server/app';
 import { header, seedUsers, signIn, resetBusinessData } from './helpers';
 import { run } from '../server/db';
 import { licenseStatus } from '../server/license';
@@ -10,12 +12,18 @@ const other = generateKeyPairSync('ed25519');
 const pubB64 = pair.publicKey.export({ type: 'spki', format: 'der' }).toString('base64');
 
 function issue(
-  fields: { addons?: string[]; expires?: string | null; customer?: string } = {},
+  fields: {
+    addons?: string[];
+    expires?: string | null;
+    customer?: string;
+    base?: boolean | 'omit';
+  } = {},
   priv = pair.privateKey,
 ) {
   const payload = {
     v: 1,
     customer: fields.customer ?? 'عميل',
+    ...(fields.base === 'omit' ? {} : { base: fields.base ?? true }),
     addons: fields.addons ?? ['crm'],
     issued: '2026-01-01',
     expires: fields.expires === undefined ? null : fields.expires,
@@ -45,15 +53,76 @@ describe('License keys and add-on gating', () => {
     expect(isAddonEnabled('crm')).toBe(true);
   });
 
-  it('turns add-ons off when enforced and no license is installed, but keeps the core', async () => {
+  it('locks the whole app when enforced and no license is installed', async () => {
     process.env.ORQIVA_LICENSE_PUBLIC_KEY = pubB64;
     expect(licenseStatus().state).toBe('missing');
     expect(listAddons().find((a) => a.id === 'crm')).toMatchObject({
       enabled: false,
       reason: 'unlicensed',
     });
-    await admin.get('/api/crm/stages').set(header).expect(404);
+    const locked = await admin.get('/api/company').set(header).expect(402);
+    expect(locked.body.code).toBe('LICENSE_REQUIRED');
+    await admin.get('/api/crm/stages').set(header).expect(402);
+    await admin.get('/api/pos/sessions').set(header).expect(402);
+    // Health, session and license endpoints stay reachable so the buyer can activate.
+    await request(app).get('/api/health').expect(200);
+    await admin.get('/api/auth/me').set(header).expect(200);
+    await admin.get('/api/license').set(header).expect(200);
+  });
+
+  it('activates from the public screen, once, before anyone signs in', async () => {
+    process.env.ORQIVA_LICENSE_PUBLIC_KEY = pubB64;
+    const status = await request(app).get('/api/license/status').expect(200);
+    expect(status.body).toMatchObject({ enforced: true, state: 'missing', locked: true });
+    await request(app)
+      .put('/api/license/activate')
+      .set(header)
+      .send({ key: issue({}, other.privateKey) })
+      .expect(400);
+    await request(app)
+      .put('/api/license/activate')
+      .set(header)
+      .send({ key: issue({ addons: [] }) })
+      .expect(200);
     await admin.get('/api/company').set(header).expect(200);
+    // Once valid, the public route cannot replace the key.
+    await request(app)
+      .put('/api/license/activate')
+      .set(header)
+      .send({ key: issue({ addons: ['*'] }) })
+      .expect(409);
+  });
+
+  it('a base-only key opens the system but keeps every add-on off, backup included', async () => {
+    process.env.ORQIVA_LICENSE_PUBLIC_KEY = pubB64;
+    await admin
+      .put('/api/license')
+      .set(header)
+      .send({ key: issue({ addons: [] }) })
+      .expect(200);
+    await admin.get('/api/company').set(header).expect(200);
+    expect(isAddonEnabled('crm')).toBe(false);
+    expect(isAddonEnabled('loyalty')).toBe(false);
+    expect(isAddonEnabled('backup')).toBe(false);
+  });
+
+  it('keys issued before the base entitlement existed still count as base-licensed', async () => {
+    process.env.ORQIVA_LICENSE_PUBLIC_KEY = pubB64;
+    await admin
+      .put('/api/license')
+      .set(header)
+      .send({ key: issue({ base: 'omit' }) })
+      .expect(200);
+    await admin.get('/api/company').set(header).expect(200);
+  });
+
+  it('refuses a key that explicitly excludes the base license', async () => {
+    process.env.ORQIVA_LICENSE_PUBLIC_KEY = pubB64;
+    await admin
+      .put('/api/license')
+      .set(header)
+      .send({ key: issue({ base: false }) })
+      .expect(400);
   });
 
   it('installs a valid key and unlocks the listed add-on', async () => {
@@ -103,7 +172,7 @@ describe('License keys and add-on gating', () => {
     expect(p).toBeTruthy();
   });
 
-  it('rejects an already expired key and turns add-ons off after expiry', async () => {
+  it('rejects an already expired key and locks the app after expiry', async () => {
     process.env.ORQIVA_LICENSE_PUBLIC_KEY = pubB64;
     await admin
       .put('/api/license')
@@ -113,7 +182,7 @@ describe('License keys and add-on gating', () => {
     process.env.ORQIVA_LICENSE = issue({ expires: '2020-01-01' });
     expect(licenseStatus().state).toBe('expired');
     expect(isAddonEnabled('crm')).toBe(false);
-    await admin.get('/api/company').set(header).expect(200);
+    await admin.get('/api/company').set(header).expect(402);
   });
 
   it('only admins with user management can read or install a license', async () => {

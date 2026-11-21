@@ -67,6 +67,8 @@ export async function api<T>(
       }
       throw new SessionExpiredError(message, response.status);
     }
+    if (response.status === 402 && (errorBody as { code?: string }).code === 'LICENSE_REQUIRED')
+      window.dispatchEvent(new Event('license-required'));
     throw new ApiError(message, response.status);
   }
   if (url === '/auth/login' || url === '/auth/me') {

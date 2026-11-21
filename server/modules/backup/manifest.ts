@@ -6,6 +6,5 @@ export const backupAddon: AddonManifest = {
   name: 'النسخ الاحتياطي المجدول والسحابي',
   version: '1.0.0',
   mountPath: '/api/backup',
-  licenseExempt: true,
   router: backupRouter,
 };

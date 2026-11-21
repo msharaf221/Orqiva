@@ -13,4 +13,9 @@ describe('license keygen page', () => {
       .sort();
     expect(inPage).toEqual(inApp);
   });
+
+  it('always signs the base entitlement into the key', () => {
+    const html = readFileSync('tools/license-keygen/index.html', 'utf8');
+    expect(html).toContain('base: true');
+  });
 });
