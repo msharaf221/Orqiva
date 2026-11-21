@@ -64,6 +64,25 @@ export function POS() {
   // Cart & Sale State
   const [cart, setCart] = useState<CartItem[]>([]);
   const [customer, setCustomer] = useState<Party>(DEFAULT_WALK_IN_CUSTOMER);
+  // Loyalty add-on: the settings answer 404 when the add-on is off, which just hides the feature.
+  const [loyalty, setLoyalty] = useState<{ enabled: boolean; point_value: number } | null>(null);
+  const [pointsBalance, setPointsBalance] = useState(0);
+  const [redeemInput, setRedeemInput] = useState(0);
+  useEffect(() => {
+    api<{ enabled: boolean; point_value: number }>('/loyalty/settings')
+      .then((s) => setLoyalty(s.enabled ? s : null))
+      .catch(() => setLoyalty(null));
+  }, []);
+  useEffect(() => {
+    setRedeemInput(0);
+    if (!loyalty || customer.id === 'walk-in-customer') {
+      setPointsBalance(0);
+      return;
+    }
+    api<{ balance: number }>(`/loyalty/customers/${customer.id}`)
+      .then((r) => setPointsBalance(r.balance))
+      .catch(() => setPointsBalance(0));
+  }, [customer.id, loyalty]);
   const [discountCents, setDiscountCents] = useState(0);
 
   // Search & Filters (rawInput drives the box; searchQuery is debounced for filtering)
@@ -432,16 +451,30 @@ export function POS() {
   );
   const effectiveDiscountCents = Math.min(discountCents, subtotalCents);
   const inclusive = !taxFree() && !!company?.prices_include_tax;
+  // Redeemed points act as an extra discount, capped by the balance and by what is left to pay.
+  const pointValue = loyalty?.point_value ?? 0;
+  const redeemPoints = pointValue
+    ? Math.max(
+        0,
+        Math.min(
+          redeemInput,
+          pointsBalance,
+          Math.floor((subtotalCents - effectiveDiscountCents) / pointValue),
+        ),
+      )
+    : 0;
+  const loyaltyDiscountCents = redeemPoints * pointValue;
+  const allDiscountCents = effectiveDiscountCents + loyaltyDiscountCents;
   const taxCents = useMemo(
     () =>
       inclusive
-        ? taxInGross(subtotalCents - effectiveDiscountCents, taxRate)
-        : calculateTax(subtotalCents - effectiveDiscountCents, taxRate),
-    [subtotalCents, effectiveDiscountCents, taxRate, inclusive],
+        ? taxInGross(subtotalCents - allDiscountCents, taxRate)
+        : calculateTax(subtotalCents - allDiscountCents, taxRate),
+    [subtotalCents, allDiscountCents, taxRate, inclusive],
   );
   const totalCents = inclusive
-    ? subtotalCents - effectiveDiscountCents
-    : subtotalCents - effectiveDiscountCents + taxCents;
+    ? subtotalCents - allDiscountCents
+    : subtotalCents - allDiscountCents + taxCents;
 
   // Filter products
   const categories = useMemo(() => {
@@ -707,6 +740,27 @@ export function POS() {
                 {effectiveDiscountCents > 0 ? `-${money(effectiveDiscountCents)}` : '0.00'} {cur()}
               </span>
             </div>
+
+            {loyalty && customer.id !== 'walk-in-customer' && (
+              <div className="pos-summary-line">
+                <span>نقاط الولاء (الرصيد {pointsBalance}):</span>
+                <span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={pointsBalance}
+                    value={redeemPoints || ''}
+                    placeholder="0"
+                    dir="ltr"
+                    style={{ width: 70 }}
+                    onChange={(e) =>
+                      setRedeemInput(Math.max(0, Math.floor(Number(e.target.value) || 0)))
+                    }
+                  />
+                  {loyaltyDiscountCents > 0 && ` -${money(loyaltyDiscountCents)} ${cur()}`}
+                </span>
+              </div>
+            )}
 
             {!taxFree() && (
               <div className="pos-summary-line">
@@ -1040,6 +1094,7 @@ export function POS() {
           customer={customer}
           cart={cart}
           discountCents={effectiveDiscountCents}
+          loyaltyPoints={redeemPoints}
           totalCents={totalCents}
           numpad={showNumpad}
           onSuccess={(res) => {

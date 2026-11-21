@@ -70,6 +70,7 @@ describe('upgrading a single-warehouse installation', () => {
       '029_license.sql',
       '030_prices_include_tax.sql',
       '031_product_barcodes.sql',
+      '032_loyalty.sql',
     ]);
     expect(one("SELECT role_id FROM user_roles WHERE user_id='u-admin'")).toEqual({
       role_id: 'role_admin',
