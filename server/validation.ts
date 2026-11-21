@@ -35,6 +35,8 @@ const productFields = {
   sale_price: money,
   cost_price: money,
   min_stock: z.number().int().min(0).max(1_000_000),
+  /** Scan codes. Omit to keep the current ones; an array replaces them. */
+  barcodes: z.array(z.string().trim().min(1).max(100)).max(10).optional(),
   track_batches: z
     .union([z.boolean(), z.number()])
     .optional()

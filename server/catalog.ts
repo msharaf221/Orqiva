@@ -17,6 +17,44 @@ import type { Product } from '../src/types';
  * a single branch gives that branch's stock and effective price; the group gives totals.
  */
 export function listProducts(scope: Scope): Product[] {
+  const products = listProductsBase(scope);
+  const byProduct = new Map<string, string[]>();
+  for (const b of all<{ barcode: string; product_id: string }>(
+    'SELECT barcode, product_id FROM product_barcodes ORDER BY created_at, barcode',
+  ))
+    byProduct.set(b.product_id, [...(byProduct.get(b.product_id) ?? []), b.barcode]);
+  return products.map((p) => ({ ...p, barcodes: byProduct.get(p.id) ?? [] }));
+}
+
+/** Replaces a product's barcodes. A barcode already used by another product is rejected. */
+function syncBarcodes(productId: string, barcodes: string[] | undefined): void {
+  if (barcodes === undefined) return;
+  const unique = [...new Set(barcodes.map((b) => b.trim()).filter(Boolean))];
+  for (const code of unique) {
+    const owner = one<{ product_id: string; name: string }>(
+      'SELECT b.product_id, p.name FROM product_barcodes b JOIN products p ON p.id=b.product_id WHERE b.barcode=?',
+      code,
+    );
+    if (owner && owner.product_id !== productId)
+      throw new AppError(409, `الباركود «${code}» مستخدم بالفعل للمنتج «${owner.name}»`);
+    const skuOwner = one<{ id: string; name: string }>(
+      'SELECT id, name FROM products WHERE sku=? AND id<>?',
+      code,
+      productId,
+    );
+    if (skuOwner) throw new AppError(409, `الباركود «${code}» يطابق كود المنتج «${skuOwner.name}»`);
+  }
+  run('DELETE FROM product_barcodes WHERE product_id=?', productId);
+  for (const code of unique)
+    run(
+      'INSERT INTO product_barcodes(barcode,product_id,created_at) VALUES(?,?,?)',
+      code,
+      productId,
+      now(),
+    );
+}
+
+function listProductsBase(scope: Scope): Product[] {
   if (scope.ids?.length === 1) {
     const branchId = scope.ids[0];
     return all<Product>(
@@ -89,6 +127,7 @@ export function createProduct(raw: unknown, actor: Actor) {
     if (p.track_batches) {
       run('INSERT INTO product_batch_settings(product_id,track_batches) VALUES(?,?)', productId, 1);
     }
+    syncBarcodes(productId, p.barcodes);
     // New products are listed by every open branch; administrators switch off what a branch does not carry.
     run(
       'INSERT INTO branch_products(branch_id,product_id,active) SELECT id,?,1 FROM branches WHERE active=1',
@@ -129,6 +168,7 @@ export function updateProduct(productId: string, raw: unknown, actor: Actor) {
       productId,
       p.track_batches ? 1 : 0,
     );
+    syncBarcodes(productId, p.barcodes);
     audit(actor, 'تعديل منتج', 'PRODUCT', productId, p.name);
   });
   return productView(productId);
