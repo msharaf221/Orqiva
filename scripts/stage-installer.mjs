@@ -6,6 +6,8 @@
  */
 import { build } from 'esbuild';
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import JavaScriptObfuscator from 'javascript-obfuscator';
 
 const open = process.argv.includes('--open');
 const keyFile = 'packaging/license-public-key.txt';
@@ -24,23 +26,67 @@ const out = 'build/app';
 rmSync(out, { recursive: true, force: true });
 mkdirSync(`${out}/server`, { recursive: true });
 
+// Release: the vendor public key is compiled into the bundle (no loose key file to delete).
+const releaseKey = open ? undefined : readFileSync(keyFile, 'utf8').trim();
+if (!open && !releaseKey) {
+  console.error(`${keyFile} is empty.`);
+  process.exit(1);
+}
+const serverFile = `${out}/server/server.mjs`;
 await build({
   entryPoints: ['server/index.ts'],
-  outfile: `${out}/server/server.mjs`,
+  outfile: serverFile,
   bundle: true,
   platform: 'node',
   format: 'esm',
   target: 'node22',
+  minify: true,
   banner: {
     js: "import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);",
   },
+  define: open ? {} : { __ORQIVA_RELEASE_KEY__: JSON.stringify(releaseKey) },
   logLevel: 'warning',
 });
 
+// Release builds are also obfuscated (light settings: they must stay fast and not break the server).
+const obfuscate = (code) =>
+  JavaScriptObfuscator.obfuscate(code, {
+    compact: true,
+    simplify: true,
+    stringArray: true,
+    stringArrayThreshold: 0.75,
+    stringArrayEncoding: ['base64'],
+    stringArrayWrappersCount: 1,
+    renameGlobals: false,
+    controlFlowFlattening: false,
+    deadCodeInjection: false,
+    selfDefending: false,
+    debugProtection: false,
+    sourceType: 'module',
+  }).getObfuscatedCode();
+if (!open) writeFileSync(serverFile, obfuscate(readFileSync(serverFile, 'utf8')));
+const serverHash = createHash('sha256').update(readFileSync(serverFile)).digest('hex');
+
 cpSync('dist', `${out}/dist`, { recursive: true });
 cpSync('database/migrations', `${out}/database/migrations`, { recursive: true });
-cpSync('electron/main.cjs', `${out}/main.cjs`);
-if (!open) cpSync(keyFile, `${out}/license-public-key.txt`);
+// The shell pins the exact server bundle it was built with and refuses to start a modified one.
+let shell = readFileSync('electron/main.cjs', 'utf8').replace(
+  '__ORQIVA_SERVER_SHA256__',
+  open ? '' : serverHash,
+);
+shell = shell.replace('__ORQIVA_RELEASE__', open ? 'false' : 'true');
+if (!open) {
+  const o = JavaScriptObfuscator.obfuscate(shell, {
+    compact: true,
+    stringArray: true,
+    stringArrayThreshold: 0.75,
+    stringArrayEncoding: ['base64'],
+    renameGlobals: false,
+    sourceType: 'script',
+  });
+  shell = o.getObfuscatedCode();
+}
+writeFileSync(`${out}/main.cjs`, shell);
 
 const root = JSON.parse(readFileSync('package.json', 'utf8'));
 writeFileSync(

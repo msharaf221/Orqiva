@@ -3,7 +3,7 @@
  * machine and opens it in a window. Data lives in the user's profile folder, so
  * updating or reinstalling the app never touches it.
  */
-const { app, BrowserWindow, dialog, shell } = require('electron');
+const { app, BrowserWindow, Menu, dialog, shell } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const net = require('node:net');
@@ -15,6 +15,9 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 const appDir = __dirname;
+// Filled in by scripts/stage-installer.mjs. Release builds pin the server bundle hash.
+const RELEASE = __ORQIVA_RELEASE__;
+const SERVER_SHA256 = '__ORQIVA_SERVER_SHA256__';
 let mainWindow = null;
 
 function freePort(preferred) {
@@ -29,14 +32,6 @@ function freePort(preferred) {
     });
     probe.listen(preferred, '0.0.0.0', () => probe.close(() => resolve(preferred)));
   });
-}
-
-function readLicensePublicKey() {
-  try {
-    return fs.readFileSync(path.join(appDir, 'license-public-key.txt'), 'utf8').trim();
-  } catch {
-    return '';
-  }
 }
 
 async function waitForServer(port) {
@@ -68,8 +63,8 @@ async function startServer() {
     SEED_DEMO: 'false',
     COOKIE_SECURE: 'false',
   });
-  const pub = process.env.ORQIVA_LICENSE_PUBLIC_KEY || readLicensePublicKey();
-  if (pub) process.env.ORQIVA_LICENSE_PUBLIC_KEY = pub;
+  // Release builds carry their public key inside the server bundle and ignore this variable.
+  // The open test build is the only one that honors it.
 
   if (firstRun) {
     // First launch: create the administrator with a random password and tell the owner where it is.
@@ -90,8 +85,17 @@ async function startServer() {
     });
   }
 
-  process.chdir(appDir); // the server serves ./dist relative to the working directory
-  await import(pathToFileURL(path.join(appDir, 'server', 'server.mjs')).href);
+  const serverFile = path.join(appDir, 'server', 'server.mjs');
+  if (RELEASE) {
+    const actual = crypto.createHash('sha256').update(fs.readFileSync(serverFile)).digest('hex');
+    if (actual !== SERVER_SHA256) {
+      throw new Error('ملفات البرنامج تم تعديلها. أعد تثبيت أوركيفا من المثبّت الأصلي.');
+    }
+  }
+  // The server serves ./dist relative to the working directory. Inside app.asar that folder is
+  // unpacked next to the archive, because a process cannot change directory into an archive.
+  process.chdir(appDir.replace(/app\.asar$/, 'app.asar.unpacked'));
+  await import(pathToFileURL(serverFile).href);
   await waitForServer(port);
   return port;
 }
@@ -110,8 +114,14 @@ async function createWindow() {
     height: 860,
     title: 'Orqiva - أوركيفا',
     autoHideMenuBar: true,
-    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      devTools: !RELEASE,
+    },
   });
+  if (RELEASE) mainWindow.removeMenu();
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: 'deny' };
@@ -128,5 +138,6 @@ app.on('second-instance', () => {
     mainWindow.focus();
   }
 });
+if (RELEASE) Menu.setApplicationMenu(null);
 app.whenReady().then(createWindow);
 app.on('window-all-closed', () => app.quit());
