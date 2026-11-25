@@ -154,7 +154,7 @@
 
 1. **استنساخ المستودع وتثبيت الاعتماديات:**
    ```bash
-   git clone <repo-url>
+   git clone https://github.com/msharaf221/Orqiva.git
    cd Orqiva
    npm ci
    ```
@@ -275,3 +275,61 @@ Orqiva/
   <br>
   <sub>Orqiva ERP — نظام متكامل، بيانات متسقة، وأداء استثنائي.</sub>
 </div>
+
+<!-- commands-reference:start -->
+## 📘 مرجع الأوامر المكمّل
+
+### كل أوامر npm
+
+| الأمر | بيعمل إيه |
+| --- | --- |
+| `npm run setup` | ترحيل قاعدة البيانات + بيانات أولية (`db:migrate` ثم `db:seed`) |
+| `npm run dev` | خادم الـ API والواجهة معًا (الواجهة على 5173) |
+| `npm run build` | فحص الأنواع + بناء الواجهة |
+| `npm start` | تشغيل الخادم (الإنتاج) |
+| `npm test` / `npm run typecheck` | الاختبارات وفحص الأنواع |
+| `npm run format` / `npm run format:check` | تنسيق الكود |
+| `npm run test:e2e` | اختبارات المتصفح (Playwright) |
+| `npm run backup` | نسخة احتياطية فورية |
+| `npm run backup:decrypt` | فك نسخة سحابية مشفرة (تحت) |
+| `npm run admin:reset` | استعادة كلمة سر المدير |
+| `npm run attendance:sync` | مزامنة أجهزة البصمة (تحت) |
+| `npm run license` | أداة تراخيص البائع (تحت) |
+| `npm run dist:win` | بناء مثبّت ويندوز محليًا |
+| `npm run desktop` | تشغيل نسخة الديسكتوب (Electron) للتجربة |
+
+### التشغيل بـ Docker
+
+```bash
+cp .env.example .env     # لازم SEED_PASSWORD فريد (10 أحرف على الأقل)
+docker compose up -d --build
+docker compose logs -f
+docker compose down      # البيانات في volumes ولا تتمسح
+```
+
+المنفذ الافتراضي 3001 (`ORQIVA_PORT` لتغييره). فعّل `COOKIE_SECURE=true` فقط خلف HTTPS.
+
+### تراخيص الإضافات (للبائع فقط)
+
+```bash
+npm run license -- keygen  private.pem            # مرة واحدة: بيطبع ORQIVA_LICENSE_PUBLIC_KEY=...
+npm run license -- issue   private.pem --customer "اسم العميل" --addons crm,hr --expires 2027-12-31
+npm run license -- verify  <المفتاح-العام> <مفتاح-الترخيص>
+```
+
+`--addons '*'` لكل الإضافات. المفتاح الخاص **سري ولا يترفع أبدًا**. العميل يلصق مفتاح الترخيص في **الإعدادات ← الترخيص**.
+
+### مثبّت ويندوز
+
+أضف سر `ORQIVA_LICENSE_PUBLIC_KEY` (المفتاح **العام**) في GitHub: Settings ← Secrets and variables ← Actions، ثم **Actions ← Windows installer ← Run workflow** ونزّل الأرتيفاكت `Orqiva-Setup`. من غير السر بيطلع `Orqiva-OPEN-TEST-do-not-sell` للتجربة بس، ما تبيعوش.
+
+### أدوات تشغيل إضافية
+
+```bash
+npx tsx scripts/attendance-sync.ts --help
+npx tsx scripts/attendance-sync.ts --test --ip=192.168.1.201 --port=4370
+ORQIVA_BACKUP_PASSPHRASE=<الباسفريز> npm run backup:decrypt -- file.db.enc restored.db
+```
+
+لاسترجاع نسخة: أوقف الخادم، استبدل ملف قاعدة البيانات (`DATABASE_PATH`) بالناتج، ثم شغّل الخادم.
+<!-- commands-reference:end -->
